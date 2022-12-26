@@ -1,1 +1,1 @@
-# fx fuzzyalgo.dev
+# fuzzyalgo.dev
