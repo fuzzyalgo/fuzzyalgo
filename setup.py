@@ -209,7 +209,14 @@ def setup():
                 mt5_bin_src_fn = dir_script + "\\MetaTrader5_TMPL\\" + mt5_bin
                 mt5_bin_dst_fn = path       + mt5_bin
                 shutil.copy( mt5_bin_src_fn, mt5_bin_dst_fn )
-                
+
+            # link servers.dat - main reason for existence of config_RoboForex-ECN directory
+            #   if servers.dat is same for all mt5 servers like 'RoboForex-ECN'
+            #   then there shall be one config dir only -> TODO consolidate
+            mt5_cnf_src_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\servers.dat"
+            mt5_cnf_dst_fn = path       + "config\\servers.dat"
+            symlink( mt5_cnf_src_fn, mt5_cnf_dst_fn )
+            
             mt5_org_confs = ['cf_accounts', 'cf_periods', 'cf_symbols', 'cf_pid_params' ]
             for mt5_cnf in mt5_org_confs:
                 mt5_cnf_src_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\" + mt5_cnf + "_" + name_user + "@" + name_host + ".json"

@@ -142,23 +142,32 @@ class Algotrader():
             self.gACCOUNT = 'RF5D01'
         else:
             self.gACCOUNT = account
-
+          
+        # TODO this shall be read from self.cf_accounts[self.gACCOUNT]['path']  
+        # but at this point the path for cf_accounts is unknown
+        # hence hardcode it here - find a better way later
+        dir_appdata =  os.getenv('APPDATA') 
+        path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
+        path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
+        
         # initialise ACCOUNTS config cf_accounts
         # KsACCOUNTS = ['RF5D01','RF5D02']
         self.cf_accounts = {}
-        cf_fn = "cf_accounts." + os.getenv('COMPUTERNAME') + ".json"
+        cf_fn = path_mt5 + "\\config\\cf_accounts_" + path_mt5_user + ".json"
         with open(cf_fn, 'r') as f: self.cf_accounts = json.load(f)
         
         # initialise PERIODS config cf_periods
         # KsPERIOD = ['T89','T233','M1','M5','M15','H1']
         self.cf_periods = {}
-        with open('cf_periods.json', 'r') as f: self.cf_periods = json.load(f)
+        cf_fn = path_mt5 + "\\config\\cf_periods_" + path_mt5_user + ".json"
+        with open(cf_fn, 'r') as f: self.cf_periods = json.load(f)
         
         # initialise SYMBOLS config cf_symbols
         # KsCurAll = ['AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD','CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD','EURCHF','EURGBP','EURJPY','EURNZD','EURUSD','GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD','GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD','USDCAD','USDCHF','USDJPY']
         #self.cf_symbols = {}
         #with open('cf_symbols.json', 'r') as f: self.cf_symbols = json.load(f)
-        self.set_cf_symbols('cf_symbols.json')
+        cf_fn = path_mt5 + "\\config\\cf_symbols_" + path_mt5_user + ".json"
+        self.set_cf_symbols(cf_fn)
         self.cf_symbols_default = 'EURUSD'
         self.cf_symbols_all =    ['AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD','CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD','EURCHF','EURGBP','EURJPY','EURNZD','EURUSD','GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD','GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD','USDCAD','USDCHF','USDJPY']
 
@@ -166,7 +175,8 @@ class Algotrader():
         self.gUsePid = False
         self.set_use_pid( usePid )
         self.cf_pid_params = {}
-        with open('cf_pid_params.json', 'r') as f: self.cf_pid_params = json.load(f)
+        cf_fn = path_mt5 + "\\config\\cf_pid_params_" + path_mt5_user + ".json"
+        with open(cf_fn, 'r') as f: self.cf_pid_params = json.load(f)
         
         self.gNpa = []
         
@@ -324,7 +334,7 @@ class Algotrader():
         # TODO make me optional - with hours and minutes or not
         #self.dt_start_str = str(dt_start.strftime("%Y%m%d_%H%M%S"))  
         self.dt_start_str = str(dt_start.strftime("%Y%m%d"))  
-        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../logs/" + self.dt_start_str + ".log"
+        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../MQL5/logs/" + self.dt_start_str + ".log"
         #format_str = '%(asctime)s: %(message)s'
         format_str = '%(message)s'
         # https://stackoverflow.com/questions/15199816/python-logging-multiple-files-using-the-same-logger
@@ -337,7 +347,7 @@ class Algotrader():
         # at kalman logging
         dt_start     = datetime.now(timezone.utc) + self.tdOffset
         dtstr = str(dt_start.strftime("%Y%m%d_"))  
-        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../logs/" + dtstr + self.gACCOUNT + "_kalman.log"
+        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../MQL5/logs/" + dtstr + self.gACCOUNT + "_kalman.log"
         format_str = '%(message)s'
         #atlogkalman.basicConfig(filename=log_filename, level=atlogkalman.DEBUG, format=format_str)
         self.set_logger( name = 'atlogkalman', filename = log_filename, level = logging.INFO, format = format_str, use_stdout = False )
@@ -3767,22 +3777,66 @@ class Algotrader():
     def mt5_init( self ):
     # =============================================================================
 
-        ret = False    
+        ret = False   
+
+        path     = self.cf_accounts[self.gACCOUNT]['path']
+        login    = self.cf_accounts[self.gACCOUNT]['login']
+        password = self.cf_accounts[self.gACCOUNT]['password']
+        server   = self.cf_accounts[self.gACCOUNT]['server']
+        portable = bool(self.cf_accounts[self.gACCOUNT]['portable'])
+
+        # TODO this shall be read from self.cf_accounts[self.gACCOUNT]['path']  
+        # but at this point the path for cf_accounts is unknown
+        # hence hardcode it here - find a better way later
+        dir_appdata =  os.getenv('APPDATA') 
+        path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
+        path_mt5_bin = path_mt5 + "\\terminal64.exe"
+        path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
+        path_mt5_config = path_mt5 + "\\config\\cf_accounts_" + path_mt5_user + ".json"
+
+        if not path.lower() ==  path_mt5_bin.lower():
+            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
+                                       please set correct 'path' in config file [%s] to [%s: path=%s]", \
+                                       path_mt5_config,\
+                                       self.gACCOUNT,\
+                                       path_mt5_bin ) )
+            
+        if (1000 > login) or  ( "your-password-here" == password ):
+            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
+                                       please check and correct 'login/password' in config file [%s] in section [%s: login= , password= ]", \
+                                       path_mt5_config,\
+                                       self.gACCOUNT ) )
     
+        if "RoboForex-ECN" != server:
+            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
+                                       please set mt5 'server' in config file [%s] to [%s: server='RoboForex-ECN']", \
+                                       path_mt5_config,\
+                                       self.gACCOUNT ) )
+
+        if True != portable:
+            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
+                                       please set mt5 'portable' in config file [%s] to [%s: portable='True']", \
+                                       path_mt5_config,\
+                                       self.gACCOUNT ) )
+
         # connect to MetaTrader 5
         self.mt5.shutdown()
         ret = self.mt5.initialize( \
-                path     = self.cf_accounts[self.gACCOUNT]['path'],\
-                login    = self.cf_accounts[self.gACCOUNT]['login'],\
-                password = self.cf_accounts[self.gACCOUNT]['password'],\
-                server   = self.cf_accounts[self.gACCOUNT]['server'],\
-                portable = bool(self.cf_accounts[self.gACCOUNT]['portable']) )
+                path     = path,\
+                login    = login,\
+                password = password,\
+                server   = server,\
+                portable = portable) 
         
         if not ret:
             print("initialize() failed")
             print()
             self.mt5.shutdown()
-            raise ValueError( _sprintf("ERROR: Initialize [%s] ", self.cf_accounts[self.gACCOUNT]['path']) )
+            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize FAILED - \
+                                       please check and correct 'login/password' in config file [%s] in section [%s: login=%s , password=%s ] - \
+                                       If problem persists afterwards, then please re-run 'python setup.py'.", \
+                                       path_mt5_config,\
+                                       self.gACCOUNT, login, password ) )
         
             
 
