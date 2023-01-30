@@ -156,9 +156,51 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 ``` CSS
 > conda activate fuzzyalgo-py38
 > cd \<your-source-path>\fuzzyalgo
-> python <>
+> python <your-python>.py
 > conda deactivate
 ```
 
+## re-install conda env fuzzyalgo-py38
+
+``` CSS
+# if activated, then deactivate first
+> conda activate fuzzyalgo-py38
+> cd \<your-source-path>\fuzzyalgo
+> jupyter notebook
+> conda deactivate
+# remove the env
+> conda env remove -n fuzzyalgo-py38
+# re-install the env
+> cd \<your-source-path>\fuzzyalgo
+> conda create -n fuzzyalgo-py38 spyder numpy scipy pandas matplotlib sympy cython nb_conda
+> conda activate fuzzyalgo-py38
+> python --version
+	Python 3.8.15
+> pip install scikit-fuzzy pynput MetaTrader5
+> pip install C:\<your-source-path>\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> python setup.py
+> conda deactivate
+```
+
+# https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
+(fuzzyalgo-py38) C:\OneDrive\rfx\git\fuzzyalgo>pip install --upgrade --user nbconvert
+Installing collected packages: mistune, nbconvert
+  WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in 'C:\Users\G6\AppData\Roaming\Python\Python38\Scripts' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+Successfully installed mistune-2.0.4 nbconvert-7.2.7
+
+C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
+
+C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
+
+
+# https://stackoverflow.com/questions/40114639/jupyter-conda-tab-an-error-occurred-while-retrieving-package-information/trackback/
+
+
+jupyter serverextension disable nb_conda
+jupyter serverextension enable nb_conda
+
+
+conda install -c conda-forge nb_conda_kernels
 
 

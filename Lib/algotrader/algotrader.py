@@ -2362,8 +2362,8 @@ class Algotrader():
             # if the sym is unavailable in MarketWatch, add it 
             if not sym_info.visible: 
                 print(sym, "is not visible, trying to switch on") 
-                if not self.mt5.sym_select(sym,True): 
-                    raise ValueError(sym + "sym_select({}}) failed at set_gc0, exit") 
+                if not self.mt5.symbol_select(sym,True): 
+                    raise ValueError(sym + "symbol_select({}}) failed at set_gc0, exit") 
 
             # calculate the price            
             #point    = self.mt5.symbol_info (sym).point
@@ -2398,8 +2398,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                raise ValueError(sym + "sym_select({}}) failed at set_gc0, exit") 
+            if not self.mt5.symbol_select(sym,True): 
+                raise ValueError(sym + "symbol_select({}}) failed at set_gc0, exit") 
 
         # calculate the price            
         #point    = self.mt5.symbol_info (sym).point
@@ -4351,8 +4351,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                raise ValueError( sym, " ERROR mt5_pending_order_sell_limit->sym_select({}}) failed, exit")
+            if not self.mt5.symbol_select(sym,True): 
+                raise ValueError( sym, " ERROR mt5_pending_order_sell_limit->symbol_select({}}) failed, exit")
 
         # calculate the price            
         point    = self.mt5.symbol_info (sym).point
@@ -4410,8 +4410,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                raise ValueError( sym, " ERROR mt5_pending_order_buy_limit->sym_select({}}) failed, exit")
+            if not self.mt5.symbol_select(sym,True): 
+                raise ValueError( sym, " ERROR mt5_pending_order_buy_limit->symbol_select({}}) failed, exit")
 
         # calculate the price            
         point    = self.mt5.symbol_info (sym).point
@@ -4470,8 +4470,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                raise ValueError( sym, " ERROR mt5_pending_order_sell_stop->sym_select({}}) failed, exit")
+            if not self.mt5.symbol_select(sym,True): 
+                raise ValueError( sym, " ERROR mt5_pending_order_sell_stop->symbol_select({}}) failed, exit")
 
         # calculate the price            
         point    = self.mt5.symbol_info (sym).point
@@ -4529,8 +4529,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                raise ValueError( sym, " ERROR mt5_pending_order_buy_stop->sym_select({}}) failed, exit")
+            if not self.mt5.symbol_select(sym,True): 
+                raise ValueError( sym, " ERROR mt5_pending_order_buy_stop->symbol_select({}}) failed, exit")
 
         # calculate the price            
         point    = self.mt5.symbol_info (sym).point
@@ -4590,8 +4590,8 @@ class Algotrader():
         # if the sym is unavailable in MarketWatch, add it 
         if not sym_info.visible: 
             print(sym, "is not visible, trying to switch on") 
-            if not self.mt5.sym_select(sym,True): 
-                print("sym_select({}}) failed, exit",sym) 
+            if not self.mt5.symbol_select(sym,True): 
+                print("symbol_select({}}) failed, exit",sym) 
                 # TODO raise error here
                 return
 
