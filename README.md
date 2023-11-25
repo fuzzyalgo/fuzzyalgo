@@ -182,7 +182,7 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 > conda deactivate
 ```
 
-# https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
+#### https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
 (fuzzyalgo-py38) C:\OneDrive\rfx\git\fuzzyalgo>pip install --upgrade --user nbconvert
 Installing collected packages: mistune, nbconvert
   WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in 'C:\Users\G6\AppData\Roaming\Python\Python38\Scripts' which is not on PATH.
@@ -191,10 +191,18 @@ Successfully installed mistune-2.0.4 nbconvert-7.2.7
 
 C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
 
-C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
+(fuzzyalgo-py38) C:\Users\G6>dir C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
+
+ Directory of C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
+
+23/05/2023  20:09           108.421 jupyter-dejavu.exe
+23/05/2023  20:09           108.407 jupyter-nbconvert.exe
+               2 File(s)        216.828 bytes
+
+(fuzzyalgo-py38) C:\Users\G6> copy C:\Users\G6\AppData\Roaming\Python\Python38\Scripts\jupyter-*.exe C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
 
 
-# https://stackoverflow.com/questions/40114639/jupyter-conda-tab-an-error-occurred-while-retrieving-package-information/trackback/
+#### https://stackoverflow.com/questions/40114639/jupyter-conda-tab-an-error-occurred-while-retrieving-package-information/trackback/
 
 
 jupyter serverextension disable nb_conda

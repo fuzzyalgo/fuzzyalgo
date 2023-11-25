@@ -23,6 +23,8 @@
 //| |
 //+--------------------------------------------+
 
+#include <myobjects.mqh>
+
 input string Symbols_Sirname = "GFRMa_Pivot_";
 
 input uint s1_Samples = 4;
@@ -168,7 +170,7 @@ int OnCalculate(const int rates_total,
 
     if(rates_total < min_rates_total)
         return(RESET);
-    
+
 
     if( BarsCalculated(Ind_Handle_S1) < Bars(Symbol(), Period())  )
         return(prev_calculated);
@@ -199,21 +201,23 @@ int OnCalculate(const int rates_total,
 
     Middle[0] = close[bar0]; //(Up2[0] + Up1[0] + Dn2[0] + Dn1[0])/4;
 
+    datetime _width_factor = 1;
+
     datetime time0 = time[bar0];
-    datetime time1 = time0 - 2 * PeriodSeconds(); //-PerSignalLen/2;
+    datetime time1 = time0 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
     if( Up1[0] < Up2[0] )
         SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Up_Color, STYLE_SOLID, 1, UpName);
     else
         SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Dn_Color, STYLE_SOLID, 1, UpName);
 
-    datetime time2 = time1 - 2 * PeriodSeconds();
+    datetime time2 = time1 - _width_factor * PeriodSeconds();
     if( Dn1[0] < Up1[0] )
         SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Up_Color, STYLE_SOLID, 1, UpDnName);
     else
         SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Dn_Color, STYLE_SOLID, 1, UpDnName);
 
 
-    datetime time3 = time2 - 2 * PeriodSeconds(); //-PerSignalLen/2;
+    datetime time3 = time2 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
     if( Dn2[0] < Dn1[0] )
         SetRectangle(0, DnName, 0, time3, Dn1[0], time2, Dn2[0], Up_Color, STYLE_SOLID, 1, DnName);
     else
@@ -224,23 +228,26 @@ int OnCalculate(const int rates_total,
     int avg3 = (int)((Dn1[0] - Dn2[0]) / _Point);
     int avgp = (int)(( avg1 + avg2 + avg3 ) / 3);
     //Print( avg1 + " " + avg2 + " " + avg3 + " " + avgp );
-    double avg  = avgp * _Point  + Middle[0];
-    datetime time4 = time3 - 2 * PeriodSeconds(); //-PerSignalLen/2;
+
+    double avg  = avgp * _Point  + Dn2[0];
+
+    datetime time4 = time3 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
     if( 0 < avgp )
-        SetRectangle(0, AvgName, 0, time4, Middle[0], time3, avg, Up_Color, STYLE_SOLID, 1, AvgName);
+        SetRectangle(0, AvgName, 0, time4, Dn2[0]/*Middle[0]*/, time3, avg, Up_Color, STYLE_SOLID, 1, AvgName);
     else
-        SetRectangle(0, AvgName, 0, time4, Middle[0], time3, avg, Dn_Color, STYLE_SOLID, 1, AvgName);
-
-    SetTline(0, MiddleName, 0, time3, Middle[0], time0, Middle[0], Middle_color, STYLE_SOLID, 3, MiddleName);
-
-
-    SetRightPrice(0, upper_name1, 0, time[bar0], Up1[0], Upper_color1, "Georgia");
-    SetRightPrice(0, lower_name1, 0, time[bar0], Dn1[0], Lower_color1, "Georgia");
+        SetRectangle(0, AvgName, 0, time4, Dn2[0]/*Middle[0]*/, time3, avg, Dn_Color, STYLE_SOLID, 1, AvgName);
 
     datetime timep = time0 + 3 * PeriodSeconds();
-    //SetRightPrice(0,middle_name,0,time[bar0],Middle[0],Middle_color,"Georgia");
-    SetRightPrice(0, middle_name, 0, timep, Middle[0], clrBlue/*Middle_color*/, "Georgia");
+    datetime time5 = time4 - _width_factor * PeriodSeconds();
+    SetTline(0, MiddleName, 0, time5, Middle[0], timep, Middle[0], Middle_color, STYLE_SOLID, 3, MiddleName);
 
+
+    //SetRightPrice(0, upper_name1, 0, time[bar0], Up1[0], Upper_color1, "Georgia");
+    //SetRightPrice(0, lower_name1, 0, time[bar0], Dn1[0], Lower_color1, "Georgia");
+
+    SetRightPrice(0, middle_name, 0, timep, Middle[0], Middle_color, "Georgia");
+
+    /*
     string avg_txt = TimeToString(TimeCurrent(), TIME_SECONDS ) + " / " +
                      "ma: " + IntegerToString(avgp) + " / " +
                      IntegerToString(avg3) + " / " +
@@ -248,7 +255,7 @@ int OnCalculate(const int rates_total,
                      IntegerToString(avg1) + " / " +
                      "v: " + IntegerToString(tick_volume[bar0]) + " / " +
                      "s: " + IntegerToString(spread[bar0]);
-    SetRightText(0, middle_name + "2", 0, time4 - 6 * PeriodSeconds(), Dn1[0], clrBlue/*Middle_color*/, "Courier", avg_txt);
+    SetRightText(0, middle_name + "2", 0, time4 - 6 * PeriodSeconds(), Dn1[0], clrBlue, "Courier", avg_txt);
 
     string c0_str = DoubleToString(close[bar0], Digits());
     int idUp2 = int( (close[bar0] - Up2[0] ) / Point() );
@@ -263,10 +270,54 @@ int OnCalculate(const int rates_total,
                        IntegerToString(idDn1) + " / " +
                        IntegerToString(idDn2) + " / " +
                        "c: " + c0_str ;
-    SetRightText(0, middle_name + "3", 0, time4 - 6 * PeriodSeconds(), Middle[0], clrBlue/*Middle_color*/, "Courier", close_txt);
+    SetRightText(0, middle_name + "3", 0, time4 - 6 * PeriodSeconds(), Middle[0], clrBlue, "Courier", close_txt);
+    */
 
-    SetRightPrice(0, upper_name2, 0, time[bar0], Up2[0], Upper_color2, "Georgia");
-    SetRightPrice(0, lower_name2, 0, time[bar0], Dn2[0], Lower_color2, "Georgia");
+    //SetRightPrice(0, upper_name2, 0, time[bar0], Up2[0], Upper_color2, "Georgia");
+    //SetRightPrice(0, lower_name2, 0, time[bar0], Dn2[0], Lower_color2, "Georgia");
+
+    //string sBS = "";
+    if(PositionSelect(_Symbol))
+    {
+        int _color = clrWhite;
+        int _colorLine = clrWhite;
+        double pos_open_price =  PositionGetDouble(POSITION_PRICE_OPEN);
+        double pos_open_price_last =  PositionGetDouble(POSITION_PRICE_CURRENT);
+        long pos_open_time = PositionGetInteger(POSITION_TIME);
+        long pos_open_price_delta = 0;
+        ENUM_POSITION_TYPE pos_open_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if( POSITION_TYPE_BUY == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price_last - pos_open_price) / _Point);
+            _color = clrBlue;
+            _colorLine = clrBlue;
+            if( 0 > pos_open_price_delta )
+                _color = clrYellow;
+        }
+
+        if( POSITION_TYPE_SELL == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price - pos_open_price_last) / _Point);
+            _color = clrRed;
+            _colorLine = clrRed;
+            if( 0 > pos_open_price_delta )
+                _color = clrYellow;
+        }
+        SetTline(0, MiddleName + "OP", 0, pos_open_time, pos_open_price, timep, pos_open_price, _colorLine, STYLE_SOLID, 3, MiddleName + "OP");
+        SetRightPrice(0, middle_name + "OP", 0, timep, pos_open_price, _colorLine, "Georgia");
+        SetRectangle(0, "OpenPrice", 0, time5, pos_open_price, time4, Middle[0]/*pos_open_price_last*/, _color, STYLE_SOLID, 1, "OpenPrice");
+
+    }
+    else
+    {
+        if( 0 == ObjectFind( 0, MiddleName + "OP") )
+            ObjectDelete( 0,    MiddleName + "OP");
+        if( 0 == ObjectFind( 0, middle_name + "OP") )
+            ObjectDelete( 0,    middle_name + "OP");
+        if( 0 == ObjectFind( 0, "OpenPrice") )
+            ObjectDelete( 0,    "OpenPrice");
+
+    } // if(PositionSelect(_Symbol))
 
 //----
     //Print("2");
@@ -295,241 +346,3 @@ int OnCalculate(const int rates_total,
 } // int OnCalculate(const int rates_total,
 //+------------------------------------------------------------------+
 
-
-
-//+------------------------------------------------------------------+
-//| |
-//+------------------------------------------------------------------+
-void CreateRectangle
-(
-    long     chart_id,
-    string   name,
-    int      nwin,
-    datetime time1,
-    double   price1,
-    datetime time2,
-    double   price2,
-    color    Color,
-    int      style,
-    int      width,
-    string   text
-)
-//----
-{
-//----
-    ObjectCreate(chart_id, name, OBJ_RECTANGLE, nwin, time1, price1, time2, price2);
-    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    ObjectSetInteger(chart_id, name, OBJPROP_STYLE, style);
-    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, width);
-    ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
-    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_SELECTED, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_ZORDER, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_FILL, true);
-//----
-
-} // void CreateRectangle
-//+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//| |
-//+------------------------------------------------------------------+
-void SetRectangle
-(
-    long     chart_id,
-    string   name,
-    int      nwin,
-    datetime time1,
-    double   price1,
-    datetime time2,
-    double   price2,
-    color    Color,
-    int      style,
-    int      width,
-    string   text
-)
-//----
-{
-//----
-    if(ObjectFind(chart_id, name) == -1) CreateRectangle(chart_id, name, nwin, time1, price1, time2, price2, Color, style, width, text);
-    else
-    {
-        ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
-        ObjectMove(chart_id, name, 0, time1, price1);
-        ObjectMove(chart_id, name, 1, time2, price2);
-        ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    }
-//----
-
-} // void SetRectangle
-//+------------------------------------------------------------------+
-
-
-//+------------------------------------------------------------------+
-//|  RightPrice creation                                             |
-//+------------------------------------------------------------------+
-void CreateRightPrice(long chart_id,   // chart ID
-                      string   name,            // object name
-                      int      nwin,            // window index
-                      datetime time,            // price level time
-                      double   price,           // price level
-                      color    Color,           // Text color
-                      string   Font             // Text font
-                     )
-//----
-{
-//----
-    ObjectCreate(chart_id, name, OBJ_ARROW_RIGHT_PRICE, nwin, time, price);
-    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    ObjectSetString(chart_id, name, OBJPROP_FONT, Font);
-    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, 2);
-//----
-
-} // void CreateRightPrice
-//+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//|  RightPrice reinstallation                                       |
-//+------------------------------------------------------------------+
-void SetRightPrice(long chart_id,// chart ID
-                   string   name,              // object name
-                   int      nwin,              // window index
-                   datetime time,              // price level time
-                   double   price,             // price level
-                   color    Color,             // Text color
-                   string   Font               // Text font
-                  )
-//----
-{
-//----
-    if(ObjectFind(chart_id, name) == -1) CreateRightPrice(chart_id, name, nwin, time, price, Color, Font);
-    else ObjectMove(chart_id, name, 0, time, price);
-//----
-
-} // void SetRightPrice
-//+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//|  RightPrice creation                                             |
-//+------------------------------------------------------------------+
-void CreateRightText(long chart_id,// chart ID
-                     string   name,              // object name
-                     int      nwin,              // window index
-                     datetime time,              // price level time
-                     double   price,             // price level
-                     color    Color,             // Text color
-                     string   Font,               // Text font
-                     string   Text               // Text text
-                    )
-//----
-{
-//----
-    ObjectCreate(chart_id, name, OBJ_TEXT, nwin, time, price);
-    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    ObjectSetString(chart_id, name, OBJPROP_FONT, Font);
-    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, 2);
-    ObjectSetString(chart_id, name, OBJPROP_TEXT, Text);
-//----
-
-} // void CreateRightText
-//+------------------------------------------------------------------+
-
-
-//+------------------------------------------------------------------+
-//|  RightPrice reinstallation                                       |
-//+------------------------------------------------------------------+
-void SetRightText(long chart_id,// chart ID
-                  string   name,              // object name
-                  int      nwin,              // window index
-                  datetime time,              // price level time
-                  double   price,             // price level
-                  color    Color,             // Text color
-                  string   Font,               // Text font
-                  string   Text               // Text text
-                 )
-//----
-{
-//----
-    if(ObjectFind(chart_id, name) == -1)
-        CreateRightText(chart_id, name, nwin, time, price, Color, Font, Text);
-    else
-    {
-        ObjectMove(chart_id, name, 0, time, price);
-        ObjectSetString(chart_id, name, OBJPROP_TEXT, Text);
-    }
-//----
-
-} // void SetRightText
-
-//+------------------------------------------------------------------+
-//|  |
-//+------------------------------------------------------------------+
-void CreateTline
-(
-    long     chart_id,
-    string   name,
-    int      nwin,
-    datetime time1,
-    double   price1,
-    datetime time2,
-    double   price2,
-    color    Color,
-    int      style,
-    int      width,
-    string   text
-)
-//----
-{
-//----
-    ObjectCreate(chart_id, name, OBJ_TREND, nwin, time1, price1, time2, price2);
-    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    ObjectSetInteger(chart_id, name, OBJPROP_STYLE, style);
-    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, width);
-    ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
-    ObjectSetInteger(chart_id, name, OBJPROP_BACK, false);
-    ObjectSetInteger(chart_id, name, OBJPROP_RAY_RIGHT, false);
-    ObjectSetInteger(chart_id, name, OBJPROP_RAY, false);
-    ObjectSetInteger(chart_id, name, OBJPROP_SELECTED, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(chart_id, name, OBJPROP_ZORDER, true);
-//----
-
-} // void CreateTline
-//+------------------------------------------------------------------+
-
-
-//+------------------------------------------------------------------+
-//|  |
-//+------------------------------------------------------------------+
-void SetTline
-(
-    long     chart_id,      // ????????????? ???????
-    string   name,          // ??? ???????
-    int      nwin,          // ?????? ????
-    datetime time1,         // ????? 1 ???????? ??????
-    double   price1,        // 1 ??????? ???????
-    datetime time2,         // ????? 2 ???????? ??????
-    double   price2,        // 2 ??????? ???????
-    color    Color,         // ???? ?????
-    int      style,         // ????? ?????
-    int      width,         // ??????? ?????
-    string   text           // ?????
-)
-//----
-{
-//----
-    if(ObjectFind(chart_id, name) == -1) CreateTline(chart_id, name, nwin, time1, price1, time2, price2, Color, style, width, text);
-    else
-    {
-        ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
-        ObjectMove(chart_id, name, 0, time1, price1);
-        ObjectMove(chart_id, name, 1, time2, price2);
-        ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
-    }
-//----
-
-} // void SetTline
-//+------------------------------------------------------------------+

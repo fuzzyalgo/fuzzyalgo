@@ -436,6 +436,11 @@ class Algotrader():
         self.gKalmanStdDevMeas = 1.2
         self.gKalmanChartIntervalInSeconds = 60
 
+        self.gKalmanDt         = 0.1
+        self.gKalmanU          = 2
+        self.gKalmanStdDevAcc  = 0.25
+        self.gKalmanStdDevMeas = 1.2
+        self.gKalmanChartIntervalInSeconds = 60
         
     # END def __init__(self, account= None, usePid = False, useScalp=False):
     # =============================================================================
@@ -3972,7 +3977,15 @@ class Algotrader():
     #  def mt5_fx_scalper(self, sym, vol, piddelta = None ):
     #     
     # =============================================================================
-    def mt5_fx_scalper(self, sym, vol, piddelta = None ):
+    def mt5_fx_scalper(self, sym, vol, piddelta = None, offset_pend_order = None, tp_lvl = None ):
+        
+        
+        dt_start     = datetime.now(timezone.utc) + self.tdOffset
+        dt_start_str = str(dt_start.strftime("%Y%m%d_%H:%M:%S_"))  
+        
+
+        if None != offset_pend_order:
+            self.offset = offset_pend_order
         
         point    = self.mt5.symbol_info (sym).point
         digits   = self.mt5.symbol_info (sym).digits
@@ -4007,7 +4020,7 @@ class Algotrader():
         #
         state = None
         if ( 0      == orders['total'] ) :
-            state = "S01.01"
+            state =   dt_start_str + "S01.01"
             self.mt5_pending_order_first(sym, vol, self.offset)
             print( _sprintf(" mt5_fx_scalper[%s] - OK - mt5_first_pending_order create", state ))
             return True, state
@@ -4028,11 +4041,11 @@ class Algotrader():
             # TODO for reverse pending offset start - make optional
             #if (2*self.offset) == abs(offsetSet):
             if (2*self.offset) == offsetSet:
-                state = "S02.01"
+                state =   dt_start_str + "S02.01"
                 print( _sprintf(" mt5_fx_scalper[%s] - OK - mt5_first_pending_order offset check OK", state))
                 return True, state
             else:
-                state = "S02.02"
+                state =   dt_start_str + "S02.02"
                 print( _sprintf(" mt5_fx_scalper[%s] - NO - mt5_first_pending_order offset check ERR [%d] != [%d]  [%f] [%f]", state, (2*self.offset), offsetSet, priceBPO, priceSPO ))
                 self.mt5_pending_order_remove(sym)
                 return False, state
@@ -4051,7 +4064,7 @@ class Algotrader():
             #  3.1 check volume of open position
             #
             if ( vol  != orders['order_pos_buy_vol'] ) :
-                state = "S03.01"
+                state =   dt_start_str + "S03.01"
                 print( _sprintf(" mt5_fx_scalper[%s] - NO - buy position - volume check ERR [%f] != [%f]", state, vol, orders['order_pos_buy_vol'] ))
                 self.mt5_position_close(sym)
                 self.mt5_pending_order_remove(sym)
@@ -4069,35 +4082,49 @@ class Algotrader():
                
                 priceBPO = orders['order_pos_buy_price_max']
                 priceSPO = orders['order_pend_sell_price']
-                offsetSet = int(round((priceBPO - priceSPO)/point,digits))
+                offsetSet = abs(int(round((priceBPO - priceSPO)/point,digits)))
                 if piddelta == offsetSet:
-                    state = "S03.02"
+                    state =   dt_start_str + "S03.02"
+                    if None != tp_lvl:
+                        self.mt5_position_sltp_follow2( sym, tp_lvl, 0 )
                     print( _sprintf(" mt5_fx_scalper[%s] - OK - buy position - check volume of counter pending sell stop order OK" , state ))
                     return True, state
                 else:
-                    state = "S03.03"
+                    state =   dt_start_str + "S03.03"
                     priceSPOprev = priceSPO
                     priceSPO = round( (priceBPO-piddelta*point)    , digits )
-                    self.mt5_pending_order_modify( sym, 
+                    ret = self.mt5_pending_order_modify( sym, 
                                                priceSPO, 
                                                456)
-                    print( _sprintf(" mt5_fx_scalper[%s]- OK - buy position - modify pending counter sell order [%f] -> [%f]", state, priceSPOprev, priceSPO ))
+                    
+                    if True == ret:
+                        print( _sprintf(" mt5_fx_scalper[%s]- OK - buy position - modify pending counter sell order [%f] -> [%f]", state, priceSPOprev, priceSPO ))
+                    else:
+                        self.mt5_position_close(sym)
+                        self.mt5_pending_order_remove(sym)
+                        print( _sprintf(" mt5_fx_scalper[%s]- !!!ERR!!! - buy position - modify pending counter sell order [%f] -> [%f]", state, priceSPOprev, priceSPO  ))
+                        
                     return False, state
                
             else:
-                state = "S03.04"
+                state =   dt_start_str + "S03.04"
                 self.mt5_pending_order_remove(sym)
 
                 priceBPO = orders['order_pos_buy_price_max']
                 priceSPO = round( (priceBPO-piddelta*point)    , digits )
-                self.mt5_pending_order_raw( sym, 
+                
+                if priceSPO < orders['order_pos_buy_price0']:
+                    self.mt5_pending_order_raw( sym, 
                                            (2*vol), 
                                            priceSPO, 
                                            self.mt5.ORDER_TYPE_SELL_STOP, 
                                            "SPO", 
                                            456)
+                    print( _sprintf(" mt5_fx_scalper[%s] - NO - buy position  - check volume of counter pending sell stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceSPO ))
+                else:
+                    self.mt5_position_close(sym)
+                    print( _sprintf(" mt5_fx_scalper[%s] - !!!ERR!!! NO - buy position  - check volume of counter pending sell stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceSPO ))
 
-                print( _sprintf(" mt5_fx_scalper[%s] - NO - buy position  - check volume of counter pending sell stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceSPO ))
                 return False, state
                 
         #
@@ -4120,7 +4147,7 @@ class Algotrader():
             #  4.1 check volume of open position
             #
             if ( vol  != orders['order_pos_sell_vol'] ) :
-                state = "S04.01"
+                state =   dt_start_str + "S04.01"
                 print( _sprintf(" mt5_fx_scalper[%s] - NO - sell position - volume check ERR [%f] != [%f]", state, vol, orders['order_pos_sell_vol'] ))
                 self.mt5_position_close(sym)
                 self.mt5_pending_order_remove(sym)
@@ -4138,35 +4165,49 @@ class Algotrader():
                
                 priceSPO = orders['order_pos_sell_price_min']
                 priceBPO = orders['order_pend_buy_price']
-                offsetSet = int(round((priceSPO - priceBPO)/point,digits))
+                offsetSet = abs(int(round((priceSPO - priceBPO)/point,digits)))
                 if piddelta == offsetSet:
-                    state = "S04.02"
+                    state =  dt_start_str + "S04.02"
+                    if None != tp_lvl:
+                        self.mt5_position_sltp_follow2( sym, tp_lvl, 0 )
                     print( _sprintf(" mt5_fx_scalper[%s] - OK - sell position - check volume of counter pending buy stop order OK" , state ))
                     return True, state
                 else:
-                    state = "S04.03"
+                    state =   dt_start_str + "S04.03"
                     priceBPOprev = priceBPO
-                    priceBPO = round( (priceSPO-piddelta*point)    , digits )
-                    self.mt5_pending_order_modify( sym, 
+                    priceBPO = round( (priceSPO+piddelta*point)    , digits )
+                    ret = self.mt5_pending_order_modify( sym, 
                                                priceBPO, 
                                                123)
-                    print( _sprintf(" mt5_fx_scalper[%s]- OK - sell position - modify pending counter buy order [%f] -> [%f]", state, priceBPOprev, priceBPO ))
+                    
+                    if True == ret:
+                        print( _sprintf(" mt5_fx_scalper[%s]- OK - sell position - modify pending counter buy order [%f] -> [%f]", state, priceBPOprev, priceBPO ))
+                    else:
+                        self.mt5_position_close(sym)
+                        self.mt5_pending_order_remove(sym)
+                        print( _sprintf(" mt5_fx_scalper[%s]- !!!ERR!!! - sell position - modify pending counter buy order [%f] -> [%f]", state, priceBPOprev, priceSPO ))
+                    
                     return False, state
                
             else:
-                state = "S04.04"
+                state =   dt_start_str + "S04.04"
                 self.mt5_pending_order_remove(sym)
                 
                 priceSPO = orders['order_pos_sell_price_min']
-                priceBPO = round( (priceSPO-piddelta*point)    , digits )
-                self.mt5_pending_order_raw( sym, 
-                                           (2*vol), 
-                                           priceBPO, 
-                                           self.mt5.ORDER_TYPE_BUY_STOP, 
-                                           "BPO", 
-                                           123)
+                priceBPO = round( (priceSPO+piddelta*point)    , digits )
+                
+                if priceBPO > orders['order_pos_sell_price0']:
+                    self.mt5_pending_order_raw( sym, 
+                                            (2*vol), 
+                                            priceBPO, 
+                                            self.mt5.ORDER_TYPE_BUY_STOP, 
+                                            "BPO", 
+                                            123)
+                    print( _sprintf(" mt5_fx_scalper[%s] - NO - sell position  - check volume of counter pending buy stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceBPO ))
+                else:
+                    self.mt5_position_close(sym)
+                    print( _sprintf(" mt5_fx_scalper[%s] - !!!ERR!!! NO - sell position  - check volume of counter pending buy stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceBPO ))
 
-                print( _sprintf(" mt5_fx_scalper[%s] - NO - sell position  - check volume of counter pending buy stop order ERR [%f] != [%f] - create new order at [%f]", state, vol, orders['order_pos_buy_vol'], priceBPO ))
                 return False, state
                 
         #
@@ -4177,7 +4218,7 @@ class Algotrader():
         #
         # error state - should never come here
         #
-        state = "S05.01"
+        state =   dt_start_str + "S05.01"
         self.mt5_position_close(sym)
         self.mt5_pending_order_remove(sym)
         print( _sprintf(" mt5_fx_scalper[%s] - ERROR STATE", state) )
@@ -5287,6 +5328,7 @@ class Algotrader():
         tried = 0
         done = 0
         points = self.mt5.symbol_info (symbol).point
+        digits = self.mt5.symbol_info (symbol).digits
         
 
         # sltp api access variables
@@ -5309,50 +5351,91 @@ class Algotrader():
         swap=0.0, profit=-0.07, symbol='GBPJPY', comment='BPO', external_id='')
         '''
         
-        sl = 0
-        tp = 0
-        magic = 0
         
         for position in positions:
-            #if 0 == position.tp:
-            #if 0 < position.profit:
+        
+            sl     = 0
+            tp     = 0
+            magic  = 0
+            pos_sl = round( position.sl, digits )
+            pos_tp = round( position.tp, digits )
+            pos_price_current = round( position.price_current, digits )
+            pos_price_open    = round( position.price_open,    digits )
+                
             if self.mt5.ORDER_TYPE_BUY == position.type:
+                profitp = (pos_price_current-pos_price_open)/points
                 if 0 < tpoffset:
-                    tp = position.price_open + tpoffset*points
+                    tp = pos_price_open + tpoffset*points
+                if 0 < tpoffset:
+                    if tpoffset < profitp:
+                        tp = 0 # pos_price_open + (tpoffset + profitp)*points
                 if 0 < sloffset:    
-                    sl = position.price_open - sloffset*points
-                profitp = (position.price_current-position.price_open)/points
-                if( 20 < profitp ):
-                    sl = position.price_open + 20*points
-                # elif( 15 < profitp ):
-                #     sl = position.price_open + 15*points
-                #     slchanged = True
-                # elif( 10 < profitp ):
-                #     sl = position.price_open + 10*points
-                #     slchanged = True
-                # elif( 5  < profitp ):
-                #     sl = position.price_open + 5 *points
-                #     slchanged = True
+                    sl = pos_price_open - sloffset*points
+                
+                # if( 10 < profitp ):
+                #    sl = pos_price_open + 2*points
+                   
+                if( 500 < profitp ):
+                    sl = pos_price_open + 300*points
+                elif( 250 < profitp ):
+                    sl = pos_price_open + 200*points
+                elif( 200 < profitp ):
+                    sl = pos_price_open + 150*points
+                elif( 150 < profitp ):
+                    sl = pos_price_open + 100*points
+                elif( 100 < profitp ):
+                    sl = pos_price_open + 50*points
+                elif( 50 < profitp ):
+                    sl = pos_price_open + 30*points
+                elif( 30 < profitp ):
+                    sl = pos_price_open + 10*points
+                elif( 20 < profitp ):
+                    sl = pos_price_open + 5*points
+                elif( 10  < profitp ):
+                    sl = pos_price_open + 2 *points
+                    
+                if 0 < pos_sl and pos_sl > sl:
+                    sl = pos_sl
 
             if self.mt5.ORDER_TYPE_SELL == position.type:
+                profitp = (pos_price_open-pos_price_current)/points
                 if 0 < tpoffset:
-                    tp = position.price_open - tpoffset*points
+                    tp = pos_price_open - tpoffset*points
+                if 0 < tpoffset:
+                    if tpoffset < profitp:
+                        tp = 0 # pos_price_open - (tpoffset + profitp)*points
                 if 0 < sloffset:    
-                    sl = position.price_open + sloffset*points
-                profitp = (position.price_open-position.price_current)/points
-                if( 20 < profitp ):
-                    sl = position.price_open - 20*points
-                # elif( 15 < profitp ):
-                #     sl = position.price_open - 15*points
-                #     slchanged = True
-                # elif( 10 < profitp ):
-                #     sl = position.price_open - 10*points
-                #     slchanged = True
-                # elif( 5  < profitp ):
-                #     sl = position.price_open - 5 *points
-                #     slchanged = True
+                    sl = pos_price_open + sloffset*points
+                
+                # if( 10 < profitp ):
+                #     sl = pos_price_open - 2*points
+                
+                if( 500 < profitp ):
+                    sl = pos_price_open - 300*points
+                elif( 250 < profitp ):
+                    sl = pos_price_open - 200*points
+                elif( 200 < profitp ):
+                    sl = pos_price_open - 150*points
+                elif( 150 < profitp ):
+                    sl = pos_price_open - 100*points
+                elif( 100 < profitp ):
+                    sl = pos_price_open - 50*points
+                elif( 50 < profitp ):
+                    sl = pos_price_open - 30*points
+                elif( 30 < profitp ):
+                    sl = pos_price_open - 10*points
+                elif( 20 < profitp ):
+                    sl = pos_price_open - 5*points
+                elif( 10  < profitp ):
+                    sl = pos_price_open - 2 *points
+                    
+                if 0 < pos_sl and pos_sl < sl:
+                    sl = pos_sl
 
-            if (0 < sl) or (0 == position.tp):
+            sl = round( sl, digits )
+            tp = round( tp, digits )
+
+            if (pos_sl != sl) or (pos_tp != tp):
                 for tries in range(10):
                     info = self.mt5.symbol_info_tick(symbol)
                     if info is None:
@@ -6992,7 +7075,7 @@ class Algotrader():
             
         ret = price, pcm, tstr
         """
-         graphical proc
+         graphical proc-
         """
 
         # fig = plt.figure()

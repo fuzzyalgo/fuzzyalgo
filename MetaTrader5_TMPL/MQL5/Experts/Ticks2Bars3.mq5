@@ -1,0 +1,1429 @@
+﻿//+------------------------------------------------------------------+
+//|                                                   Ticks2Bars.mq5 |
+//|                               Copyright (c) 2018-2019, Marketeer |
+//|                          https://www.mql5.com/en/users/marketeer |
+//|                        https://www.mql5.com/en/blogs/post/719145 |
+//+------------------------------------------------------------------+
+#property copyright "Copyright © 2018-2019, Marketeer"
+#property link      "https://www.mql5.com/en/users/marketeer"
+#property version   "1.0"
+#property description "Ticks2Bars\n"
+#property description "Non-trading expert, generating bar chart from ticks - 1 bar per 1 tick."
+
+#include <comment.mqh>
+#include <myobjects.mqh>
+
+
+#define COLOR_BLACK     clrBlack
+#define COLOR_BORDER    clrRed
+#define COLOR_BLUE      clrDodgerBlue
+#define COLOR_TEXT      clrLightGray
+#define COLOR_GREEN     clrLimeGreen
+#define COLOR_RED       clrOrangeRed
+#define COLOR_YELLOW    clrYellow
+
+/*
+https://www.mql5.com/en/blogs/post/719145
+https://www.mql5.com/en/blogs/post/718632
+https://www.mql5.com/en/blogs/post/718430
+https://www.mql5.com/en/blogs/post/748035
+*/
+
+
+// I N C L U D E S
+
+
+// T Y P E D E F S
+
+
+
+// I N P U T S
+input int Limit = 0;
+input bool Reset = false;
+
+input uint nS1 = 10;
+input uint nS2 = 100;
+input uint nS3 = 1000;
+input uint nS4 = 10000;
+
+input bool OpenChartOnInit = false;
+
+// G L O B A L S
+
+CComment comment;
+CComment comment2;
+
+struct sMAvars
+{
+
+    string periodKey;
+
+    datetime t0;
+    double c0;
+    double ma1;
+    double ma2;
+    double ma3;
+    double ma4;
+
+    int mad1;
+    int mad2;
+    int mad3;
+    int mad4;
+    int mad_avg;
+
+    int c0d1;
+    int c0d2;
+    int c0d3;
+    int c0d4;
+    int c0d_avg;
+
+    int sum_avg;
+
+    string str_txt;
+
+}; // struct sMAvars
+
+sMAvars sMa[9];
+string symbolNameAppendix = "_ticks";
+uint tickCount;
+uint gCopyTicksFlags = COPY_TICKS_INFO; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
+
+
+// E V E N T   H A N D L E R S IMPLEMENTATION
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+int OnInit(void)
+{
+
+    return(  _OnInit() ) ;
+
+} // int OnInit(void)
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void OnTimer(void)
+{
+
+    ulong cnt1 = GetTickCount64();
+
+    _OnTimer();
+
+    //ulong cnt1 = GetTickCount64();
+    ulong cnt2 = GetTickCount64();
+    //Print( "OnTick : ", (cnt2-cnt1) );
+
+
+} // void OnTimer(void)
+//+------------------------------------------------------------------+
+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void OnTick(void)
+{
+    
+    _OnTick();
+
+} // void OnTick(void)
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+
+    _OnDeinit( reason );
+
+} // void OnDeinit(const int reason)
+//+------------------------------------------------------------------+
+
+
+
+
+
+// A P P L I C A T I O N
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL, long& DELTA_MSC)
+{
+    double high = 0;
+    double low  = 1000000000;
+    int size = ArraySize( mqltickarray );
+    DELTA_MSC = 0;
+
+    HL = 0;
+    OC = 0;
+
+    if( 0 < size )
+    {
+        MqlTick t0 = mqltickarray[size - 1];
+        if(t0.ask == 0 || t0.bid == 0 || t0.ask < t0.bid)
+            return;
+        MqlTick tstart = mqltickarray[0];
+        if(tstart.ask == 0 || tstart.bid == 0 || tstart.ask < tstart.bid)
+            return;
+        OC = (int)(( ((t0.ask + t0.bid) / 2 ) - ((tstart.ask + tstart.bid) / 2 ) ) / _Point);
+        DELTA_MSC = (long)(t0.time_msc - tstart.time_msc);
+    }
+    else
+    {
+        return;
+    }
+
+    for( int cnt = 0; cnt < size; cnt++ )
+    {
+        MqlTick t = mqltickarray[cnt];
+        // sanity check
+        if(t.ask == 0 || t.bid == 0 || t.ask < t.bid)
+            continue;
+        if( high < t.ask )
+            high = t.ask;
+        if( low  > t.bid )
+            low  = t.bid;
+
+    } // for( cnt = 0; cnt < size; cnt++ )
+
+    HL = (int)(( high - low ) / _Point);
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL)
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void reset(const string& _symCustName)
+{
+
+    ResetLastError();
+    int deleted = CustomTicksDelete(_symCustName, 0, LONG_MAX);
+    if(deleted == -1)
+    {
+        Print("CustomTicksDelete failed ", GetLastError());
+        return;
+    }
+    else
+    {
+        Print("Ticks deleted: ", deleted);
+    }
+
+// wait for changes to take effect in background (asynchronously)
+    int size;
+    do
+    {
+        Sleep(1);
+
+        MqlTick array[];
+        size = CopyTicks(_symCustName, array, gCopyTicksFlags, 0, Limit);
+        Print("Remaining ticks: ", size);
+    }
+    while(size > 0);
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void reset()
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void fillArray(const string& _symCustName)
+{
+    /*
+    MqlTick array[];
+    int size = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, Limit);
+    if(size == -1)
+    {
+        Print("CopyTicks failed: ", GetLastError());
+    }
+    else
+    {
+        Print("Ticks start at ", array[0].time, "'", array[0].time_msc % 1000);
+        MqlRates r[];
+        ArrayResize(r, size);
+        datetime start = (datetime)(((long)TimeCurrent() / 60 * 60) - (size - 1) * 60);
+        datetime cursor = start;
+        int j = 0;
+        for(int i = 0; i < size; i++)
+        {
+            if(apply(cursor, array[i], r[j]))
+            {
+                cursor += TimeDelta;
+                j++;
+            }
+        }
+        if(j < size)
+        {
+            Print("Shrinking to ", j);
+            ArrayResize(r, j);
+        }
+        if(CustomRatesUpdate(_symCustName, r) == 0)
+        {
+            Print("CustomRatesUpdate failed: ", GetLastError());
+        }
+    }
+    */
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void fillArray()
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void add(const string& _symCustName, const MqlTick& _t )
+{
+
+    //MqlTick t;
+    //if(SymbolInfoTick(_Symbol, t))
+
+
+    /*
+    int  CustomTicksReplace( 
+       const string     symbol,            // symbol name 
+       long             from_msc,          // start date 
+       long             to_msc,            // end date 
+       const MqlTick&   ticks[],           // array for the data to be applied to a custom symbol 
+       uint             count=WHOLE_ARRAY  // number of the ticks[] array elements to be used 
+       );
+    */
+    
+    MqlTick ta[1];
+    ta[0] = _t;
+    //Print(ta[0].time_msc, " - ", ta[0].time);
+    if(CustomTicksAdd(_symCustName, ta, 1 ) == -1)
+    //if(CustomTicksReplace(_symCustName, _t.time_msc, _t.time_msc, ta, 1 ) == -1)
+    {
+        Print("Not ticked:", GetLastError(), " ", (long)ta[0].time);
+        ArrayPrint(ta);
+    }    
+        
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void add(const string& _symCustName, const MqlTick& _t )
+//+------------------------------------------------------------------+
+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void InitMaVarsStruct( sMAvars &ma )
+{
+
+    ma.periodKey = "";
+
+    ma.t0 = 0;
+    ma.c0 = 0.0;
+    ma.ma1 = 0.0;
+    ma.ma2 = 0.0;
+    ma.ma3 = 0.0;
+    ma.ma4 = 0.0;
+
+    ma.mad1 = 0;
+    ma.mad2 = 0;
+    ma.mad3 = 0;
+    ma.mad4 = 0;
+    ma.mad_avg = 0;
+
+    ma.c0d1 = 0;
+    ma.c0d2 = 0;
+    ma.c0d3 = 0;
+    ma.c0d4 = 0;
+    ma.c0d_avg = 0;
+
+    ma.sum_avg = 0;
+
+    ma.str_txt = "";
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void InitMaVarsStruct( sMAvars &ma )
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+int _OnInitCreateCustomSymbol(const string& _symCustName)
+{
+
+    bool _justCreated = false;
+
+    if(!SymbolSelect(_symCustName, true))
+    {
+        ResetLastError();
+        SymbolInfoInteger(_symCustName, SYMBOL_CUSTOM);
+        if(ERR_MARKET_UNKNOWN_SYMBOL == GetLastError())
+        {
+            Print( "create symbol: " + _symCustName );
+            CustomSymbolCreate( _symCustName, _Symbol, _Symbol );
+            _justCreated = true;
+        }
+
+        if(!SymbolSelect(_symCustName, true))
+        {
+            Alert("Can't select symbol:", _symCustName, " err:", GetLastError());
+            return INIT_FAILED;
+        }
+    } // if(!SymbolSelect(_symCustName, true))
+
+
+    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+    {
+        Print("Waiting for connection...");
+        return(INIT_FAILED);
+    }
+    // NB! Since some MT5 build function SeriesInfoInteger(SERIES_SYNCHRONIZED) does not work properly anymore
+    // and returns false always, so replaced with SymbolIsSynchronized
+    // if(!SeriesInfoInteger(_Symbol, _Period, SERIES_SYNCHRONIZED))
+    if(!SymbolIsSynchronized(_Symbol))
+    {
+        Print("Unsynchronized, skipping ticks...");
+        return(INIT_FAILED);
+    }
+
+    if(Reset)
+    {
+        reset(_symCustName);
+    }
+
+    if(Limit > 0)
+    {
+        fillArray(_symCustName);
+        Print("Buffer filled in for ", _symCustName);
+    }
+
+    if( _justCreated || OpenChartOnInit )
+    {
+        long id = ChartOpen(_symCustName, PERIOD_M1);
+        if(id == 0)
+        {
+            Print("Can't open new chart for ", _symCustName, ", code: ", GetLastError());
+            return(INIT_FAILED);
+        }
+        else
+        {
+            ChartSetSymbolPeriod(id, _symCustName, PERIOD_M1);
+            ChartSetInteger(id, CHART_MODE, CHART_CANDLES);
+            Sleep(1000);
+            string tmpl = TerminalInfoString(TERMINAL_DATA_PATH)+"\\Mql5\\Profiles\\Templates\\TicksTmpl.tpl";
+            Print( tmpl );
+            ChartApplyTemplate(id, tmpl);
+            ChartRedraw(id);
+        }
+    } // if( _justCreated || OpenChartOnInit )
+
+    return INIT_SUCCEEDED;
+
+//+------------------------------------------------------------------+
+} // int _OnInitCreateCustomSymbol(const string& _symCustName)
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+
+// E V E N T   H A N D L E R S IMPLEMENTATION
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+int _OnInit(void)
+{
+    tickCount = 0;
+
+    // sanity check - that expert advisor does not run from a custom symbol
+    if(SymbolInfoInteger(_Symbol, SYMBOL_CUSTOM))
+    {
+        Alert("" + _Symbol + " is a custom symbol. Only built-in symbol can be used as a host.");
+        return INIT_FAILED;
+    }
+
+    datetime t0 = iTime( _Symbol, PERIOD_H1, 0);
+    MqlDateTime dt0;
+    TimeToStruct( t0, dt0 );
+    // change name every hour
+    //symbolNameAppendix = StringFormat( "_%02d%02d%02d", 
+    //                                    dt0.mon,
+    //                                    dt0.day,
+    //                                    dt0.hour );
+    // change name every day                                        
+    symbolNameAppendix = StringFormat( "_%04d%02d%02d", 
+                                        dt0.year,
+                                        dt0.mon,
+                                        dt0.day );
+    
+
+    int ret = INIT_FAILED;
+    
+    string _symCustName = Symbol() + symbolNameAppendix;
+    ret = _OnInitCreateCustomSymbol( _symCustName ); 
+    if( INIT_SUCCEEDED != ret )
+    {
+        return ret;
+    }
+
+    _symCustName = Symbol() + symbolNameAppendix + "_OC";
+    ret = _OnInitCreateCustomSymbol( _symCustName ); 
+    if( INIT_SUCCEEDED != ret )
+    {
+        return ret;
+    }
+
+    _symCustName = Symbol() + symbolNameAppendix + "_HL";
+    ret = _OnInitCreateCustomSymbol( _symCustName ); 
+    if( INIT_SUCCEEDED != ret )
+    {
+        return ret;
+    }
+
+    _symCustName = Symbol() + symbolNameAppendix + "_DS";
+    ret = _OnInitCreateCustomSymbol( _symCustName ); 
+    if( INIT_SUCCEEDED != ret )
+    {
+        return ret;
+    }
+
+
+//--- panel position
+    int y = 30;
+    //if(ChartGetInteger(0, CHART_SHOW_ONE_CLICK))
+    //    y = 120;
+    comment.Create("comment_panel_01", 20, y);
+    comment2.Create("comment_panel_02", 20, 0);
+//--- panel style
+    bool InpAutoColors = false; //Auto Colors
+    comment.SetAutoColors(InpAutoColors);
+    comment.SetColor(COLOR_BORDER, COLOR_BLACK, 255);
+    comment.SetFont("Lucida Console", 13, false, 1.7);
+
+    comment2.SetAutoColors(InpAutoColors);
+    comment2.SetColor(COLOR_YELLOW, COLOR_BLACK, 255);
+    comment2.SetFont("Lucida Console", 12, false, 1.7);
+
+
+
+
+    //
+    // init all ma structs with default values
+    //
+    sMAvars md;
+    InitMaVarsStruct( md );
+    int sMaSize = ArraySize(sMa);
+    for( int cnt = 0; sMaSize > cnt; cnt++ )
+    {
+        sMa[cnt] = md;
+    }
+
+    sMa[0].periodKey = "S"+string(nS1);
+    sMa[1].periodKey = "S"+string(nS2);
+    sMa[2].periodKey = "S"+string(nS3);
+    sMa[3].periodKey = "S"+string(nS4);
+    sMa[4].periodKey = "T"+string(nS1);
+    sMa[5].periodKey = "T"+string(nS2);
+    sMa[6].periodKey = "T"+string(nS3);
+    sMa[7].periodKey = "T"+string(nS4);
+    sMa[8].periodKey = "SUM_AVG";
+
+    //ArrayPrint( sMa );
+
+    EventSetTimer(1);
+
+    return INIT_SUCCEEDED;
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // int _OnInit(void)
+//+------------------------------------------------------------------+
+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void _OnTimer()
+{
+
+    ulong position_ID = 0;
+    long pos_open_time = 0;
+    long create_time_delta = 0;
+
+    double last_price = 0;
+    double last_spread = 0;
+    ulong  pos_open_time_delta = 0;
+    long   pos_open_price_delta = 0;
+    double pos_open_price = 0;
+    double pos_open_price_last = 0;
+    double pos_open_profit = 0;
+    double pos_open_vol = 0;
+    ENUM_POSITION_TYPE pos_open_type = 0;
+    
+    int size = 0;
+    MqlTick array[];
+    int size1    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS1   ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int oc1   = 0;
+    int hl1   = 0;
+    long delta_msc1 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc1, hl1, delta_msc1 );
+    sMa[0].mad_avg = oc1;
+    sMa[0].c0d_avg = hl1;
+    sMa[0].sum_avg = 0;
+    if( 0 != delta_msc1)
+        sMa[0].sum_avg = (int)(-100+((double)size1/delta_msc1*1000)*20);
+
+    int size2    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS2   ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int oc2   = 0;
+    int hl2   = 0;
+    long delta_msc2 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc2, hl2, delta_msc2 );
+    sMa[1].mad_avg = oc2;
+    sMa[1].c0d_avg = hl2;
+    sMa[1].sum_avg = 0;
+    if( 0 != delta_msc2)
+        sMa[1].sum_avg = (int)(-100+((double)size2/delta_msc2*1000)*20);
+
+    int size5    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS3   ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int oc5   = 0;
+    int hl5   = 0;
+    long delta_msc5 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc5, hl5, delta_msc5 );
+    sMa[2].mad_avg = oc5;
+    sMa[2].c0d_avg = hl5;
+    sMa[2].sum_avg = 0;
+    if( 0 != delta_msc5)
+        sMa[2].sum_avg = (int)(-100+((double)size5/delta_msc5*1000)*20);
+
+    int size15   = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS4   ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int oc15   = 0;
+    int hl15   = 0;
+    long delta_msc15 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc15, hl15, delta_msc15 );
+    sMa[3].mad_avg = oc15;
+    sMa[3].c0d_avg = hl15;
+    sMa[3].sum_avg = 0;
+    if( 0 != delta_msc15)
+        sMa[3].sum_avg = (int)(-100+((double)size15/delta_msc15*1000)*20);
+
+    int size60   = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS1 );
+    int oc60   = 0;
+    int hl60   = 0;
+    long delta_msc60 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc60, hl60, delta_msc60 );
+    sMa[4].mad_avg = oc60;
+    sMa[4].c0d_avg = hl60;
+    sMa[4].sum_avg = 0;
+    if( 0 != delta_msc60)
+        sMa[4].sum_avg = (int)(-100+((double)size60/delta_msc60*1000)*20);
+
+    int size300  = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS2 );
+    int oc300  = 0;
+    int hl300  = 0;
+    long delta_msc300 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc300, hl300, delta_msc300 );
+    sMa[5].mad_avg = oc300;
+    sMa[5].c0d_avg = hl300;
+    sMa[5].sum_avg = 0;
+    if( 0 != delta_msc300)
+        sMa[5].sum_avg = (int)(-100+((double)size300/delta_msc300*1000)*20);
+
+    int size900  = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS3 );
+    int oc900   = 0;
+    int hl900   = 0;
+    long delta_msc900 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc900, hl900, delta_msc900 );
+    sMa[6].mad_avg = oc900;
+    sMa[6].c0d_avg = hl900;
+    sMa[6].sum_avg = 0;
+    if( 0 != delta_msc900)
+        sMa[6].sum_avg = (int)(-100+((double)size900/delta_msc900*1000)*20);
+
+    int size3600 = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS4 );
+    int oc3600   = 0;
+    int hl3600   = 0;
+    long delta_msc3600 = 0;
+    ExtractHighLowFromMqlTickArray( array, oc3600, hl3600, delta_msc3600 );
+    sMa[7].mad_avg = oc3600;
+    sMa[7].c0d_avg = hl3600;
+    sMa[7].sum_avg = 0;
+    if( 0 != delta_msc3600)
+        sMa[7].sum_avg = (int)(-100+((double)size3600/delta_msc3600*1000)*20);
+
+
+    string _t_str = StringFormat( " tc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
+                                  size1, size2, size5, size15, size60, size300, size900, size3600 );
+    //Print( _t_str );
+
+
+    string _oc_str = StringFormat( " oc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
+                                   oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600 );
+    //Print( _oc_str );
+
+    string _hl_str = StringFormat( " hl: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
+                                   hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600 );
+    //Print( _hl_str );
+
+    int tick_avg =      (sMa[0].sum_avg+sMa[1].sum_avg+sMa[2].sum_avg+sMa[3].sum_avg+
+                         sMa[4].sum_avg+sMa[5].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/8;
+
+    int tick_avg_low =  (sMa[0].sum_avg+sMa[1].sum_avg+sMa[4].sum_avg+sMa[5].sum_avg)/4;
+
+    int tick_avg_high = (sMa[2].sum_avg+sMa[3].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/4;
+                            
+    string str = StringFormat( " t: %s %s  avg:  %0.1f/ %0.1f/ %0.1f  %4d/1 %4d/2 %4d/5 %4d/15 %6d/60 %6d/300 %6d/900 %6d/3600",
+                               TimeToString(TimeCurrent(), TIME_SECONDS),
+                               _Symbol,
+                               tick_avg,
+                               tick_avg_low,
+                               tick_avg_high,
+                               size1, size2, size5, size15, size60, size300, size900, size3600 );
+    //Print( str );
+
+    double oc_avg = (((double)oc1) +     ((double)oc2) +
+                     (double)(oc5) +     ((double)oc15) +
+                     ((double)oc60) +   ((double)oc300) +
+                     ((double)oc900) + ((double)oc3600) ) / 8;
+    double oc_avg_low = (((double)oc1) +     ((double)oc2) +
+                         (double)(oc5) +     ((double)oc15)  ) / 4;
+    double oc_avg_high = (((double)oc60) +   ((double)oc300) +
+                          ((double)oc900) + ((double)oc3600) ) / 4;
+    str = StringFormat( " t: %s %s  avg: %4d/%4d/%4d  %4d %4d %4d %4d %6d %6d %6d %6d",
+                        TimeToString(TimeCurrent(), TIME_SECONDS),
+                        _Symbol,
+                        (int)oc_avg,
+                        (int)oc_avg_low,
+                        (int)oc_avg_high,
+                        oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600 );
+    sMa[8].mad_avg = (int)oc_avg;
+    //Print( str );
+
+    double hl_avg = (((double)hl1) +     ((double)hl2) +
+                     (double)(hl5) +     ((double)hl15) +
+                     ((double)hl60) +   ((double)hl300) +
+                     ((double)hl900) + ((double)hl3600) ) / 8;
+    double hl_avg_low = (((double)hl1) +     ((double)hl2) +
+                         (double)(hl5) +     ((double)hl15)  ) / 4;
+    double hl_avg_high = (((double)hl60) +   ((double)hl300) +
+                          ((double)hl900) + ((double)hl3600) ) / 4;
+    str = StringFormat( " t: %s %s  avg: %4d/%4d/%4d  %4d %4d %4d %4d %6d %6d %6d %6d",
+                        TimeToString(TimeCurrent(), TIME_SECONDS),
+                        _Symbol,
+                        (int)hl_avg,
+                        (int)hl_avg_low,
+                        (int)hl_avg_high,
+                        hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600 );
+    sMa[8].c0d_avg = (int)hl_avg;
+    //Print( str );
+    
+    
+    sMa[8].sum_avg = (sMa[0].sum_avg+sMa[1].sum_avg+sMa[2].sum_avg+sMa[3].sum_avg+
+                      sMa[4].sum_avg+sMa[5].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/8;
+
+
+    double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
+    double acc_cre = AccountInfoDouble(ACCOUNT_CREDIT);
+    double acc_pro = AccountInfoDouble(ACCOUNT_PROFIT);
+    double acc_equ = AccountInfoDouble(ACCOUNT_EQUITY);
+    double acc_mrg = AccountInfoDouble(ACCOUNT_MARGIN);
+    double acc_mrg_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    double acc_mrg_lvl = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+    double acc_mrg_so_call = AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL);
+    double acc_mrg_so_so = AccountInfoDouble(ACCOUNT_MARGIN_SO_SO);
+
+    str += StringFormat( "   ACCOUNT: %s / %s / %s - MARGIN free: %s ",
+                         DoubleToString(acc_equ, 2),
+                         DoubleToString(acc_bal, 2),
+                         DoubleToString(acc_pro, 2),
+                         DoubleToString(acc_mrg_free, 2) );
+    //Print( str );
+
+
+    //--- get data on the last tick
+    MqlTick t;
+    if(!SymbolInfoTick(Symbol(), t))
+    {
+        Print("SymbolInfoTick() failed, error = ", GetLastError());
+    }
+    else
+    {
+        // eliminate strange things
+        if(t.ask == 0 || t.bid == 0 || t.ask < t.bid)
+        {
+            Print("SymbolInfoTick() Ticks error");
+        }
+        else
+        {
+            last_spread = (t.ask - t.bid) / _Point;
+            last_price = (t.ask + t.bid) / 2;
+            //--- display the last tick time up to milliseconds
+            str += StringFormat("    -  Last tick [ %s / %s / %s ] was at %s.%03d with spread [ %4d ]",
+                                DoubleToString(t.ask, _Digits),
+                                DoubleToString(last_price, _Digits),
+                                DoubleToString(t.bid, _Digits),
+                                TimeToString(t.time, TIME_SECONDS),
+                                t.time_msc % 1000,
+                                (int)last_spread );
+            //Print( str );
+        }
+    }
+
+
+    str = StringFormat(" t: %s  no open position", TimeToString(TimeCurrent(), TIME_SECONDS ) );
+
+    string sBS = "";
+    //--- check if a position is present and display the time of its changing
+    if(PositionSelect(_Symbol))
+    {
+
+
+        //--- receive position ID for further work
+        position_ID = PositionGetInteger(POSITION_IDENTIFIER);
+        //--- receive the time of position forming in milliseconds since 01.01.1970
+        pos_open_time = PositionGetInteger(POSITION_TIME);
+        create_time_delta = TimeCurrent() - pos_open_time;
+
+        pos_open_price =  PositionGetDouble(POSITION_PRICE_OPEN);
+        pos_open_price_last =  PositionGetDouble(POSITION_PRICE_CURRENT);
+        pos_open_profit =  PositionGetDouble(POSITION_PROFIT);
+        pos_open_vol =  PositionGetDouble(POSITION_VOLUME);
+
+        pos_open_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+        if( POSITION_TYPE_BUY == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price_last - pos_open_price) / _Point);
+            sBS = "BUY ";
+        }
+
+        if( POSITION_TYPE_SELL == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price - pos_open_price_last) / _Point);
+            sBS = "SELL";
+        }
+
+        str = StringFormat(" t: %s [%s v%0.2f] %s #%d   %6d / %6ds ",
+                           TimeToString(TimeCurrent(), TIME_SECONDS ),
+                           sBS,
+                           pos_open_vol,
+                           _Symbol,
+                           position_ID,
+                           pos_open_price_delta,
+                           create_time_delta );
+
+
+        str += StringFormat(" -  open price delta: %5d - last price %s  - open price %s - profit: %s - vol: %s",
+                            pos_open_price_delta,
+                            DoubleToString(pos_open_price_last, _Digits),
+                            DoubleToString(pos_open_price, _Digits),
+                            DoubleToString(pos_open_profit, 2),
+                            DoubleToString(pos_open_vol, 2) );
+
+
+        str += StringFormat(" -  %d delta seconds => curr time %s  - open time %s",
+                            create_time_delta, TimeToString(TimeCurrent(), TIME_SECONDS ), TimeToString(pos_open_time, TIME_SECONDS ) );
+
+
+    } // if(PositionSelect(_Symbol))
+
+    //Print( str );
+
+
+    //
+    // comment output c0 and spread
+    //
+    int _comment_txt_line_start = 0;
+    int sMaSize = ArraySize(sMa);
+    string delta_ms_since_last_tick_str = "n/a";
+    if( 0 < tickCount )
+        delta_ms_since_last_tick_str = IntegerToString(GetTickCount() - tickCount);
+    string tickv_str = StringFormat("c0: %s s: %2d  d: %4s",
+                                    DoubleToString(last_price, Digits()),
+                                    (int)last_spread,
+                                    delta_ms_since_last_tick_str );
+    //tickCount = 0;
+    comment.SetText(_comment_txt_line_start, tickv_str, COLOR_TEXT);
+
+    //
+    // comment output tick speed
+    //
+    _comment_txt_line_start++;
+
+    double tick_threshold = 1.0;
+    if( "GBPJPY" == _Symbol || "NZDUSD" == _Symbol )
+        tick_threshold = 2.0;
+
+    tickv_str = StringFormat(" %4d/min : %4d/%4d/%4d",
+                             size60,
+                             tick_avg,
+                             tick_avg_low,
+                             tick_avg_high );
+
+    if( tick_threshold < tick_avg_low &&  tick_threshold < tick_avg_high )
+    {
+        comment.SetText(_comment_txt_line_start, tickv_str, COLOR_GREEN);
+    }
+    else
+    {
+        comment.SetText(_comment_txt_line_start, tickv_str, COLOR_TEXT);
+    }
+
+    //
+    // comment output HL
+    //
+    _comment_txt_line_start++;
+    double hl_threshold = 10;
+
+    string hl_str = StringFormat(" %4d  HL : %4d/%4d/%4d",
+                                 hl60,
+                                 (int)hl_avg,
+                                 (int)hl_avg_low,
+                                 (int)hl_avg_high );
+
+    if( hl_threshold < hl_avg_low &&  hl_threshold < hl_avg_high )
+    {
+        comment.SetText(_comment_txt_line_start, hl_str, COLOR_GREEN);
+    }
+    else
+    {
+        comment.SetText(_comment_txt_line_start, hl_str, COLOR_TEXT);
+    }
+
+    //
+    // comment output OC
+    //
+    _comment_txt_line_start++;
+    double oc_threshold = 10;
+
+    string oc_str = StringFormat(" %4d  OC : %4d/%4d/%4d",
+                                 oc60,
+                                 (int)oc_avg,
+                                 (int)oc_avg_low,
+                                 (int)oc_avg_high );
+
+    if( +1 * oc_threshold < oc_avg_low && +1 * oc_threshold < oc_avg_high)
+    {
+        comment.SetText(_comment_txt_line_start, oc_str, COLOR_BLUE);
+    }
+    else if ( -1 * oc_threshold > oc_avg_low && -1 * oc_threshold > oc_avg_high )
+    {
+        comment.SetText(_comment_txt_line_start, oc_str, COLOR_RED);
+    }
+    else
+    {
+        comment.SetText(_comment_txt_line_start, oc_str, COLOR_TEXT);
+    }
+
+    //
+    // comment output MA
+    //
+    _comment_txt_line_start++;
+
+    int _sum_avg_threshold = 0;
+    string _ma_str = "";
+
+    for( int cnt = 0; sMaSize > cnt; cnt++ )
+    {
+        _ma_str = StringFormat("  %7s : %4d/%4d/%4d",
+                               sMa[cnt].periodKey,
+                               sMa[cnt].mad_avg,
+                               sMa[cnt].c0d_avg,
+                               sMa[cnt].sum_avg );
+        _sum_avg_threshold = 10 + (int)last_spread;
+        int _lineno = _comment_txt_line_start + cnt;
+        if( +1 * _sum_avg_threshold < sMa[cnt].mad_avg )
+        {
+            comment.SetText(_lineno, _ma_str, COLOR_BLUE);
+        }
+        else if ( -1 * _sum_avg_threshold > sMa[cnt].mad_avg )
+        {
+            comment.SetText(_lineno, _ma_str, COLOR_RED);
+        }
+        else
+        {
+            comment.SetText(_lineno, _ma_str, COLOR_TEXT);
+        }
+    } // for( int cnt = 0; sMaSize > cnt; cnt++ )
+
+    //
+    // comment output open positions
+    //
+    _comment_txt_line_start += sMaSize;
+
+    if( "" == sBS || 0.0 == pos_open_vol )
+    {
+        string bs_str = StringFormat("%s(0.00)",
+                                     _Symbol);
+        comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
+    }
+    else
+    {
+        string bs_str = StringFormat("%s(%0.2f) %6d over %6d s",
+                                     //_Symbol,
+                                     sBS,
+                                     pos_open_vol,
+                                     pos_open_price_delta,
+                                     create_time_delta );
+
+        if( 10 < pos_open_price_delta )
+        {
+            if( "BUY " == sBS )
+                comment.SetText(_comment_txt_line_start, bs_str, COLOR_BLUE);
+            else if( "SELL" == sBS )
+                comment.SetText(_comment_txt_line_start, bs_str, COLOR_RED);
+            else
+                comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
+
+        }
+        else if ( -10 > pos_open_price_delta )
+        {
+            comment.SetText(_comment_txt_line_start, bs_str, COLOR_YELLOW);
+        }
+        else
+        {
+            comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
+        }
+    } // if( "" == sBS || 0.0 == pos_open_vol )
+
+    //
+    // comment show
+    //
+
+    
+    comment.Show();
+
+    string c2_str = StringFormat("%s  %s%s",
+                                 TimeToString(TimeCurrent(), TIME_SECONDS ),
+                                 _Symbol,
+                                 symbolNameAppendix);
+    comment2.SetText(0, c2_str, COLOR_TEXT);
+    comment2.Show();
+
+
+//#define MAMBO_JUMBO
+#ifdef MAMBO_JUMBO
+    int _color = clrWhite;
+    int _colorLine = clrWhite;
+    datetime _width_factor = 1;
+    datetime time0 = iTime(_Symbol, _Period, 0);
+    datetime time1 = time0 - 1 * PeriodSeconds();
+    datetime time4 = time0 - 4 * PeriodSeconds();
+    datetime time5 = time0 - 5 * PeriodSeconds();
+    datetime timep = time0 + 3 * PeriodSeconds();
+    if(PositionSelect(_Symbol))
+    {
+        /*double pos_open_price =  PositionGetDouble(POSITION_PRICE_OPEN);
+        double pos_open_price_last =  PositionGetDouble(POSITION_PRICE_CURRENT);
+        long pos_open_time = PositionGetInteger(POSITION_TIME);
+        long pos_open_price_delta = 0;
+        ENUM_POSITION_TYPE pos_open_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);*/
+        if( POSITION_TYPE_BUY == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price_last - pos_open_price) / _Point);
+            _color = clrBlue;
+            _colorLine = clrBlue;
+            if( 0 > pos_open_price_delta )
+                _color = clrYellow;
+        }
+
+        if( POSITION_TYPE_SELL == pos_open_type )
+        {
+            pos_open_price_delta = (long)((pos_open_price - pos_open_price_last) / _Point);
+            _color = clrRed;
+            _colorLine = clrRed;
+            if( 0 > pos_open_price_delta )
+                _color = clrYellow;
+        }
+
+        SetTline(0,      "OP_tline", 0, pos_open_time, pos_open_price, timep, pos_open_price,      _colorLine, STYLE_SOLID, 3, "OP_tline");
+        SetRightPrice(0, "OP_price", 0, timep,         pos_open_price,                             _colorLine, "Georgia");
+        SetRectangle(0,  "OP_rect",  0, time1,         pos_open_price, time0, pos_open_price_last, _color, STYLE_SOLID, 1, "OpenPrice");
+
+
+        if( 0 == ObjectFind( 0, "OC_tline") )
+            ObjectDelete( 0,    "OC_tline");
+        if( 0 == ObjectFind( 0, "OC_price") )
+            ObjectDelete( 0,    "OC_price");
+        if( 0 == ObjectFind( 0, "OC_rect") )
+            ObjectDelete( 0,    "OC_rect");
+
+    }
+    else
+    {
+        if( 0 == ObjectFind( 0, "OP_tline") )
+            ObjectDelete( 0,    "OP_tline");
+        if( 0 == ObjectFind( 0, "OP_price") )
+            ObjectDelete( 0,    "OP_price");
+        if( 0 == ObjectFind( 0, "OP_rect") )
+            ObjectDelete( 0,    "OP_rect");
+
+        double o0 = iOpen( _Symbol, _Period, 0 );
+        double c0 = iClose( _Symbol, _Period, 0 );
+
+        if( o0 < c0 )
+        {
+            _color = clrBlue;
+            _colorLine = clrBlue;
+        }
+        if( o0 > c0 )
+        {
+            _color = clrRed;
+            _colorLine = clrRed;
+        }
+        //SetTline(     0, "OC_tline", 0, time1, o0, timep, o0,         _colorLine, STYLE_SOLID, 3, "OP_tline");
+        //SetRightPrice(0, "OC_price", 0, timep, c0,                    _colorLine, "Georgia");
+        //SetRectangle( 0, "OC_rect",  0, time1, c0, time0, o0, _color, STYLE_SOLID, 1, "OpenPrice");
+
+    } // if(PositionSelect(_Symbol))
+
+    SetTline(0, "PRICE_tline", 0, time1, last_price, timep, last_price, clrSpringGreen, STYLE_SOLID, 3, "PRICE_tline");
+    SetRightPrice(0, "PRICE_price", 0, timep, last_price, clrSpringGreen, "Georgia");
+#endif
+
+    //EventKillTimer();
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void _OnTimer()
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void _OnTick(void)
+{
+
+    tickCount = GetTickCount();
+
+    //ResetAllTickBarsIfStopAllOrNewHour(  );
+    ResetAllTickBarsIfStopAllOrNewDay(  );
+    
+    MqlTick _t;
+    if(SymbolInfoTick(_Symbol, _t))
+    {
+        
+        
+//
+//
+//
+//
+
+        int size = 0;
+        MqlTick array[];
+        int size1    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS1   ) * 1000, (TimeCurrent() - 0) * 1000 );
+        int oc1   = 0;
+        int hl1   = 0;
+        long delta_msc1 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc1, hl1, delta_msc1 );
+        sMa[0].mad_avg = oc1;
+        sMa[0].c0d_avg = hl1;
+        sMa[0].sum_avg = 0;
+        if( 0 != delta_msc1)
+            sMa[0].sum_avg = (int)(-100+((double)size1/delta_msc1*1000)*20);
+    
+        int size2    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS2   ) * 1000, (TimeCurrent() - 0) * 1000 );
+        int oc2   = 0;
+        int hl2   = 0;
+        long delta_msc2 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc2, hl2, delta_msc2 );
+        sMa[1].mad_avg = oc2;
+        sMa[1].c0d_avg = hl2;
+        sMa[1].sum_avg = 0;
+        if( 0 != delta_msc2)
+            sMa[1].sum_avg = (int)(-100+((double)size2/delta_msc2*1000)*20);
+    
+        int size5    = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS3   ) * 1000, (TimeCurrent() - 0) * 1000 );
+        int oc5   = 0;
+        int hl5   = 0;
+        long delta_msc5 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc5, hl5, delta_msc5 );
+        sMa[2].mad_avg = oc5;
+        sMa[2].c0d_avg = hl5;
+        sMa[2].sum_avg = 0;
+        if( 0 != delta_msc5)
+            sMa[2].sum_avg = (int)(-100+((double)size5/delta_msc5*1000)*20);
+    
+        int size15   = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - nS4   ) * 1000, (TimeCurrent() - 0) * 1000 );
+        int oc15   = 0;
+        int hl15   = 0;
+        long delta_msc15 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc15, hl15, delta_msc15 );
+        sMa[3].mad_avg = oc15;
+        sMa[3].c0d_avg = hl15;
+        sMa[3].sum_avg = 0;
+        if( 0 != delta_msc15)
+            sMa[3].sum_avg = (int)(-100+((double)size15/delta_msc15*1000)*20);
+    
+        int size60   = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS1 );
+        int oc60   = 0;
+        int hl60   = 0;
+        long delta_msc60 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc60, hl60, delta_msc60 );
+        sMa[4].mad_avg = oc60;
+        sMa[4].c0d_avg = hl60;
+        sMa[4].sum_avg = 0;
+        if( 0 != delta_msc60)
+            sMa[4].sum_avg = (int)(-100+((double)size60/delta_msc60*1000)*20);
+    
+        int size300  = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS2 );
+        int oc300  = 0;
+        int hl300  = 0;
+        long delta_msc300 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc300, hl300, delta_msc300 );
+        sMa[5].mad_avg = oc300;
+        sMa[5].c0d_avg = hl300;
+        sMa[5].sum_avg = 0;
+        if( 0 != delta_msc300)
+            sMa[5].sum_avg = (int)(-100+((double)size300/delta_msc300*1000)*20);
+    
+        int size900  = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS3 );
+        int oc900   = 0;
+        int hl900   = 0;
+        long delta_msc900 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc900, hl900, delta_msc900 );
+        sMa[6].mad_avg = oc900;
+        sMa[6].c0d_avg = hl900;
+        sMa[6].sum_avg = 0;
+        if( 0 != delta_msc900)
+            sMa[6].sum_avg = (int)(-100+((double)size900/delta_msc900*1000)*20);
+    
+        int size3600 = CopyTicks(_Symbol, array, gCopyTicksFlags, 0, nS4 );
+        int oc3600   = 0;
+        int hl3600   = 0;
+        long delta_msc3600 = 0;
+        ExtractHighLowFromMqlTickArray( array, oc3600, hl3600, delta_msc3600 );
+        sMa[7].mad_avg = oc3600;
+        sMa[7].c0d_avg = hl3600;
+        sMa[7].sum_avg = 0;
+        if( 0 != delta_msc3600)
+            sMa[7].sum_avg = (int)(-100+((double)size3600/delta_msc3600*1000)*20);
+    
+    
+        int tick_avg =      (sMa[0].sum_avg+sMa[1].sum_avg+sMa[2].sum_avg+sMa[3].sum_avg+
+                             sMa[4].sum_avg+sMa[5].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/8;
+    
+        int tick_avg_low =  (sMa[0].sum_avg+sMa[1].sum_avg+sMa[4].sum_avg+sMa[5].sum_avg)/4;
+    
+        int tick_avg_high = (sMa[2].sum_avg+sMa[3].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/4;
+                                
+    
+        double oc_avg = (((double)oc1) +     ((double)oc2) +
+                         (double)(oc5) +     ((double)oc15) +
+                         ((double)oc60) +   ((double)oc300) +
+                         ((double)oc900) + ((double)oc3600) ) / 8;
+        double oc_avg_low = (((double)oc1) +     ((double)oc2) +
+                             (double)(oc5) +     ((double)oc15)  ) / 4;
+        double oc_avg_high = (((double)oc60) +   ((double)oc300) +
+                              ((double)oc900) + ((double)oc3600) ) / 4;
+        sMa[8].mad_avg = (int)oc_avg;
+    
+        double hl_avg = (((double)hl1) +     ((double)hl2) +
+                         (double)(hl5) +     ((double)hl15) +
+                         ((double)hl60) +   ((double)hl300) +
+                         ((double)hl900) + ((double)hl3600) ) / 8;
+        double hl_avg_low = (((double)hl1) +     ((double)hl2) +
+                             (double)(hl5) +     ((double)hl15)  ) / 4;
+        double hl_avg_high = (((double)hl60) +   ((double)hl300) +
+                              ((double)hl900) + ((double)hl3600) ) / 4;
+        sMa[8].c0d_avg = (int)hl_avg;
+        
+        sMa[8].sum_avg = (sMa[0].sum_avg+sMa[1].sum_avg+sMa[2].sum_avg+sMa[3].sum_avg+
+                          sMa[4].sum_avg+sMa[5].sum_avg+sMa[6].sum_avg+sMa[7].sum_avg)/8;
+
+
+//
+//
+//
+//        
+        
+        
+
+        string _symCustName = Symbol() + symbolNameAppendix;
+        double o0 = iOpen(_Symbol,PERIOD_D1,0);
+        _t.ask = (_t.ask - o0)/_Point;
+        _t.bid = (_t.bid - o0)/_Point;
+        if( 0 < _t.last )
+        {
+            _t.last = (_t.last - o0)/_Point;
+        }
+        add(_symCustName, _t);
+        
+
+        _symCustName = Symbol() + symbolNameAppendix + "_OC";
+        _t.ask  = sMa[8].mad_avg;
+        _t.bid  = sMa[8].mad_avg;
+        _t.last = sMa[8].mad_avg;
+        add(_symCustName, _t);
+
+        _symCustName = Symbol() + symbolNameAppendix + "_HL";
+        _t.ask  = sMa[8].c0d_avg;
+        _t.bid  = sMa[8].c0d_avg;
+        _t.last = sMa[8].c0d_avg;
+        add(_symCustName, _t);
+
+        _symCustName = Symbol() + symbolNameAppendix + "_DS";
+        _t.ask  = sMa[8].sum_avg;
+        _t.bid  = sMa[8].sum_avg;
+        _t.last = sMa[8].sum_avg;
+        add(_symCustName, _t);
+
+    } // if(SymbolInfoTick(_Symbol, _t))
+    
+    Print( (GetTickCount()-tickCount));
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void _OnTick(void)
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void _OnDeinit(const int reason)
+{
+
+    Print( "OnDeinit: ", reason );
+    //
+    // open all the iMa handles
+    //
+    /*int sMaSize = ArraySize(sMa);
+    for( int cnt = 0; sMaSize > cnt; cnt++ )
+    {
+        if(INVALID_HANDLE != sMa[cnt].hS1)
+        {
+            IndicatorRelease(sMa[cnt].hS1);
+        }
+        if(INVALID_HANDLE != sMa[cnt].hS2)
+        {
+            IndicatorRelease(sMa[cnt].hS2);
+        }
+        if(INVALID_HANDLE != sMa[cnt].hS3)
+        {
+            IndicatorRelease(sMa[cnt].hS3);
+        }
+        if(INVALID_HANDLE != sMa[cnt].hS4)
+        {
+            IndicatorRelease(sMa[cnt].hS4);
+        }
+    } // for( int cnt = 0; sMaSize>cnt; cnt++ )*/
+
+//--- remove panel
+    comment.Destroy();
+    comment2.Destroy();
+
+    ObjectsDeleteAll(0, "", -1, -1);
+    ChartRedraw(0);
+
+    Comment("");
+//--- destroy the timer after completing the work
+    EventKillTimer();
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+} // void _OnDeinit(const int reason)
+//+------------------------------------------------------------------+
+
+
+//
+// helper functions
+//
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void ResetAllTickBarsIfStopAllOrNewHour()
+{
+    
+    datetime t0 = iTime( _Symbol, PERIOD_M1, 0);
+    MqlDateTime dt0;
+    TimeToStruct( t0, dt0 );
+    datetime t1 = iTime( _Symbol, PERIOD_M1, 1);
+    MqlDateTime dt1;
+    TimeToStruct( t1, dt1 );
+    // a new hour has begun - create new custom symbol of the hour
+    if( dt0.hour != dt1.hour )
+    {
+        string str_apx = StringFormat( "_%02d%02d%02d", 
+                                            dt0.mon,
+                                            dt0.day,
+                                            dt0.hour );
+        // if the appendix hasn't changed yet 
+        //  -> e.g. for PERIOD_M1 that could happen
+        //          the full first 60s
+        if( str_apx != symbolNameAppendix )
+        {
+            symbolNameAppendix = str_apx;
+            //string _symCustName = Symbol() + symbolNameAppendix;
+            _OnDeinit(0);
+            // TODO error handling
+            int ret = _OnInit();
+            Print( "newHour: ",  str_apx, " _OnInit: ", ret );
+        }
+        
+    } // if( dt0.hour != dt1.hour )
+
+} // void ResetAllTickBarsIfStopAllOrNewHour()
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void ResetAllTickBarsIfStopAllOrNewDay()
+{
+    
+    // no error
+    datetime t0 = iTime( _Symbol, PERIOD_H1, 0);
+    MqlDateTime dt0;
+    TimeToStruct( t0, dt0 );
+    datetime t1 = iTime( _Symbol, PERIOD_H1, 1);
+    MqlDateTime dt1;
+    TimeToStruct( t1, dt1 );
+    // a new hour has begun - create new custom symbol of the hour
+    if( dt0.day_of_week != dt1.day_of_week )
+    {
+        string str_apx = StringFormat( "_%04d%02d%02d", 
+                                            dt0.year,
+                                            dt0.mon,
+                                            dt0.day );
+        // if the appendix hasn't changed yet 
+        //  -> e.g. for PERIOD_M1 that could happen
+        //          the full first 60s
+        if( str_apx != symbolNameAppendix )
+        {
+            symbolNameAppendix = str_apx;
+            //string _symCustName = Symbol() + symbolNameAppendix;
+            _OnDeinit(0);
+            // TODO error handling
+            int ret = _OnInit();
+            Print( "newDay: ",  str_apx, " _OnInit: ", ret );
+        }
+        
+    } // if( dt0.hour != dt1.hour )
+
+} // void ResetAllTickBarsIfStopAllOrNewDay()
+//+------------------------------------------------------------------+
+
