@@ -1210,7 +1210,7 @@ int m_IndiGetShiftSinceYearStarted( int shift )
 } // int m_IndiGetShiftSinceYearStarted( int shift )
 //+------------------------------------------------------------------+
 
-
+/*
 datetime iTime(string asymbol,ENUM_TIMEFRAMES timeframe,int shift) {
     if(shift < 0) return(0);
     datetime Arr[];
@@ -1219,7 +1219,7 @@ datetime iTime(string asymbol,ENUM_TIMEFRAMES timeframe,int shift) {
     else 
         return(0);
 } // datetime iTime(string asymbol,ENUM_TIMEFRAMES timeframe,int shift)
-
+*/
 
 
 //+------------------------------------------------------------------+
