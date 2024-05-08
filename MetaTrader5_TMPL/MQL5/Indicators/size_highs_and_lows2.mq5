@@ -96,9 +96,9 @@ void OnInit()
 
     PlotIndexSetDouble( 0, PLOT_EMPTY_VALUE, 0.0 );
     PlotIndexSetDouble( 1, PLOT_EMPTY_VALUE, 0.0 );
-    PlotIndexSetDouble( 2, PLOT_EMPTY_VALUE, 0.0 );
-    PlotIndexSetDouble( 3, PLOT_EMPTY_VALUE, 0.0 );
-    PlotIndexSetDouble( 4, PLOT_EMPTY_VALUE, 0.0 );
+    //PlotIndexSetDouble( 2, PLOT_EMPTY_VALUE, 0.0 );
+    //PlotIndexSetDouble( 3, PLOT_EMPTY_VALUE, 0.0 );
+    //PlotIndexSetDouble( 4, PLOT_EMPTY_VALUE, 0.0 );
 
 
 //--- set plot draw begin (0 1 2 3...N )

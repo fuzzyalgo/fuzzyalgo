@@ -11,9 +11,9 @@
 #property indicator_buffers 9
 #property indicator_plots   3
 //---
-#property indicator_type1  DRAW_ARROW
-#property indicator_type2  DRAW_ARROW
-#property indicator_type3  DRAW_LINE
+#property indicator_type1  DRAW_LINE
+#property indicator_type2  DRAW_LINE
+#property indicator_type3  DRAW_ARROW
 #property indicator_type4  DRAW_HISTOGRAM
 #property indicator_type5  DRAW_HISTOGRAM
 #property indicator_type6  DRAW_LINE
@@ -23,7 +23,7 @@
 //---
 #property indicator_color1 clrBlue
 #property indicator_color2 clrRed
-#property indicator_color3 clrBlack
+#property indicator_color3 clrBlack 
 #property indicator_color4 clrLime
 #property indicator_color5 clrGold
 #property indicator_color6 clrLime
@@ -123,15 +123,15 @@ void OnInit()
    PlotIndexSetInteger(1,PLOT_LINE_STYLE,STYLE_SOLID);
    PlotIndexSetInteger(1,PLOT_LINE_WIDTH,1);
 
-   /*PlotIndexSetInteger(0,PLOT_ARROW,0x6e);
-   PlotIndexSetInteger(1,PLOT_ARROW,0x6e);
+   PlotIndexSetInteger(2,PLOT_ARROW,0x6e);
+   /*PlotIndexSetInteger(1,PLOT_ARROW,0x6e);
    PlotIndexSetInteger(0,PLOT_LINE_WIDTH,6);
    PlotIndexSetInteger(1,PLOT_LINE_WIDTH,6);*/
 
 
 //---
    PlotIndexSetInteger(2,PLOT_LINE_STYLE,STYLE_SOLID);
-   PlotIndexSetInteger(2,PLOT_LINE_WIDTH,3);
+   PlotIndexSetInteger(2,PLOT_LINE_WIDTH,1);
 //---
    PlotIndexSetInteger(3,PLOT_LINE_STYLE,STYLE_SOLID);
    PlotIndexSetInteger(3,PLOT_LINE_WIDTH,1);
@@ -257,7 +257,8 @@ int OnCalculate(const int rates_total,     // rates total
         
       if( maxHighBuffer[i] > maxHighBuffer[i-1] )
       {
-        maxHighBufferMainChart[i] = Close[i];
+        //maxHighBufferMainChart[i] = Close[i];
+        maxHighBufferMainChart[i] = High[i];
       }
       else
       {
@@ -266,14 +267,16 @@ int OnCalculate(const int rates_total,     // rates total
       
       if( maxLowBuffer[i] < maxLowBuffer[i-1] )
       {
-        maxLowBufferMainChart[i] = Close[i];
+        //maxLowBufferMainChart[i] = Close[i];
+        maxLowBufferMainChart[i] = Low[i];
       }
       else
       {
         maxLowBufferMainChart[i] = maxLowBufferMainChart[i-1];
       }
         
-      maxDeltaBuffer[i]=(maxHighBufferMainChart[i] + maxLowBufferMainChart[i])/2;
+      //maxDeltaBuffer[i]=(maxHighBufferMainChart[i] + maxLowBufferMainChart[i])/2;
+      maxDeltaBuffer[i] = Close[i];
        
    }
 //--- return prev_calculated
