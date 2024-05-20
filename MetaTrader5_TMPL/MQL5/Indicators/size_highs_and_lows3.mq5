@@ -116,11 +116,11 @@ void OnInit()
    PlotIndexSetInteger(7,PLOT_DRAW_BEGIN,gAlgoPeriod);
    PlotIndexSetInteger(8,PLOT_DRAW_BEGIN,gAlgoPeriod);
 //--- line style
-   PlotIndexSetInteger(0,PLOT_LINE_STYLE,STYLE_SOLID);
+   PlotIndexSetInteger(0,PLOT_LINE_STYLE,STYLE_DASHDOTDOT);
 //--- line width
    PlotIndexSetInteger(0,PLOT_LINE_WIDTH,1);
 //---
-   PlotIndexSetInteger(1,PLOT_LINE_STYLE,STYLE_SOLID);
+   PlotIndexSetInteger(1,PLOT_LINE_STYLE,STYLE_DASHDOTDOT);
    PlotIndexSetInteger(1,PLOT_LINE_WIDTH,1);
 
    PlotIndexSetInteger(2,PLOT_ARROW,0x6e);

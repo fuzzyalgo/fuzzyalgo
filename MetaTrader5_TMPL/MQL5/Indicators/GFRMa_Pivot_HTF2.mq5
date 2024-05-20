@@ -32,6 +32,9 @@ input uint s2_Samples = 8;
 input uint s3_Samples = 16;
 input uint s4_Samples = 32;
 
+uint kInputSampleAvgInSecs = (s1_Samples+s2_Samples+s3_Samples+s4_Samples)/4*PeriodSeconds();
+
+
 input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
 input ENUM_MA_METHOD     ma_method     = MODE_SMA;
 
@@ -186,16 +189,20 @@ int OnCalculate(const int rates_total,
     if( BarsCalculated(Ind_Handle_S4) < Bars(Symbol(), Period())  )
         return(prev_calculated);
 
+
     MqlTick array[];
     uint gCopyTicksFlags = COPY_TICKS_INFO; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
     int size1    = CopyTicksRange(  Symbol(), 
                                     array, gCopyTicksFlags, 
-                                    (TimeCurrent() - 14*PeriodSeconds()   ) * 1000, 
+                                    (TimeCurrent() - kInputSampleAvgInSecs   ) * 1000, 
                                     (TimeCurrent() - 0) * 1000 );
     int oc1   = 0;
     int hl1   = 0;
-    ExtractHighLowFromMqlTickArray( array, oc1, hl1 );
-    string fmt = StringFormat("%4d  v: %4d  oc: %4d  hl: %4d", PeriodSeconds(), size1, oc1, hl1);
+    double high1 = 0;
+    double low1  = 1000000000;
+    ExtractHighLowFromMqlTickArray( array, oc1, hl1, high1, low1 );
+    int size_delta = (size1*hl1)/(int)kInputSampleAvgInSecs;
+    string fmt = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size1, oc1, hl1,size_delta);
     Print( fmt );
     
     static double Up1[1], Up2[1], Middle[1], Dn1[1], Dn2[1];
@@ -221,38 +228,39 @@ int OnCalculate(const int rates_total,
 
     datetime time0 = time[bar0];
     datetime time1 = time0 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
+    /*
     if( Up1[0] < Up2[0] )
         SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Up_Color, STYLE_SOLID, 1, UpName);
     else
         SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Dn_Color, STYLE_SOLID, 1, UpName);
+    */
 
     datetime time2 = time1 - _width_factor * PeriodSeconds();
+    /*
     if( Dn1[0] < Up1[0] )
         SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Up_Color, STYLE_SOLID, 1, UpDnName);
     else
         SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Dn_Color, STYLE_SOLID, 1, UpDnName);
-
+    */
 
     datetime time3 = time2 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
+    /*
     if( Dn2[0] < Dn1[0] )
         SetRectangle(0, DnName, 0, time3, Dn1[0], time2, Dn2[0], Up_Color, STYLE_SOLID, 1, DnName);
     else
         SetRectangle(0, DnName, 0, time3, Dn1[0], time2, Dn2[0], Dn_Color, STYLE_SOLID, 1, DnName);
-
+    */
+    
     int avg1 = (int)((Up2[0] - Up1[0]) / _Point);
     int avg2 = (int)((Up1[0] - Dn1[0]) / _Point);
     int avg3 = (int)((Dn1[0] - Dn2[0]) / _Point);
     int avgp = (int)(( avg1 + avg2 + avg3 ) / 3);
     //Print( avg1 + " " + avg2 + " " + avg3 + " " + avgp );
 
-    double avg  = avgp * _Point  + Dn2[0];
+    double avg  = avgp * _Point  + Middle[0];
 
     datetime time4 = time3 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
-    if( 0 < avgp )
-        SetRectangle(0, AvgName, 0, time4, Dn2[0]/*Middle[0]*/, time3, avg, Up_Color, STYLE_SOLID, 1, AvgName);
-    else
-        SetRectangle(0, AvgName, 0, time4, Dn2[0]/*Middle[0]*/, time3, avg, Dn_Color, STYLE_SOLID, 1, AvgName);
-
+        
     datetime timep  = time0 + 3 * PeriodSeconds();
     datetime timel1 = time4 - _width_factor * PeriodSeconds();
     SetTline(0, MiddleName, 0, timep, Middle[0], timel1, Middle[0], Middle_color, STYLE_SOLID, 3, MiddleName);
@@ -270,10 +278,28 @@ int OnCalculate(const int rates_total,
 
 
     datetime time6 = time5 - _width_factor * PeriodSeconds(); 
+    /*
     if( 0 < oc1 )
-        SetRectangle(0, OCName, 0, time[bar0]+0*PeriodSeconds(), close[bar0], time[bar0]+1*PeriodSeconds(), close[bar0-14], Up_Color, STYLE_SOLID, 1, OCName);
+        SetRectangle(0, OCName, 0, time[bar0]-1*PeriodSeconds(), close[bar0], time[bar0]+0*PeriodSeconds(), close[bar0] - (oc1*_Point), Up_Color, STYLE_SOLID, 1, OCName);
     else
-        SetRectangle(0, OCName, 0, time[bar0]+0*PeriodSeconds(), close[bar0], time[bar0]+1*PeriodSeconds(), close[bar0-14], Dn_Color, STYLE_SOLID, 1, OCName);
+        SetRectangle(0, OCName, 0, time[bar0]-1*PeriodSeconds(), close[bar0], time[bar0]+0*PeriodSeconds(), close[bar0] - (oc1*_Point), Dn_Color, STYLE_SOLID, 1, OCName);
+    */
+    
+
+    if( 0 < avgp )
+        //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
+    else
+        //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
+
+    if( 0 < oc1 )
+        //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);
+        SetRectangle(0, OCName, 0, array[size1-1].time-1*PeriodSeconds(), array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);
+    else
+        //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Dn_Color, STYLE_SOLID, 1, OCName);
+        SetRectangle(0, OCName, 0, array[size1-1].time-1*PeriodSeconds(), array[0].ask, array[size1-1].time, array[size1-1].ask, Dn_Color, STYLE_SOLID, 1, OCName);
+
 
     //SetRectangle(0, HLName, 0, time7, Middle[0], time6, (Middle[0] + (size1/hl1)*_Point), HL_Color, STYLE_SOLID, 1, HLName);
     ////SetRightPrice(0, middle_name+"1", 0, time6, Middle[0] + (10*_Point), clrBlue, "Georgia");
@@ -281,7 +307,8 @@ int OnCalculate(const int rates_total,
     datetime time7 = time6 - _width_factor * PeriodSeconds(); 
     datetime time8 = time7 - _width_factor * PeriodSeconds(); 
     //SetRectangle(0, SizeName, 0, time8, Middle[0], time7, (Middle[0] + hl1*_Point), HL_Color, STYLE_SOLID, 1, SizeName);
-    SetRectangle(0, SizeName, 0, time[bar0]+1*PeriodSeconds(), (close[bar0] - (hl1*_Point)/2), time[bar0]+2*PeriodSeconds(), (close[bar0] + (hl1*_Point)/2), HL_Color, STYLE_SOLID, 1, SizeName);
+    SetRectangle(0, SizeName, 0, time[bar0]+2*PeriodSeconds(), (close[bar0] - (hl1*_Point)/2), time[bar0]+3*PeriodSeconds(), (close[bar0] + (hl1*_Point)/2), HL_Color, STYLE_SOLID, 1, SizeName);
+    SetRectangle(0, HLName,   0, time[bar0]+3*PeriodSeconds(), (close[bar0] - (size_delta*_Point)/2 ), time[bar0]+4*PeriodSeconds(), (close[bar0] + (size_delta*_Point)/2 ), HL_Color, STYLE_SOLID, 1, HLName);
 
     fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
     SetRightText (0, middle_name+"1", 0, time8, Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
@@ -324,6 +351,8 @@ int OnCalculate(const int rates_total,
         double pos_open_price =  PositionGetDouble(POSITION_PRICE_OPEN);
         double pos_open_price_last =  PositionGetDouble(POSITION_PRICE_CURRENT);
         long pos_open_time = PositionGetInteger(POSITION_TIME);
+        long posOpenDT = ((TimeCurrent() - pos_open_time)*hl1)/kInputSampleAvgInSecs;
+        //Print((long)TimeCurrent(), " ", pos_open_time, " ", TimeCurrent()-pos_open_time, " ", posOpenDT);
         long pos_open_price_delta = 0;
         ENUM_POSITION_TYPE pos_open_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if( POSITION_TYPE_BUY == pos_open_type )
@@ -345,7 +374,30 @@ int OnCalculate(const int rates_total,
         }
         SetTline(0, MiddleName + "OP", 0, pos_open_time, pos_open_price, timep, pos_open_price, _colorLine, STYLE_SOLID, 3, MiddleName + "OP");
         SetRightPrice(0, middle_name + "OP", 0, timep, pos_open_price, _colorLine, "Georgia");
-        SetRectangle(0, "OpenPrice", 0, time5, pos_open_price, time4, Middle[0]/*pos_open_price_last*/, _color, STYLE_SOLID, 1, "OpenPrice");
+        SetRectangle(0, "OpenPrice", 0, time[bar0]+0*PeriodSeconds(), pos_open_price, time[bar0]+1*PeriodSeconds(), Middle[0]/*pos_open_price_last*/, _color, STYLE_SOLID, 1, "OpenPrice");
+        
+        if( Middle[0] >  pos_open_price ) {
+            SetRectangle(0, "OpenPriceTime", 0, time[bar0]+0*PeriodSeconds(), pos_open_price, time[bar0]+1*PeriodSeconds(), pos_open_price-posOpenDT*_Point, clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
+        } else {
+            SetRectangle(0, "OpenPriceTime", 0, time[bar0]+0*PeriodSeconds(), pos_open_price, time[bar0]+1*PeriodSeconds(), pos_open_price+posOpenDT*_Point, clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
+        }
+        
+        MqlTick array2[];
+        int size2    = CopyTicksRange(  Symbol(), 
+                                        array2, COPY_TICKS_INFO, 
+                                        (pos_open_time * 1000 ), 
+                                        (TimeCurrent() * 1000 ));
+        int oc2   = 0;
+        int hl2   = 0;
+        double high2 = 0;
+        double low2  = 1000000000;
+        ExtractHighLowFromMqlTickArray( array2, oc2, hl2, high2, low2 );
+        int size_delta2 = (size2*hl2)/(int)kInputSampleAvgInSecs;
+        //string fmt2 = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size2, oc2, hl2,size_delta2);
+        //Print( fmt2 );
+        SetRectangle(0, "OpenPriceHigh", 0, time[bar0]+1*PeriodSeconds(), pos_open_price, time[bar0]+2*PeriodSeconds(), high2, clrBlueViolet, STYLE_SOLID, 1, "OpenPriceHigh");
+        SetRectangle(0, "OpenPriceLow" , 0, time[bar0]+1*PeriodSeconds(), pos_open_price, time[bar0]+2*PeriodSeconds(), low2,  clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
+        
 
     }
     else
@@ -389,10 +441,10 @@ int OnCalculate(const int rates_total,
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL)
+void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL, double& high, double& low )
 {
-    double high = 0;
-    double low  = 1000000000;
+    //double high = 0;
+    //double low  = 1000000000;
     int size = ArraySize( mqltickarray );
 
     HL = 0;
