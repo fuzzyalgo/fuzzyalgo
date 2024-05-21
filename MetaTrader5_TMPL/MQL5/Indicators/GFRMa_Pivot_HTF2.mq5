@@ -408,6 +408,12 @@ int OnCalculate(const int rates_total,
             ObjectDelete( 0,    middle_name + "OP");
         if( 0 == ObjectFind( 0, "OpenPrice") )
             ObjectDelete( 0,    "OpenPrice");
+        if( 0 == ObjectFind( 0, "OpenPriceTime") )
+            ObjectDelete( 0,    "OpenPriceTime");
+        if( 0 == ObjectFind( 0, "OpenPriceHigh") )
+            ObjectDelete( 0,    "OpenPriceHigh");
+        if( 0 == ObjectFind( 0, "OpenPriceLow") )
+            ObjectDelete( 0,    "OpenPriceLow");
 
     } // if(PositionSelect(_Symbol))
 
