@@ -307,8 +307,8 @@ int OnCalculate(const int rates_total,
     datetime time7 = time6 - _width_factor * PeriodSeconds(); 
     datetime time8 = time7 - _width_factor * PeriodSeconds(); 
     //SetRectangle(0, SizeName, 0, time8, Middle[0], time7, (Middle[0] + hl1*_Point), HL_Color, STYLE_SOLID, 1, SizeName);
-    SetRectangle(0, SizeName, 0, time[bar0]+2*PeriodSeconds(), (close[bar0] - (hl1*_Point)/2), time[bar0]+3*PeriodSeconds(), (close[bar0] + (hl1*_Point)/2), HL_Color, STYLE_SOLID, 1, SizeName);
-    SetRectangle(0, HLName,   0, time[bar0]+3*PeriodSeconds(), (close[bar0] - (size_delta*_Point)/2 ), time[bar0]+4*PeriodSeconds(), (close[bar0] + (size_delta*_Point)/2 ), HL_Color, STYLE_SOLID, 1, HLName);
+    SetRectangle(0, SizeName, 0, time[bar0]+2*PeriodSeconds(), (close[bar0] - (hl1*_Point)/2), time[bar0]+3*PeriodSeconds(), (close[bar0] + (hl1*_Point)/2), clrLightGreen, STYLE_SOLID, 1, SizeName);
+    SetRectangle(0, HLName,   0, time[bar0]+3*PeriodSeconds(), (close[bar0] - (size_delta*_Point)/2 ), time[bar0]+4*PeriodSeconds(), (close[bar0] + (size_delta*_Point)/2 ), clrGreen, STYLE_SOLID, 1, HLName);
 
     fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
     SetRightText (0, middle_name+"1", 0, time8, Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
