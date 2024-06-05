@@ -287,10 +287,10 @@ int OnCalculate(const int rates_total,
 
     if( 0 < avgp )
         //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
     else
         //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
 
     if( 0 < oc1 )
         //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);

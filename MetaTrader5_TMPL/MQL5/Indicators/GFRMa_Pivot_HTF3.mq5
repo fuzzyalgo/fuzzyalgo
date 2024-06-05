@@ -27,14 +27,6 @@
 
 input string Symbols_Sirname = "GFRMa_Pivot_";
 
-input uint s1_Samples = 4;
-input uint s2_Samples = 8;
-input uint s3_Samples = 16;
-input uint s4_Samples = 32;
-
-uint kInputSampleAvgInSecs = (s1_Samples+s2_Samples+s3_Samples+s4_Samples)/4*PeriodSeconds();
-
-
 input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
 input ENUM_MA_METHOD     ma_method     = MODE_SMA;
 
@@ -44,6 +36,8 @@ input color Dn_Color = clrRed;
 input color HL_Color = clrGreen;
 input uint SignalBar = 0;
 input uint SignalLen = 15;
+uint kInputSampleAvgInSecs = SignalLen*PeriodSeconds();
+
 
 input color  Middle_color = clrSpringGreen; //clrBlue;
 input color  Upper_color1 = clrMediumSeaGreen;
@@ -69,7 +63,7 @@ int Ind_Handle_S4 = INVALID_HANDLE;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    Ind_Handle_S1 = iMA( Symbol(), Period(), s1_Samples, 0, ma_method, applied_price );
+    Ind_Handle_S1 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
     //Ind_Handle_S1=iCustom(Symbol(),Period(),"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
     //Ind_Handle_S1_M1_Ticks=iCustom(Symbol()/*+"_ticks"*/,PERIOD_M1,"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
     if(Ind_Handle_S1 == INVALID_HANDLE)
@@ -78,21 +72,21 @@ int OnInit()
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S2 = iMA( Symbol(), Period(), s2_Samples, 0, ma_method, applied_price );
+    Ind_Handle_S2 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
     if(Ind_Handle_S2 == INVALID_HANDLE)
     {
         Print(" BARS Ind_Handle_S2 failed");
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S3 = iMA( Symbol(), Period(), s3_Samples, 0, ma_method, applied_price );
+    Ind_Handle_S3 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
     if(Ind_Handle_S3 == INVALID_HANDLE)
     {
         Print(" BARS Ind_Handle_S3 failed");
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S4 = iMA( Symbol(), Period(), s4_Samples, 0, ma_method, applied_price );
+    Ind_Handle_S4 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
     if(Ind_Handle_S4 == INVALID_HANDLE)
     {
         Print(" BARS Ind_Handle_S4 failed");
@@ -285,12 +279,12 @@ int OnCalculate(const int rates_total,
     */
     
 
-    if( 0 < avgp )
+    if( Up2[0] < Middle[0] )
         //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), Up2[0], Up_Color, STYLE_DOT, 1, AvgName);
     else
         //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time, Middle[0], array[size1-1].time-2*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
+        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), Up2[0], Dn_Color, STYLE_DOT, 1, AvgName);
 
     if( 0 < oc1 )
         //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);
