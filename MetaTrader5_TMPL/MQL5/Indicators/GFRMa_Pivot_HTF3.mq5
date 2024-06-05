@@ -17,7 +17,7 @@
 //+--------------------------------------------+
 //| |
 //+--------------------------------------------+
-#define INDICATOR_NAME      "GFRMa_Pivot_HTF"
+#define INDICATOR_NAME      "GFRMa_Pivot_HTF3"
 #define RESET               0
 //+--------------------------------------------+
 //| |
@@ -25,94 +25,74 @@
 
 #include <myobjects.mqh>
 
-input string Symbols_Sirname = "GFRMa_Pivot_";
+//input string Symbols_Sirname = "GFRMa_Pivot_";
 
-input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
-input ENUM_MA_METHOD     ma_method     = MODE_SMA;
-
-
-input color Up_Color = clrBlue;
-input color Dn_Color = clrRed;
-input color HL_Color = clrGreen;
-input uint SignalBar = 0;
 input uint SignalLen = 15;
 uint kInputSampleAvgInSecs = SignalLen*PeriodSeconds();
 
+input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
+input ENUM_MA_METHOD     ma_method     = MODE_SMA;
+input ENUM_STO_PRICE     sto_price     = STO_CLOSECLOSE;
 
-input color  Middle_color = clrSpringGreen; //clrBlue;
-input color  Upper_color1 = clrMediumSeaGreen;
-input color  Lower_color1 = clrRed;
-input color  Upper_color2 = clrDodgerBlue;
-input color  Lower_color2 = clrMagenta;
 
-int min_rates_total, min_rates_1;
+color Up_Color = clrBlue;
+color Dn_Color = clrRed;
+color  Middle_color = clrSpringGreen; //clrBlue;
 
-string AvgName, UpDnName, UpName, MiddleName, DnName;
-string SizeName, OCName, HLName;
-
-string upper_name1, middle_name, lower_name1, upper_name2, lower_name2;
-int PerSignalLen;
-
-int Ind_Handle_S1 = INVALID_HANDLE;
-int Ind_Handle_S2 = INVALID_HANDLE;
-int Ind_Handle_S3 = INVALID_HANDLE;
-int Ind_Handle_S4 = INVALID_HANDLE;
+int hMA1    = INVALID_HANDLE;
+int hCCI1   = INVALID_HANDLE;
+int hRSI1   = INVALID_HANDLE;
+int hStoch1 = INVALID_HANDLE;
+int hSHL1   = INVALID_HANDLE;
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-    Ind_Handle_S1 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
-    //Ind_Handle_S1=iCustom(Symbol(),Period(),"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
+
+    ObjectsDeleteAll(0);
+    ChartRedraw(0);
+
+    hMA1 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
+    //hMA1=iCustom(Symbol(),Period(),"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
     //Ind_Handle_S1_M1_Ticks=iCustom(Symbol()/*+"_ticks"*/,PERIOD_M1,"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
-    if(Ind_Handle_S1 == INVALID_HANDLE)
+    if(hMA1 == INVALID_HANDLE)
     {
-        Print(" BARS Ind_Handle_S1 failed");
+        Print(" BARS hMA1 failed");
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S2 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
-    if(Ind_Handle_S2 == INVALID_HANDLE)
+    hCCI1 = iCCI( Symbol(), Period(), SignalLen, applied_price );
+    if(hCCI1 == INVALID_HANDLE)
     {
-        Print(" BARS Ind_Handle_S2 failed");
+        Print(" BARS hCCI1 failed");
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S3 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
-    if(Ind_Handle_S3 == INVALID_HANDLE)
+    hRSI1 = iRSI( Symbol(), Period(), SignalLen, applied_price );
+    if(hRSI1 == INVALID_HANDLE)
     {
-        Print(" BARS Ind_Handle_S3 failed");
+        Print(" BARS hRSI1 failed");
         return(INIT_FAILED);
     }
 
-    Ind_Handle_S4 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
-    if(Ind_Handle_S4 == INVALID_HANDLE)
+    hStoch1 = iStochastic( Symbol(), Period(), 5,3,3, ma_method, sto_price );
+    if(hStoch1 == INVALID_HANDLE)
     {
-        Print(" BARS Ind_Handle_S4 failed");
+        Print(" BARS hStoch1 failed");
         return(INIT_FAILED);
     }
 
-    min_rates_total = int(SignalLen);
-    UpName = Symbols_Sirname + "Upper Band";
-    MiddleName = Symbols_Sirname + "Middle Band";
-    DnName = Symbols_Sirname + "Lower Band";
-    UpDnName = Symbols_Sirname + "Upper Lower Band";
-    AvgName = Symbols_Sirname + "Average Band";
-    SizeName = Symbols_Sirname + "SizeName";
-    HLName = Symbols_Sirname + "HLName";
-    OCName = Symbols_Sirname + "OCName";
-    // TODO FIXME find constant length per Period() depending on input SignalLen
-    //  for now set PerSignalLen to 5h -> 5*60min*60sec
-    PerSignalLen = 15 * 60; //5*60*60;//int(SignalLen)*PeriodSeconds();
-    PerSignalLen = int(SignalLen) * PeriodSeconds();
-    upper_name1 = Symbols_Sirname + " upper text lable 1";
-    middle_name = Symbols_Sirname + " middle text lable";
-    lower_name1 = Symbols_Sirname + " lower text lable 1";
-    upper_name2 = Symbols_Sirname + " upper text lable 2";
-    lower_name2 = Symbols_Sirname + " lower text lable 2";
+    hSHL1=iCustom(Symbol(),Period(),"size_highs_and_lows3",SignalLen);
+    if(hSHL1 == INVALID_HANDLE)
+    {
+        Print(" BARS hMA1 failed");
+        return(INIT_FAILED);
+    }
 
-    IndicatorSetString(INDICATOR_SHORTNAME, INDICATOR_NAME);
+
+    IndicatorSetString (INDICATOR_SHORTNAME, INDICATOR_NAME);
     IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
 
     return(INIT_SUCCEEDED);
@@ -129,24 +109,28 @@ int OnInit()
 void OnDeinit(const int reason)
 {
 
-    if(INVALID_HANDLE != Ind_Handle_S1)
+    if(INVALID_HANDLE != hMA1)
     {
-        IndicatorRelease(Ind_Handle_S1);
+        IndicatorRelease(hMA1);
     }
-    if(INVALID_HANDLE != Ind_Handle_S2)
+    if(INVALID_HANDLE != hCCI1)
     {
-        IndicatorRelease(Ind_Handle_S2);
+        IndicatorRelease(hCCI1);
     }
-    if(INVALID_HANDLE != Ind_Handle_S3)
+    if(INVALID_HANDLE != hRSI1)
     {
-        IndicatorRelease(Ind_Handle_S3);
+        IndicatorRelease(hRSI1);
     }
-    if(INVALID_HANDLE != Ind_Handle_S4)
+    if(INVALID_HANDLE != hStoch1)
     {
-        IndicatorRelease(Ind_Handle_S4);
+        IndicatorRelease(hStoch1);
+    }
+    if(INVALID_HANDLE != hSHL1)
+    {
+        IndicatorRelease(hSHL1);
     }
 
-    ObjectsDeleteAll(0, Symbols_Sirname, -1, -1);
+    ObjectsDeleteAll(0);
     ChartRedraw(0);
 
 //+------------------------------------------------------------------+
@@ -170,17 +154,19 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
-    if(rates_total < min_rates_total)
+    if(rates_total < (int)SignalLen+10)
         return(RESET);
 
 
-    if( BarsCalculated(Ind_Handle_S1) < Bars(Symbol(), Period())  )
+    if( BarsCalculated(hMA1)    < Bars(Symbol(), Period())  )
         return(prev_calculated);
-    if( BarsCalculated(Ind_Handle_S2) < Bars(Symbol(), Period())  )
+    if( BarsCalculated(hCCI1)   < Bars(Symbol(), Period())  )
         return(prev_calculated);
-    if( BarsCalculated(Ind_Handle_S3) < Bars(Symbol(), Period())  )
+    if( BarsCalculated(hRSI1)   < Bars(Symbol(), Period())  )
         return(prev_calculated);
-    if( BarsCalculated(Ind_Handle_S4) < Bars(Symbol(), Period())  )
+    if( BarsCalculated(hStoch1) < Bars(Symbol(), Period())  )
+        return(prev_calculated);
+    if( BarsCalculated(hSHL1)   < Bars(Symbol(), Period())  )
         return(prev_calculated);
 
     MqlTick array[];
@@ -194,149 +180,303 @@ int OnCalculate(const int rates_total,
     double high1 = 0;
     double low1  = 1000000000;
     ExtractHighLowFromMqlTickArray( array, oc1, hl1, high1, low1 );
-    int size_delta = (size1*hl1)/(int)kInputSampleAvgInSecs;
-    string fmt = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size1, oc1, hl1,size_delta);
-    Print( fmt );
+    int size_delta1 = (size1*hl1)/(int)kInputSampleAvgInSecs;
     
-    static double Up1[1], Up2[1], Middle[1], Dn1[1], Dn2[1];
+    static double iCCI1[1], iMa1[1], Middle[1], iRSI1[1], 
+                  iStochMain1[1], iStochSignal1[1],
+                  iHSLhighs1[1], iHSLlows1[1];
 
-    if(CopyBuffer(Ind_Handle_S1, 0, SignalBar, 1, Up2) <= 0)
+    if(CopyBuffer(hMA1, 0, 0, 1, iMa1) <= 0)
         return(RESET);
-    if(CopyBuffer(Ind_Handle_S2, 0, SignalBar, 1, Up1) <= 0)
+    if(CopyBuffer(hCCI1, 0, 0, 1, iCCI1) <= 0)
         return(RESET);
-    if(CopyBuffer(Ind_Handle_S3, 0, SignalBar, 1, Dn1) <= 0)
+    if(CopyBuffer(hRSI1, 0, 0, 1, iRSI1) <= 0)
         return(RESET);
-    if(CopyBuffer(Ind_Handle_S4, 0, SignalBar, 1, Dn2) <= 0)
+
+    // The buffer numbers: 0 - MAIN_LINE, 1 - SIGNAL_LINE.
+    if(CopyBuffer(hStoch1, MAIN_LINE,   0, 1, iStochMain1)   <= 0)
+        return(RESET);
+    if(CopyBuffer(hStoch1, SIGNAL_LINE, 0, 1, iStochSignal1) <= 0)
+        return(RESET);
+
+    // The buffer numbers: 0 - price max sizes highs, 1 - price max sizes lows.
+    if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
+        return(RESET);
+    if(CopyBuffer(hSHL1, 1, 0, 1, iHSLlows1)  <= 0)
         return(RESET);
 
     int bar0 = rates_total - 1;
     int bar1 = rates_total - int(MathMax(SignalLen - 1, 0));
-
-    //Up2[0] = open[bar0]; //(Up2[0] + Up1[0] + Dn2[0] + Dn1[0])/4;
-    //Up1[0] = close[bar0]; //(Up2[0] + Up1[0] + Dn2[0] + Dn1[0])/4;
-
-    Middle[0] = close[bar0]; //(Up2[0] + Up1[0] + Dn2[0] + Dn1[0])/4;
-
-    datetime _width_factor = 1;
-
-    datetime time0 = time[bar0];
-    datetime time1 = time0 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
-    /*
-    if( Up1[0] < Up2[0] )
-        SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Up_Color, STYLE_SOLID, 1, UpName);
-    else
-        SetRectangle(0, UpName, 0, time1, Up1[0], time0, Up2[0], Dn_Color, STYLE_SOLID, 1, UpName);
-    */
-
-    datetime time2 = time1 - _width_factor * PeriodSeconds();
-    /*
-    if( Dn1[0] < Up1[0] )
-        SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Up_Color, STYLE_SOLID, 1, UpDnName);
-    else
-        SetRectangle(0, UpDnName, 0, time2, Dn1[0], time1, Up1[0], Dn_Color, STYLE_SOLID, 1, UpDnName);
-    */
-
-    datetime time3 = time2 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
-    /*
-    if( Dn2[0] < Dn1[0] )
-        SetRectangle(0, DnName, 0, time3, Dn1[0], time2, Dn2[0], Up_Color, STYLE_SOLID, 1, DnName);
-    else
-        SetRectangle(0, DnName, 0, time3, Dn1[0], time2, Dn2[0], Dn_Color, STYLE_SOLID, 1, DnName);
-    */
+    MqlTick tick;
+    SymbolInfoTick( Symbol(), tick );
+    double ask = tick.ask;
+    double bid = tick.bid;
+    Middle[0]  = (ask+bid)/2;
+    int spread1 = (int)((ask-bid)/ _Point);
+    int ma1 = (int)((Middle[0]-iMa1[0] ) / _Point);
     
-    int avg1 = (int)((Up2[0] - Up1[0]) / _Point);
-    int avg2 = (int)((Up1[0] - Dn1[0]) / _Point);
-    int avg3 = (int)((Dn1[0] - Dn2[0]) / _Point);
-    int avgp = (int)(( avg1 + avg2 + avg3 ) / 3);
-    //Print( avg1 + " " + avg2 + " " + avg3 + " " + avgp );
+    int iHSLdelta = (int)MathAbs((iHSLhighs1[0]-iHSLlows1[0] ) / _Point);
+    int iHSLBreakoutDelta = 0;
+    if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
+    
+        iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
+        if( iHSLlows1[0] > iHSLhighs1[0] ) {
+            iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
+        } 
+    
+    } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
 
-    double avg  = avgp * _Point  + Middle[0];
+        iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
+        if( iHSLlows1[0] > iHSLhighs1[0] ) {
+            iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
+        } 
+    
+    } else {
+            
+    } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
+    
+    
+    string fmt = StringFormat("s: %4d*%d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
+                                PeriodSeconds(), 
+                                SignalLen,
+                                size1, 
+                                (int)iStochMain1[0]-50,
+                                (int)iStochSignal1[0]-50,
+                                (int)iRSI1[0]-50,
+                                (int)iCCI1[0],
+                                ma1, 
+                                oc1, 
+                                iHSLBreakoutDelta,
+                                hl1,
+                                size_delta1,
+                                iHSLdelta,
+                                spread1,
+                                iHSLhighs1[0],
+                                iHSLlows1[0]);
+    Print( fmt );
 
-    datetime time4 = time3 - _width_factor * PeriodSeconds(); //-PerSignalLen/2;
-        
-    datetime timep  = time0 + 3 * PeriodSeconds();
-    datetime timel1 = time4 - _width_factor * PeriodSeconds();
-    SetTline(0, MiddleName, 0, timep, Middle[0], timel1, Middle[0], Middle_color, STYLE_SOLID, 3, MiddleName);
-    //SetRightPrice(0, upper_name1, 0, time[bar0], Up1[0], Upper_color1, "Georgia");
-    //SetRightPrice(0, lower_name1, 0, time[bar0], Dn1[0], Lower_color1, "Georgia");
-    //SetRightPrice(0, middle_name, 0, timep, Middle[0], Middle_color, "Georgia");
+    //
+    // green middle line
+    //
+    SetTline(0, "GreenMiddleLine", 0, time[bar0] + 5 * PeriodSeconds(), Middle[0], time[bar0] -12 * PeriodSeconds(), Middle[0], Middle_color, STYLE_SOLID, 3, "GreenMiddleLine");
+    //SetRightPrice(0, upper_name1, 0, time[bar0], iCCI1[0], Upper_color1, "Georgia");
+    //SetRightPrice(0, lower_name1, 0, time[bar0], iRSI1[0], Lower_color1, "Georgia");
 
+    //2024.06.05 13:03:07.924	GFRMa_Pivot_HTF3 (EURUSD,M1)	s:   60*15  v:    654  sto:   50/  20  rsi:    6  cci:   55  ma:    1  oc:    7  hl:   20  sd:   14
+    //2024.06.05 13:03:07.938	GFRMa_Pivot_HTF3 (EURUSD,M5)	s:  300*15  v:   4415  sto:   36/  30  rsi:   -8  cci:   -4  ma:   -1  oc:  -75  hl:  123  sd:  120
+    //2024.06.05 13:03:07.946	GFRMa_Pivot_HTF3 (EURUSD,M15)	s:  900*15  v:  16908  sto:  -28/ -40  rsi:  -11  cci:  -74  ma:  -32  oc:  -55  hl:  150  sd:  187
+    //2024.06.05 13:03:07.952	GFRMa_Pivot_HTF3 (EURUSD,H1)	s: 3600*15  v:  40016  sto:  -39/ -30  rsi:  -10  cci: -137  ma:  -87  oc: -114  hl:  221  sd:  163
+
+    //
+    // stochastic main rectangle
     // 
-    // 2024.05.17 17:25:20.057	GFRMa_Pivot_HTF (EURUSD,M1)	  60  v:  144  oc:   -4  hl:   16
-    // 2024.05.17 17:25:20.064	GFRMa_Pivot_HTF (EURUSD,M5)	 300  v:  449  oc:    1  hl:   23
-    // 2024.05.17 17:25:20.068	GFRMa_Pivot_HTF (EURUSD,M15) 900  v: 1386  oc:  -18  hl:   62
-    // 2024.05.17 17:25:20.072	GFRMa_Pivot_HTF (EURUSD,H1)	3600  v: 7120  oc:  113  hl:  194
-
-    datetime time5 = time4 - (_width_factor/2) * PeriodSeconds(); 
-
-
-    datetime time6 = time5 - _width_factor * PeriodSeconds(); 
-    /*
-    if( 0 < oc1 )
-        SetRectangle(0, OCName, 0, time[bar0]-1*PeriodSeconds(), close[bar0], time[bar0]+0*PeriodSeconds(), close[bar0] - (oc1*_Point), Up_Color, STYLE_SOLID, 1, OCName);
+    double stomain = (Middle[0]-((iStochMain1[0]-50)* _Point));
+    if( 0 < ((int)iStochMain1[0]-50) )
+        SetRectangle(0, "iStoMain1", 0, 
+                        time[bar0]-12*PeriodSeconds(), stomain, 
+                        time[bar0]-10*PeriodSeconds(), Middle[0], 
+                        Up_Color, STYLE_SOLID, 1, "iStoMain1");
     else
-        SetRectangle(0, OCName, 0, time[bar0]-1*PeriodSeconds(), close[bar0], time[bar0]+0*PeriodSeconds(), close[bar0] - (oc1*_Point), Dn_Color, STYLE_SOLID, 1, OCName);
-    */
+        SetRectangle(0, "iStoMain1", 0, 
+                        time[bar0]-12*PeriodSeconds(), stomain, 
+                        time[bar0]-10*PeriodSeconds(), Middle[0], 
+                        Dn_Color, STYLE_SOLID, 1, "iStoMain1");
+                
+    fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
+    SetRightText (0, "iStoMain1Txt", 0, 
+        time[bar0]-12*PeriodSeconds(), stomain - (0*_Point), clrBlack, "Courier", fmt);
+
+    //
+    // stochastic signal rectangle
+    // 
+    double stosignal = (Middle[0]-((iStochSignal1[0]-50)* _Point));
+    if( 0 < ((int)iStochSignal1[0]-50) )
+        SetRectangle(0, "iStoSignal1", 0, 
+                        time[bar0]-10*PeriodSeconds(), stosignal, 
+                        time[bar0]-8*PeriodSeconds(), Middle[0], 
+                        Up_Color, STYLE_SOLID, 1, "iStoSignal1");
+    else
+        SetRectangle(0, "iStoSignal1", 0, 
+                        time[bar0]-10*PeriodSeconds(), stosignal, 
+                        time[bar0]-8*PeriodSeconds(), Middle[0], 
+                        Dn_Color, STYLE_SOLID, 1, "iStoSignal1");
+
+    fmt = StringFormat("STOS%4d", (int)iStochSignal1[0]-50);
+    SetRightText (0, "iStoSignal1Txt", 0, 
+        time[bar0]-10*PeriodSeconds(), stosignal - (0*_Point), clrBlack, "Courier", fmt);
+
+    //
+    // rsi rectangle
+    //
+    double rsi = (Middle[0]-((iRSI1[0]-50)* _Point));
+    if( 0 < ((int)iRSI1[0]-50) )
+        SetRectangle(0, "iRSI1", 0, 
+                        time[bar0]-8*PeriodSeconds(), rsi, 
+                        time[bar0]-6*PeriodSeconds(), Middle[0], 
+                        Up_Color, STYLE_SOLID, 1, "iRSI1");
+    else
+        SetRectangle(0, "iRSI1", 0, 
+                        time[bar0]-8*PeriodSeconds(), rsi, 
+                        time[bar0]-6*PeriodSeconds(), Middle[0], 
+                        Dn_Color, STYLE_SOLID, 1, "iRSI1");
+
+    fmt = StringFormat("RSI %4d", (int)iRSI1[0]-50);
+    SetRightText (0, "iRSI1Txt", 0, 
+        time[bar0]-8*PeriodSeconds(), rsi - (0*_Point), clrBlack, "Courier", fmt);
+
+    //
+    // cci rectangle
+    //
+    double cci = (Middle[0]-(iCCI1[0]* _Point));
+    if( 0 < (int)iCCI1[0] )
+        SetRectangle(0, "iCCI1", 0, 
+                        time[bar0]-6*PeriodSeconds(), cci, 
+                        time[bar0]-4*PeriodSeconds(), Middle[0], 
+                        Up_Color, STYLE_SOLID, 1, "iCCI1");
+    else
+        SetRectangle(0, "iCCI1", 0, 
+                        time[bar0]-6*PeriodSeconds(), cci, 
+                        time[bar0]-4*PeriodSeconds(), Middle[0],
+                        Dn_Color, STYLE_SOLID, 1, "iCCI1");
+                        
+    fmt = StringFormat("CCI %4d", (int)iCCI1[0]);
+    SetRightText (0, "iCCI1Txt", 0, 
+        time[bar0]-6*PeriodSeconds(), cci - (0*_Point), clrBlack, "Courier", fmt);
+
+    //
+    // ma rectangle
+    //
+    if( iMa1[0] < Middle[0] )
+        SetRectangle(0, "iMA1", 0, 
+                        time[bar0]-4*PeriodSeconds(), iMa1[0], 
+                        time[bar0]-2*PeriodSeconds(), Middle[0], 
+                        Up_Color, STYLE_SOLID, 1, "iMA1");
+    else
+        SetRectangle(0, "iMA1", 0, 
+                        time[bar0]-4*PeriodSeconds(), iMa1[0], 
+                        time[bar0]-2*PeriodSeconds(), Middle[0], 
+                        Dn_Color, STYLE_SOLID, 1, "iMA1");
+
+    fmt = StringFormat("MA  %4d", ma1);
+    SetRightText (0, "iMa1Txt", 0, 
+        time[bar0]-4*PeriodSeconds(), iMa1[0] - (0*_Point), clrBlack, "Courier", fmt);
+
+    //
+    // oc recatangle
+    //
+    if( 0 < oc1 )
+        SetRectangle(0, "iOC1", 0, 
+                        time[bar0]-2*PeriodSeconds(), array[0].ask, 
+                        time[bar0]-0*PeriodSeconds(), Middle[0],
+                        Up_Color, STYLE_SOLID, 1, "iOC1");
+    else
+        SetRectangle(0, "iOC1", 0, 
+                        time[bar0]-2*PeriodSeconds(), array[0].ask, 
+                        time[bar0]-0*PeriodSeconds(), Middle[0],
+                        Dn_Color, STYLE_SOLID, 1, "iOC1");
+
+    fmt = StringFormat("OC  %4d", oc1);
+    SetRightText (0, "iOc1Txt", 0, 
+        time[bar0]-2*PeriodSeconds(), array[0].ask - (0*_Point), clrBlack, "Courier", fmt);
+
+
+    //
+    // shl (size high low custom) rectangle
+    //  breakout - outside of high and low - the delta between high/low and middle
+    //
+    double hsl = 0;
+    if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
     
+        hsl = iHSLhighs1[0];
+        if( iHSLlows1[0] > iHSLhighs1[0] ) {
+            hsl = iHSLlows1[0];
+        } 
+        SetRectangle(0, "iHSL",   0, 
+                            time[bar0]+0*PeriodSeconds(), hsl , 
+                            time[bar0]+2*PeriodSeconds(), Middle[0] , 
+                            Up_Color, STYLE_SOLID, 1, "iHSL");
+    
+    } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
 
-    if( Up2[0] < Middle[0] )
-        //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Up_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), Up2[0], Up_Color, STYLE_DOT, 1, AvgName);
-    else
-        //SetRectangle(0, AvgName, 0, array[0].time, Middle[0], array[0].time-1*PeriodSeconds(), avg, Dn_Color, STYLE_DOT, 1, AvgName);
-        SetRectangle(0, AvgName, 0, array[size1-1].time-1*PeriodSeconds(), Middle[0], array[size1-1].time-2*PeriodSeconds(), Up2[0], Dn_Color, STYLE_DOT, 1, AvgName);
+        hsl = iHSLlows1[0];
+        if( iHSLlows1[0] > iHSLhighs1[0] ) {
+            hsl = iHSLhighs1[0];
+        } 
+        SetRectangle(0, "iHSL",   0, 
+                            time[bar0]+0*PeriodSeconds(), hsl , 
+                            time[bar0]+2*PeriodSeconds(), Middle[0] , 
+                            Dn_Color, STYLE_SOLID, 1, "iHSL");
+    
+    } else {
+    
+        if( 0 == ObjectFind( 0, "iHSL") )
+            ObjectDelete( 0,    "iHSL");
+        if( 0 == ObjectFind( 0, "iSHL1Txt") )
+            ObjectDelete( 0,    "iSHL1Txt");
+            
+    } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
 
-    if( 0 < oc1 )
-        //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);
-        SetRectangle(0, OCName, 0, array[size1-1].time-1*PeriodSeconds(), array[0].ask, array[size1-1].time, array[size1-1].ask, Up_Color, STYLE_SOLID, 1, OCName);
-    else
-        //SetRectangle(0, OCName, 0, array[0].time, array[0].ask, array[size1-1].time, array[size1-1].ask, Dn_Color, STYLE_SOLID, 1, OCName);
-        SetRectangle(0, OCName, 0, array[size1-1].time-1*PeriodSeconds(), array[0].ask, array[size1-1].time, array[size1-1].ask, Dn_Color, STYLE_SOLID, 1, OCName);
-
-
-    //SetRectangle(0, HLName, 0, time7, Middle[0], time6, (Middle[0] + (size1/hl1)*_Point), HL_Color, STYLE_SOLID, 1, HLName);
-    ////SetRightPrice(0, middle_name+"1", 0, time6, Middle[0] + (10*_Point), clrBlue, "Georgia");
-
-    datetime time7 = time6 - _width_factor * PeriodSeconds(); 
-    datetime time8 = time7 - _width_factor * PeriodSeconds(); 
-    //SetRectangle(0, SizeName, 0, time8, Middle[0], time7, (Middle[0] + hl1*_Point), HL_Color, STYLE_SOLID, 1, SizeName);
-    SetRectangle(0, SizeName, 0, time[bar0]+2*PeriodSeconds(), (close[bar0] - (hl1*_Point)/2), time[bar0]+3*PeriodSeconds(), (close[bar0] + (hl1*_Point)/2), clrLightGreen, STYLE_SOLID, 1, SizeName);
-    SetRectangle(0, HLName,   0, time[bar0]+3*PeriodSeconds(), (close[bar0] - (size_delta*_Point)/2 ), time[bar0]+4*PeriodSeconds(), (close[bar0] + (size_delta*_Point)/2 ), clrGreen, STYLE_SOLID, 1, HLName);
-
-    fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
-    SetRightText (0, middle_name+"1", 0, time8, Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
+    if( 0 == ObjectFind( 0, "iHSL") ) {
+        fmt = StringFormat("SHL %4d", iHSLBreakoutDelta);
+        SetRightText (0, "iSHL1Txt", 0, 
+            time[bar0]+0*PeriodSeconds(), hsl, clrBlack, "Courier", fmt);
+    }
 
 
-    /*
-    string avg_txt = TimeToString(TimeCurrent(), TIME_SECONDS ) + " / " +
-                     "ma: " + IntegerToString(avgp) + " / " +
-                     IntegerToString(avg3) + " / " +
-                     IntegerToString(avg2) + " / " +
-                     IntegerToString(avg1) + " / " +
-                     "v: " + IntegerToString(tick_volume[bar0]) + " / " +
-                     "s: " + IntegerToString(spread[bar0]);
-    SetRightText(0, middle_name + "2", 0, time4 - 6 * PeriodSeconds(), Dn1[0], clrBlue, "Courier", avg_txt);
+    //
+    // hl rectangle
+    // 
+    SetRectangle(0, "HlRectangle", 0, 
+                        time[bar0]+2*PeriodSeconds(), (Middle[0] - (hl1*_Point)/2), 
+                        time[bar0]+3*PeriodSeconds(), (Middle[0] + (hl1*_Point)/2), 
+                        clrLightGreen, STYLE_SOLID, 1, "HlRectangle");
+                        
+    fmt = StringFormat("%4d", hl1);
+    SetRightText (0, "HlRectangleTxt", 0, 
+            time[bar0]+2*PeriodSeconds(), (Middle[0] + (hl1*_Point)/2), clrBlack, "Courier", fmt);
+                        
+    //
+    // sd rectangle
+    // 
+    SetRectangle(0, "SdRectangle",   0, 
+                        time[bar0]+3*PeriodSeconds(), (Middle[0] - (size_delta1*_Point)/2 ), 
+                        time[bar0]+4*PeriodSeconds(), (Middle[0] + (size_delta1*_Point)/2 ), 
+                        clrGreen, STYLE_SOLID, 1, "SdRectangle");
 
-    string c0_str = DoubleToString(close[bar0], Digits());
-    int idUp2 = int( (close[bar0] - Up2[0] ) / Point() );
-    int idUp1 = int( (close[bar0] - Up1[0] ) / Point() );
-    int idDn1 = int( (close[bar0] - Dn1[0] ) / Point() );
-    int idDn2 = int( (close[bar0] - Dn2[0] ) / Point() );
-    int avg_delta = (( idUp2 + idUp1 + idDn1 + idDn2 ) / 4);
-    string close_txt = TimeToString(TimeCurrent(), TIME_SECONDS ) + " / " +
-                       "d: " + IntegerToString(avg_delta) + " / " +
-                       IntegerToString(idUp2) + " / " +
-                       IntegerToString(idUp1) + " / " +
-                       IntegerToString(idDn1) + " / " +
-                       IntegerToString(idDn2) + " / " +
-                       "c: " + c0_str ;
-    SetRightText(0, middle_name + "3", 0, time4 - 6 * PeriodSeconds(), Middle[0], clrBlue, "Courier", close_txt);
-    */
+    fmt = StringFormat("%4d", size_delta1);
+    SetRightText (0, "SdRectangleTxt", 0, 
+            time[bar0]+3*PeriodSeconds(), (Middle[0] + (size_delta1*_Point)/2), clrBlack, "Courier", fmt);
 
-    //SetRightPrice(0, upper_name2, 0, time[bar0], Up2[0], Upper_color2, "Georgia");
-    //SetRightPrice(0, lower_name2, 0, time[bar0], Dn2[0], Lower_color2, "Georgia");
+    //
+    // shl (size high low custom) rectangle
+    //    the delta between high and low
+    // 
+    SetRectangle(0, "ShlRectangle",   0, 
+                        time[bar0]+4*PeriodSeconds(), (Middle[0] - (iHSLdelta*_Point)/2 ), 
+                        time[bar0]+5*PeriodSeconds(), (Middle[0] + (iHSLdelta*_Point)/2 ), 
+                        clrYellowGreen, STYLE_SOLID, 1, "ShlRectangle");
 
-    //string sBS = "";
+    fmt = StringFormat("%4d", iHSLdelta);
+    SetRightText (0, "ShlRectangleTxt", 0, 
+            time[bar0]+4*PeriodSeconds(), (Middle[0] + (iHSLdelta*_Point)/2), clrBlack, "Courier", fmt);
+
+    //
+    // spread rectangle
+    //
+    SetRectangle(0, "SpreadRectangle",   0, 
+                        time[bar0]+5*PeriodSeconds(), ask , 
+                        time[bar0]+6*PeriodSeconds(), bid , 
+                        clrYellow, STYLE_SOLID, 1, "SpreadRectangle");
+
+    fmt = StringFormat("%4d", spread1);
+    SetRightText (0, "SpreadRectangleTxt", 0, 
+            time[bar0]+5*PeriodSeconds(), ask, clrBlack, "Courier", fmt);
+
+    //fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
+    //SetRightText (0, middle_name+"1", 0, time[bar0]-10*PeriodSeconds(), Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
+
+
+
     if(PositionSelect(_Symbol))
     {
         int _color = clrWhite;
@@ -365,8 +505,8 @@ int OnCalculate(const int rates_total,
             if( 0 > pos_open_price_delta )
                 _color = clrYellow;
         }
-        SetTline(0, MiddleName + "OP", 0, pos_open_time, pos_open_price, timep, pos_open_price, _colorLine, STYLE_SOLID, 3, MiddleName + "OP");
-        SetRightPrice(0, middle_name + "OP", 0, timep, pos_open_price, _colorLine, "Georgia");
+        SetTline(0, "OPLine", 0, pos_open_time, pos_open_price, time[bar0] + 3 * PeriodSeconds(), pos_open_price, _colorLine, STYLE_SOLID, 3, "OPLine");
+        SetRightPrice(0, "OPpriceTxt", 0,  time[bar0] + 3 * PeriodSeconds(), pos_open_price, _colorLine, "Georgia");
         SetRectangle(0, "OpenPrice", 0, time[bar0]+0*PeriodSeconds(), pos_open_price, time[bar0]+1*PeriodSeconds(), Middle[0]/*pos_open_price_last*/, _color, STYLE_SOLID, 1, "OpenPrice");
         
         if( Middle[0] >  pos_open_price ) {
@@ -395,10 +535,10 @@ int OnCalculate(const int rates_total,
     }
     else
     {
-        if( 0 == ObjectFind( 0, MiddleName + "OP") )
-            ObjectDelete( 0,    MiddleName + "OP");
-        if( 0 == ObjectFind( 0, middle_name + "OP") )
-            ObjectDelete( 0,    middle_name + "OP");
+        if( 0 == ObjectFind( 0, "OPLine") )
+            ObjectDelete( 0,    "OPLine");
+        if( 0 == ObjectFind( 0, "OPpriceTxt") )
+            ObjectDelete( 0,    "OPpriceTxt");
         if( 0 == ObjectFind( 0, "OpenPrice") )
             ObjectDelete( 0,    "OpenPrice");
         if( 0 == ObjectFind( 0, "OpenPriceTime") )
@@ -412,7 +552,7 @@ int OnCalculate(const int rates_total,
 
 //----
     //Print("2");
-    ChartRedraw(0);
+    //ChartRedraw(0);
 
     // TODO don't do this when _Ticks Symbol
     /*
