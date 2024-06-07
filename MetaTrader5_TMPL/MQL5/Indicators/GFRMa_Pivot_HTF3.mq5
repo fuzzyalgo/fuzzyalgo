@@ -236,7 +236,7 @@ int OnCalculate(const int rates_total,
     } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
     
     
-    string fmt = StringFormat("s: %4d*%d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
+    string fmt = StringFormat("s: %4d*%3d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
                                 PeriodSeconds(), 
                                 SignalLen,
                                 size1, 
@@ -258,7 +258,7 @@ int OnCalculate(const int rates_total,
     //
     // green middle line
     //
-    SetTline(0, "GreenMiddleLine", 0, time[bar0] + 5 * PeriodSeconds(), Middle[0], time[bar0] -12 * PeriodSeconds(), Middle[0], Middle_color, STYLE_SOLID, 3, "GreenMiddleLine");
+    SetTline(0, "GreenMiddleLine", 0, time[bar0] + 5 * PeriodSeconds(), Middle[0], time[bar0] -SignalLen * PeriodSeconds(), Middle[0], Middle_color, STYLE_SOLID, 3, "GreenMiddleLine");
     //SetRightPrice(0, upper_name1, 0, time[bar0], iCCI1[0], Upper_color1, "Georgia");
     //SetRightPrice(0, lower_name1, 0, time[bar0], iRSI1[0], Lower_color1, "Georgia");
 
