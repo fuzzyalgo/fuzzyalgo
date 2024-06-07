@@ -273,18 +273,18 @@ int OnCalculate(const int rates_total,
     double stomain = (Middle[0]-((iStochMain1[0]-50)* _Point));
     if( 0 < ((int)iStochMain1[0]-50) )
         SetRectangle(0, "iStoMain1", 0, 
-                        time[bar0]-12*PeriodSeconds(), stomain, 
-                        time[bar0]-10*PeriodSeconds(), Middle[0], 
+                        time[bar0]-14*PeriodSeconds(), stomain, 
+                        time[bar0]-12*PeriodSeconds(), Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iStoMain1");
     else
         SetRectangle(0, "iStoMain1", 0, 
-                        time[bar0]-12*PeriodSeconds(), stomain, 
-                        time[bar0]-10*PeriodSeconds(), Middle[0], 
+                        time[bar0]-14*PeriodSeconds(), stomain, 
+                        time[bar0]-12*PeriodSeconds(), Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iStoMain1");
                 
     fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
     SetRightText (0, "iStoMain1Txt", 0, 
-        time[bar0]-12*PeriodSeconds(), stomain - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-14*PeriodSeconds(), stomain - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // stochastic signal rectangle
@@ -292,18 +292,18 @@ int OnCalculate(const int rates_total,
     double stosignal = (Middle[0]-((iStochSignal1[0]-50)* _Point));
     if( 0 < ((int)iStochSignal1[0]-50) )
         SetRectangle(0, "iStoSignal1", 0, 
-                        time[bar0]-10*PeriodSeconds(), stosignal, 
-                        time[bar0]-8*PeriodSeconds(), Middle[0], 
+                        time[bar0]-12*PeriodSeconds(), stosignal, 
+                        time[bar0]-10*PeriodSeconds(), Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iStoSignal1");
     else
         SetRectangle(0, "iStoSignal1", 0, 
-                        time[bar0]-10*PeriodSeconds(), stosignal, 
-                        time[bar0]-8*PeriodSeconds(), Middle[0], 
+                        time[bar0]-12*PeriodSeconds(), stosignal, 
+                        time[bar0]-10*PeriodSeconds(), Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iStoSignal1");
 
     fmt = StringFormat("STOS%4d", (int)iStochSignal1[0]-50);
     SetRightText (0, "iStoSignal1Txt", 0, 
-        time[bar0]-10*PeriodSeconds(), stosignal - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-12*PeriodSeconds(), stosignal - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // rsi rectangle
@@ -311,18 +311,18 @@ int OnCalculate(const int rates_total,
     double rsi = (Middle[0]-((iRSI1[0]-50)* _Point));
     if( 0 < ((int)iRSI1[0]-50) )
         SetRectangle(0, "iRSI1", 0, 
-                        time[bar0]-8*PeriodSeconds(), rsi, 
-                        time[bar0]-6*PeriodSeconds(), Middle[0], 
+                        time[bar0]-10*PeriodSeconds(), rsi, 
+                        time[bar0]-8*PeriodSeconds(), Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iRSI1");
     else
         SetRectangle(0, "iRSI1", 0, 
-                        time[bar0]-8*PeriodSeconds(), rsi, 
-                        time[bar0]-6*PeriodSeconds(), Middle[0], 
+                        time[bar0]-10*PeriodSeconds(), rsi, 
+                        time[bar0]-8*PeriodSeconds(), Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iRSI1");
 
     fmt = StringFormat("RSI %4d", (int)iRSI1[0]-50);
     SetRightText (0, "iRSI1Txt", 0, 
-        time[bar0]-8*PeriodSeconds(), rsi - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-10*PeriodSeconds(), rsi - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // cci rectangle
@@ -330,54 +330,54 @@ int OnCalculate(const int rates_total,
     double cci = (Middle[0]-(iCCI1[0]* _Point));
     if( 0 < (int)iCCI1[0] )
         SetRectangle(0, "iCCI1", 0, 
-                        time[bar0]-6*PeriodSeconds(), cci, 
-                        time[bar0]-4*PeriodSeconds(), Middle[0], 
+                        time[bar0]-8*PeriodSeconds(), cci, 
+                        time[bar0]-6*PeriodSeconds(), Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iCCI1");
     else
         SetRectangle(0, "iCCI1", 0, 
-                        time[bar0]-6*PeriodSeconds(), cci, 
-                        time[bar0]-4*PeriodSeconds(), Middle[0],
+                        time[bar0]-8*PeriodSeconds(), cci, 
+                        time[bar0]-6*PeriodSeconds(), Middle[0],
                         Dn_Color, STYLE_SOLID, 1, "iCCI1");
                         
     fmt = StringFormat("CCI %4d", (int)iCCI1[0]);
     SetRightText (0, "iCCI1Txt", 0, 
-        time[bar0]-6*PeriodSeconds(), cci - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-8*PeriodSeconds(), cci - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // ma rectangle
     //
     if( iMa1[0] < Middle[0] )
         SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-4*PeriodSeconds(), iMa1[0], 
-                        time[bar0]-2*PeriodSeconds(), Middle[0], 
+                        time[bar0]-6*PeriodSeconds(), iMa1[0], 
+                        time[bar0]-4*PeriodSeconds(), Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iMA1");
     else
         SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-4*PeriodSeconds(), iMa1[0], 
-                        time[bar0]-2*PeriodSeconds(), Middle[0], 
+                        time[bar0]-6*PeriodSeconds(), iMa1[0], 
+                        time[bar0]-4*PeriodSeconds(), Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iMA1");
 
     fmt = StringFormat("MA  %4d", ma1);
     SetRightText (0, "iMa1Txt", 0, 
-        time[bar0]-4*PeriodSeconds(), iMa1[0] - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-6*PeriodSeconds(), iMa1[0] - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // oc recatangle
     //
     if( 0 < oc1 )
         SetRectangle(0, "iOC1", 0, 
-                        time[bar0]-2*PeriodSeconds(), array[0].ask, 
-                        time[bar0]-0*PeriodSeconds(), Middle[0],
+                        time[bar0]-4*PeriodSeconds(), array[0].ask, 
+                        time[bar0]-2*PeriodSeconds(), Middle[0],
                         Up_Color, STYLE_SOLID, 1, "iOC1");
     else
         SetRectangle(0, "iOC1", 0, 
-                        time[bar0]-2*PeriodSeconds(), array[0].ask, 
-                        time[bar0]-0*PeriodSeconds(), Middle[0],
+                        time[bar0]-4*PeriodSeconds(), array[0].ask, 
+                        time[bar0]-2*PeriodSeconds(), Middle[0],
                         Dn_Color, STYLE_SOLID, 1, "iOC1");
 
     fmt = StringFormat("OC  %4d", oc1);
     SetRightText (0, "iOc1Txt", 0, 
-        time[bar0]-2*PeriodSeconds(), array[0].ask - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-4*PeriodSeconds(), array[0].ask - (0*_Point), clrBlack, "Courier", fmt);
 
 
     //
@@ -392,8 +392,8 @@ int OnCalculate(const int rates_total,
             hsl = iHSLlows1[0];
         } 
         SetRectangle(0, "iHSL",   0, 
-                            time[bar0]+0*PeriodSeconds(), hsl , 
-                            time[bar0]+2*PeriodSeconds(), Middle[0] , 
+                            time[bar0]-2*PeriodSeconds(), hsl , 
+                            time[bar0]-0*PeriodSeconds(), Middle[0] , 
                             Up_Color, STYLE_SOLID, 1, "iHSL");
     
     } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
@@ -403,8 +403,8 @@ int OnCalculate(const int rates_total,
             hsl = iHSLhighs1[0];
         } 
         SetRectangle(0, "iHSL",   0, 
-                            time[bar0]+0*PeriodSeconds(), hsl , 
-                            time[bar0]+2*PeriodSeconds(), Middle[0] , 
+                            time[bar0]-2*PeriodSeconds(), hsl , 
+                            time[bar0]-0*PeriodSeconds(), Middle[0] , 
                             Dn_Color, STYLE_SOLID, 1, "iHSL");
     
     } else {
@@ -419,7 +419,7 @@ int OnCalculate(const int rates_total,
     if( 0 == ObjectFind( 0, "iHSL") ) {
         fmt = StringFormat("SHL %4d", iHSLBreakoutDelta);
         SetRightText (0, "iSHL1Txt", 0, 
-            time[bar0]+0*PeriodSeconds(), hsl, clrBlack, "Courier", fmt);
+            time[bar0]-2*PeriodSeconds(), hsl, clrBlack, "Courier", fmt);
     }
 
 
