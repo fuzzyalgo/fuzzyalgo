@@ -12,12 +12,18 @@
 //+--------------------------------------------+
 
 #property indicator_chart_window
-#property indicator_buffers 0
-#property indicator_plots   0
+#property indicator_buffers 18
+#property indicator_plots   14
+//---
+#property indicator_type13  DRAW_LINE
+#property indicator_type14  DRAW_LINE
+//---
+#property indicator_color13 clrBlue
+#property indicator_color14 clrRed
 //+--------------------------------------------+
 //| |
 //+--------------------------------------------+
-#define INDICATOR_NAME      "GFRMa_Pivot_HTF3"
+#define INDICATOR_NAME      "GFRMa_Pivot_HTF4"
 #define RESET               0
 //+--------------------------------------------+
 //| |
@@ -25,7 +31,6 @@
 
 #include <myobjects.mqh>
 
-//input string Symbols_Sirname = "GFRMa_Pivot_";
 
 input uint SignalLen = 15;
 uint kInputSampleAvgInSecs = SignalLen*PeriodSeconds();
@@ -43,7 +48,13 @@ int hMA1    = INVALID_HANDLE;
 int hCCI1   = INVALID_HANDLE;
 int hRSI1   = INVALID_HANDLE;
 int hStoch1 = INVALID_HANDLE;
-int hSHL1   = INVALID_HANDLE;
+//int hSHL1   = INVALID_HANDLE;
+
+//--- buffers
+double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
+double highs[],lows[];
+double HighBuffer[],LowBuffer[];
+double maxHighBuffer[], maxLowBuffer[];
 
 //+------------------------------------------------------------------+
 //| Custom indicator initialization function                         |
@@ -84,13 +95,79 @@ int OnInit()
         return(INIT_FAILED);
     }
 
-    hSHL1=iCustom(Symbol(),Period(),"size_highs_and_lows4",SignalLen);
+    /*hSHL1=iCustom(Symbol(),Period(),"size_highs_and_lows4",SignalLen);
     if(hSHL1 == INVALID_HANDLE)
     {
         Print(" BARS hMA1 failed");
         return(INIT_FAILED);
-    }
+    }*/
 
+    //--- buffers for calculations and plot
+    //double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
+    SetIndexBuffer( 0,vb,       INDICATOR_DATA);
+    SetIndexBuffer( 1,sto1b,    INDICATOR_DATA);
+    SetIndexBuffer( 2,sto2b,    INDICATOR_DATA);
+    SetIndexBuffer( 3,rsib,     INDICATOR_DATA);
+    SetIndexBuffer( 4,ccib,     INDICATOR_DATA);
+    SetIndexBuffer( 5,mab,      INDICATOR_DATA);
+    SetIndexBuffer( 6,ocb,      INDICATOR_DATA);
+    SetIndexBuffer( 7,shlb,     INDICATOR_DATA);
+    SetIndexBuffer( 8,hlb,      INDICATOR_DATA);
+    SetIndexBuffer( 9,sdb,      INDICATOR_DATA);
+    SetIndexBuffer(10,shldb,    INDICATOR_DATA);
+    SetIndexBuffer(11,spreadb,  INDICATOR_DATA);
+    SetIndexBuffer(12,highs,    INDICATOR_DATA);
+    SetIndexBuffer(13,lows,     INDICATOR_DATA);
+    SetIndexBuffer(14,HighBuffer,INDICATOR_CALCULATIONS);
+    SetIndexBuffer(15,LowBuffer,INDICATOR_CALCULATIONS);
+    SetIndexBuffer(16,maxHighBuffer,INDICATOR_CALCULATIONS);
+    SetIndexBuffer(17,maxLowBuffer,INDICATOR_CALCULATIONS);
+    //--- set plot draw begin (0 1 2 3...N )
+    PlotIndexSetInteger(12,PLOT_DRAW_BEGIN,SignalLen);
+    PlotIndexSetInteger(13,PLOT_DRAW_BEGIN,SignalLen);
+    //--- line style
+    PlotIndexSetInteger(12,PLOT_LINE_STYLE,STYLE_DASHDOTDOT);
+    //--- line width
+    PlotIndexSetInteger(12,PLOT_LINE_WIDTH,1);
+    //---
+    PlotIndexSetInteger(13,PLOT_LINE_STYLE,STYLE_DASHDOTDOT);
+    PlotIndexSetInteger(13,PLOT_LINE_WIDTH,1);
+
+
+    //--- indicator label
+    PlotIndexSetString( 0,PLOT_LABEL,"v");
+    PlotIndexSetString( 1,PLOT_LABEL,"sto1");
+    PlotIndexSetString( 2,PLOT_LABEL,"sto2");
+    PlotIndexSetString( 3,PLOT_LABEL,"rsi");
+    PlotIndexSetString( 4,PLOT_LABEL,"cci");
+    PlotIndexSetString( 5,PLOT_LABEL,"ma");
+    PlotIndexSetString( 6,PLOT_LABEL,"oc");
+    PlotIndexSetString( 7,PLOT_LABEL,"shl");
+    PlotIndexSetString( 8,PLOT_LABEL,"hl");
+    PlotIndexSetString( 9,PLOT_LABEL,"sd");
+    PlotIndexSetString(10,PLOT_LABEL,"shld");
+    PlotIndexSetString(11,PLOT_LABEL,"spread");
+    PlotIndexSetString(12,PLOT_LABEL,"highs");
+    PlotIndexSetString(13,PLOT_LABEL,"lows");
+    
+	PlotIndexSetDouble( 0,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 1,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 2,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 3,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 4,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 5,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 6,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 7,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 8,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 9,  PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 10, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 11, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 12, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 13, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 14, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 15, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 16, PLOT_EMPTY_VALUE, EMPTY_VALUE );
+	PlotIndexSetDouble( 17, PLOT_EMPTY_VALUE, EMPTY_VALUE );
 
     IndicatorSetString (INDICATOR_SHORTNAME, INDICATOR_NAME);
     IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
@@ -125,10 +202,10 @@ void OnDeinit(const int reason)
     {
         IndicatorRelease(hStoch1);
     }
-    if(INVALID_HANDLE != hSHL1)
+    /*if(INVALID_HANDLE != hSHL1)
     {
         IndicatorRelease(hSHL1);
-    }
+    }*/
 
     ObjectsDeleteAll(0);
     ChartRedraw(0);
@@ -154,9 +231,12 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
+    int cnt;
+    int limit = rates_total-1*(int)SignalLen-10;
+    
+    //--- checking of bars
     if(rates_total < (int)SignalLen+10)
         return(RESET);
-
 
     if( BarsCalculated(hMA1)    < Bars(Symbol(), Period())  )
         return(prev_calculated);
@@ -166,8 +246,67 @@ int OnCalculate(const int rates_total,
         return(prev_calculated);
     if( BarsCalculated(hStoch1) < Bars(Symbol(), Period())  )
         return(prev_calculated);
-    if( BarsCalculated(hSHL1)   < Bars(Symbol(), Period())  )
-        return(prev_calculated);
+    /*if( BarsCalculated(hSHL1)   < Bars(Symbol(), Period())  )
+        return(prev_calculated);*/
+
+
+    //--- start SIZE HIGHS / LOWS4 calculations
+    for(cnt=limit+1; cnt<rates_total; cnt++) {
+        //--- size of highs
+        if(close[cnt]>open[cnt]) // bullish candle
+        {
+            //--- calculate the body
+            HighBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
+            maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
+            
+            LowBuffer[cnt]=0.0;
+            maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
+            
+        }
+        else if(close[cnt]<open[cnt]) // bearish candle
+        {
+            LowBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
+            maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
+            
+            HighBuffer[cnt]=0.0;
+            maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
+            
+        }
+        else // Doji
+        {
+            HighBuffer[cnt]=0.0;
+            //---
+            maxHighBuffer[cnt]=maxHighBuffer[cnt-1];
+            //---
+            LowBuffer[cnt]=0.0;
+            //---
+            maxLowBuffer[cnt]=maxLowBuffer[cnt-1];
+            //---
+            
+        }
+        
+        if( maxHighBuffer[cnt] > maxHighBuffer[cnt-1] )
+        {
+            highs[cnt] = high[cnt];
+        }
+        else
+        {
+            highs[cnt] = highs[cnt-1];
+        }
+        
+        if( maxLowBuffer[cnt] < maxLowBuffer[cnt-1] )
+        {
+            lows[cnt] = low[cnt];
+        }
+        else
+        {
+            lows[cnt] = lows[cnt-1];
+        }
+        
+    } // for(cnt=limit; cnt<rates_total; cnt++)
+    //--- end SIZE HIGHS / LOWS4 calculations
+
+
 
     MqlTick array[];
     uint gCopyTicksFlags = COPY_TICKS_INFO; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
@@ -200,10 +339,12 @@ int OnCalculate(const int rates_total,
         return(RESET);
 
     // The buffer numbers: 0 - price max sizes highs, 1 - price max sizes lows.
-    if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
+    /*if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
         return(RESET);
     if(CopyBuffer(hSHL1, 1, 0, 1, iHSLlows1)  <= 0)
-        return(RESET);
+        return(RESET);*/
+    iHSLhighs1[0] = highs[rates_total-1];
+    iHSLlows1 [0] = lows [rates_total-1];
 
     int bar0 = rates_total - 1;
     int bar1 = rates_total - int(MathMax(SignalLen - 1, 0));
@@ -235,6 +376,20 @@ int OnCalculate(const int rates_total,
             
     } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
     
+    
+    //double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
+    vb[rates_total-1] = size1;
+    sto1b[rates_total-1] = iStochMain1[0]-50;
+    sto2b[rates_total-1] = iStochSignal1[0]-50;
+    rsib[rates_total-1]  = iRSI1[0]-50;
+    ccib[rates_total-1]  = iCCI1[0]-50;
+    mab[rates_total-1]   = ma1;
+    ocb[rates_total-1]   = oc1;
+    shlb[rates_total-1]   = iHSLBreakoutDelta;
+    hlb[rates_total-1]   = hl1;
+    sdb[rates_total-1]   = size_delta1;
+    shldb[rates_total-1]   = iHSLdelta;
+    spreadb[rates_total-1]   = spread1;
     
     string fmt = StringFormat("s: %4d*%3d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
                                 PeriodSeconds(), 
@@ -654,3 +809,67 @@ void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int
 //+------------------------------------------------------------------+
 } // void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL)
 //+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Get highest value for range                                      |
+//+------------------------------------------------------------------+
+double Highest(const double &array[],int range,int fromIndex)
+{
+    int cnt=0;
+    double res;
+    //---
+    res=array[fromIndex];
+    //---
+    for(cnt=fromIndex; cnt>fromIndex-range && cnt>=0; cnt--)
+    {
+        if(res<array[cnt]) res=array[cnt];
+    }
+    //---
+    return(res);
+}
+//+------------------------------------------------------------------+
+//| Get lowest value for range                                       |
+//+------------------------------------------------------------------+
+double Lowest(const double &array[],int range,int fromIndex)
+{
+    int cnt=0;
+    double res;
+    //---
+    res=array[fromIndex];
+    //---
+    for(cnt=fromIndex;cnt>fromIndex-range && cnt>=0;cnt--)
+    {
+        if(res>array[cnt]) res=array[cnt];
+    }
+    //---
+    return(res);
+}
+//+------------------------------------------------------------------+
+//| Convertion of value depending on digits (3/5)                    |
+//+------------------------------------------------------------------+
+int vDgtMlt(int value)
+{
+    if(_Digits==3 || _Digits==5) { return(value*=10); } else { return(value); }
+}
+//+------------------------------------------------------------------+
+//| Conversion from double to string (digit)                         |
+//+------------------------------------------------------------------+
+string DS_dgt(double aValue,int digit)
+{
+    return(DoubleToString(aValue,digit));
+}
+//+------------------------------------------------------------------+
+//| Normalization of values (digit)                                  |
+//+------------------------------------------------------------------+
+double ND_dgt(double aValue,int digit)
+{
+    return(NormalizeDouble(aValue,digit));
+}
+//+------------------------------------------------------------------+
+//| Normalization and conversion to string (digit)                   |
+//+------------------------------------------------------------------+
+string DSNDdgt(double aValue,int digit)
+{
+    return(DS_dgt(ND_dgt(aValue,digit),digit));
+}
+//-------------------------------------------------------------------+
