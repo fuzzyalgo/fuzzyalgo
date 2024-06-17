@@ -1,19 +1,17 @@
-﻿//+---------------------------------------------------------------------+
-//|                                       GFRMa_Pivot_HTF.mq5           |
-//|                                  Copyright © 2017, Nikolay Kositsin |
-//|                                 Khabarovsk,   farria@mail.redcom.ru |
-//+---------------------------------------------------------------------+
-#property copyright "Copyright © 2017, Nikolay Kositsin"
-#property link "farria@mail.redcom.ru"
-#property description "GFRMa Bands Pivot"
-#property version   "1.60"
+﻿//+------------------------------------------------------------------+
+//|                                         SIZE_HIGHS_AND_LOWS4.mq5 |
+//+------------------------------------------------------------------+
+#property copyright     "Copyright 2024, André Howe"
+#property link          "andrehowe.com"
+#property description   "GFRMa_Pivot_HTF4.mq5"
+#property version       "1.0"
 //+--------------------------------------------+
 //|  |
 //+--------------------------------------------+
 
 #property indicator_chart_window
 #property indicator_buffers 18
-#property indicator_plots   14
+#property indicator_plots   18
 //---
 #property indicator_type13  DRAW_LINE
 #property indicator_type14  DRAW_LINE
@@ -24,12 +22,9 @@
 //| |
 //+--------------------------------------------+
 #define INDICATOR_NAME      "GFRMa_Pivot_HTF4"
-#define RESET               0
 //+--------------------------------------------+
 //| |
 //+--------------------------------------------+
-
-#include <myobjects.mqh>
 
 
 input uint SignalLen = 15;
@@ -231,12 +226,10 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
-    int cnt;
-    int limit = rates_total-1*(int)SignalLen-10;
     
     //--- checking of bars
     if(rates_total < (int)SignalLen+10)
-        return(RESET);
+        return(0);
 
     if( BarsCalculated(hMA1)    < Bars(Symbol(), Period())  )
         return(prev_calculated);
@@ -249,6 +242,9 @@ int OnCalculate(const int rates_total,
     /*if( BarsCalculated(hSHL1)   < Bars(Symbol(), Period())  )
         return(prev_calculated);*/
 
+
+    int cnt;
+    int limit = rates_total-1*(int)SignalLen-10;
 
     //--- start SIZE HIGHS / LOWS4 calculations
     for(cnt=limit+1; cnt<rates_total; cnt++) {
@@ -308,17 +304,16 @@ int OnCalculate(const int rates_total,
 
 
 
-    MqlTick array[];
-    uint gCopyTicksFlags = COPY_TICKS_INFO; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
+    MqlTick tickArray1[];
     int size1    = CopyTicksRange(  Symbol(), 
-                                    array, gCopyTicksFlags, 
-                                    (TimeCurrent() - kInputSampleAvgInSecs   ) * 1000, 
-                                    (TimeCurrent() - 0) * 1000 );
+                    tickArray1, COPY_TICKS_INFO, // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL 
+                    (TimeCurrent() - kInputSampleAvgInSecs   ) * 1000, 
+                    (TimeCurrent() - 0) * 1000 );
     int oc1   = 0;
     int hl1   = 0;
     double high1 = 0;
     double low1  = 1000000000;
-    ExtractHighLowFromMqlTickArray( array, oc1, hl1, high1, low1 );
+    ExtractHighLowFromMqlTickArray( tickArray1, oc1, hl1, high1, low1 );
     int size_delta1 = (size1*hl1)/(int)kInputSampleAvgInSecs;
     
     static double iCCI1[1], iMa1[1], Middle[1], iRSI1[1], 
@@ -326,17 +321,17 @@ int OnCalculate(const int rates_total,
                   iHSLhighs1[1], iHSLlows1[1];
 
     if(CopyBuffer(hMA1, 0, 0, 1, iMa1) <= 0)
-        return(RESET);
+        return(0);
     if(CopyBuffer(hCCI1, 0, 0, 1, iCCI1) <= 0)
-        return(RESET);
+        return(0);
     if(CopyBuffer(hRSI1, 0, 0, 1, iRSI1) <= 0)
-        return(RESET);
+        return(0);
 
     // The buffer numbers: 0 - MAIN_LINE, 1 - SIGNAL_LINE.
     if(CopyBuffer(hStoch1, MAIN_LINE,   0, 1, iStochMain1)   <= 0)
-        return(RESET);
+        return(0);
     if(CopyBuffer(hStoch1, SIGNAL_LINE, 0, 1, iStochSignal1) <= 0)
-        return(RESET);
+        return(0);
 
     // The buffer numbers: 0 - price max sizes highs, 1 - price max sizes lows.
     /*if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
@@ -530,20 +525,22 @@ int OnCalculate(const int rates_total,
     //
     // oc recatangle
     //
-    if( 0 < oc1 )
-        SetRectangle(0, "iOC1", 0, 
-                        time[bar0]-4*PeriodSeconds()*offset, array[0].ask, 
-                        time[bar0]-2*PeriodSeconds()*offset, Middle[0],
-                        Up_Color, STYLE_SOLID, 1, "iOC1");
-    else
-        SetRectangle(0, "iOC1", 0, 
-                        time[bar0]-4*PeriodSeconds()*offset, array[0].ask, 
-                        time[bar0]-2*PeriodSeconds()*offset, Middle[0],
-                        Dn_Color, STYLE_SOLID, 1, "iOC1");
-
-    fmt = StringFormat("OC  %4d", oc1);
-    SetRightText (0, "iOc1Txt", 0, 
-        time[bar0]-4*PeriodSeconds()*offset, array[0].ask - (0*_Point), clrBlack, "Courier", fmt);
+    if( 0 < size1 ) { // only call if there have been any ticks
+        if( 0 < oc1 )
+            SetRectangle(0, "iOC1", 0, 
+                            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask, 
+                            time[bar0]-2*PeriodSeconds()*offset, Middle[0],
+                            Up_Color, STYLE_SOLID, 1, "iOC1");
+        else
+            SetRectangle(0, "iOC1", 0, 
+                            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask, 
+                            time[bar0]-2*PeriodSeconds()*offset, Middle[0],
+                            Dn_Color, STYLE_SOLID, 1, "iOC1");
+    
+        fmt = StringFormat("OC  %4d", oc1);
+        SetRightText (0, "iOc1Txt", 0, 
+            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask - (0*_Point), clrBlack, "Courier", fmt);
+    } // if( 0 < size1 )
 
 
     //
@@ -695,27 +692,29 @@ int OnCalculate(const int rates_total,
                 clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
         }
         
-        MqlTick array2[];
+        MqlTick tickArray2[];
         int size2    = CopyTicksRange(  Symbol(), 
-                                        array2, COPY_TICKS_INFO, 
+                                        tickArray2, COPY_TICKS_INFO, 
                                         (pos_open_time * 1000 ), 
                                         (TimeCurrent() * 1000 ));
-        int oc2   = 0;
-        int hl2   = 0;
-        double high2 = 0;
-        double low2  = 1000000000;
-        ExtractHighLowFromMqlTickArray( array2, oc2, hl2, high2, low2 );
-        int size_delta2 = (size2*hl2)/(int)kInputSampleAvgInSecs;
-        //string fmt2 = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size2, oc2, hl2,size_delta2);
-        //Print( fmt2 );
-        SetRectangle(0, "OpenPriceHigh", 0, 
-            time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
-            time[bar0]+2*PeriodSeconds()*offset, high2, 
-            clrBlueViolet, STYLE_SOLID, 1, "OpenPriceHigh");
-        SetRectangle(0, "OpenPriceLow" , 0, 
-            time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
-            time[bar0]+2*PeriodSeconds()*offset, low2,  
-            clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
+        if( 0 < size2 ) { // only call if there have been any ticks
+            int oc2   = 0;
+            int hl2   = 0;
+            double high2 = 0;
+            double low2  = 1000000000;
+            ExtractHighLowFromMqlTickArray( tickArray2, oc2, hl2, high2, low2 );
+            int size_delta2 = (size2*hl2)/(int)kInputSampleAvgInSecs;
+            //string fmt2 = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size2, oc2, hl2,size_delta2);
+            //Print( fmt2 );
+            SetRectangle(0, "OpenPriceHigh", 0, 
+                time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
+                time[bar0]+2*PeriodSeconds()*offset, high2, 
+                clrBlueViolet, STYLE_SOLID, 1, "OpenPriceHigh");
+            SetRectangle(0, "OpenPriceLow" , 0, 
+                time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
+                time[bar0]+2*PeriodSeconds()*offset, low2,  
+                clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
+        } // if( 0 < size2 )
 
     }
     else
@@ -765,24 +764,24 @@ int OnCalculate(const int rates_total,
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL, double& high, double& low )
+void ExtractHighLowFromMqlTickArray( const MqlTick& aTickArray[], int& aOC, int& aHL, double& aHigh, double& aLow )
 {
-    //double high = 0;
-    //double low  = 1000000000;
-    int size = ArraySize( mqltickarray );
+    //double aHigh = 0;
+    //double aLow  = 1000000000;
+    int size = ArraySize( aTickArray );
 
-    HL = 0;
-    OC = 0;
+    aHL = 0;
+    aOC = 0;
 
     if( 0 < size )
     {
-        MqlTick t0 = mqltickarray[size - 1];
+        MqlTick t0 = aTickArray[size - 1];
         if(t0.ask == 0 || t0.bid == 0 || t0.ask < t0.bid)
             return;
-        MqlTick tstart = mqltickarray[0];
+        MqlTick tstart = aTickArray[0];
         if(tstart.ask == 0 || tstart.bid == 0 || tstart.ask < tstart.bid)
             return;
-        OC = (int)(( ((t0.ask + t0.bid) / 2 ) - ((tstart.ask + tstart.bid) / 2 ) ) / _Point);
+        aOC = (int)(( ((t0.ask + t0.bid) / 2 ) - ((tstart.ask + tstart.bid) / 2 ) ) / _Point);
     }
     else
     {
@@ -791,38 +790,38 @@ void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int
 
     for( int cnt = 0; cnt < size; cnt++ )
     {
-        MqlTick t = mqltickarray[cnt];
+        MqlTick t = aTickArray[cnt];
         // sanity check
         if(t.ask == 0 || t.bid == 0 || t.ask < t.bid)
             continue;
-        if( high < t.ask )
-            high = t.ask;
-        if( low  > t.bid )
-            low  = t.bid;
+        if( aHigh < t.ask )
+            aHigh = t.ask;
+        if( aLow  > t.bid )
+            aLow  = t.bid;
 
     } // for( cnt = 0; cnt < size; cnt++ )
 
-    HL = (int)(( high - low ) / _Point);
+    aHL = (int)(( aHigh - aLow ) / _Point);
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-} // void ExtractHighLowFromMqlTickArray( const MqlTick& mqltickarray[], int& OC, int& HL)
+} // void ExtractHighLowFromMqlTickArray( const MqlTick& aTickArray[], int& aOC, int& aHL, double& aHigh, double& aLow )
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
 //| Get highest value for range                                      |
 //+------------------------------------------------------------------+
-double Highest(const double &array[],int range,int fromIndex)
+double Highest(const double &aTickArray[],int range,int fromIndex)
 {
     int cnt=0;
     double res;
     //---
-    res=array[fromIndex];
+    res=aTickArray[fromIndex];
     //---
     for(cnt=fromIndex; cnt>fromIndex-range && cnt>=0; cnt--)
     {
-        if(res<array[cnt]) res=array[cnt];
+        if(res<aTickArray[cnt]) res=aTickArray[cnt];
     }
     //---
     return(res);
@@ -830,16 +829,16 @@ double Highest(const double &array[],int range,int fromIndex)
 //+------------------------------------------------------------------+
 //| Get lowest value for range                                       |
 //+------------------------------------------------------------------+
-double Lowest(const double &array[],int range,int fromIndex)
+double Lowest(const double &aTickArray[],int range,int fromIndex)
 {
     int cnt=0;
     double res;
     //---
-    res=array[fromIndex];
+    res=aTickArray[fromIndex];
     //---
     for(cnt=fromIndex;cnt>fromIndex-range && cnt>=0;cnt--)
     {
-        if(res>array[cnt]) res=array[cnt];
+        if(res>aTickArray[cnt]) res=aTickArray[cnt];
     }
     //---
     return(res);
@@ -873,3 +872,251 @@ string DSNDdgt(double aValue,int digit)
     return(DS_dgt(ND_dgt(aValue,digit),digit));
 }
 //-------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| CreateRectangle                                                  |
+//+------------------------------------------------------------------+
+void CreateRectangle
+(
+    long     chart_id,
+    string   name,
+    int      nwin,
+    datetime time1,
+    double   price1,
+    datetime time2,
+    double   price2,
+    color    Color,
+    int      style,
+    int      width,
+    string   text
+)
+//----
+{
+//----
+    ObjectCreate(chart_id, name, OBJ_RECTANGLE, nwin, time1, price1, time2, price2);
+    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    ObjectSetInteger(chart_id, name, OBJPROP_STYLE, style);
+    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, width);
+    ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_SELECTED, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_SELECTABLE, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_ZORDER, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_FILL, true);
+//----
+
+} // void CreateRectangle
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| SetRectangle                                                     |
+//+------------------------------------------------------------------+
+void SetRectangle
+(
+    long     chart_id,
+    string   name,
+    int      nwin,
+    datetime time1,
+    double   price1,
+    datetime time2,
+    double   price2,
+    color    Color,
+    int      style,
+    int      width,
+    string   text
+)
+//----
+{
+//----
+    if(ObjectFind(chart_id, name) == -1) {
+        CreateRectangle(chart_id, name, nwin, time1, price1, time2, price2, Color, style, width, text);
+    } else {
+        ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
+        ObjectMove(chart_id, name, 0, time1, price1);
+        ObjectMove(chart_id, name, 1, time2, price2);
+        ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    }
+//----
+
+} // void SetRectangle
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|  CreateRightPrice                                                |
+//+------------------------------------------------------------------+
+void CreateRightPrice
+(
+    long chart_id,   // chart ID
+    string   name,            // object name
+    int      nwin,            // window index
+    datetime time,            // price level time
+    double   price,           // price level
+    color    Color,           // Text color
+    string   Font             // Text font
+)
+//----
+{
+//----
+    ObjectCreate(chart_id, name, OBJ_ARROW_RIGHT_PRICE, nwin, time, price);
+    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    ObjectSetString(chart_id, name, OBJPROP_FONT, Font);
+    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, 2);
+//----
+
+} // void CreateRightPrice
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|  SetRightPrice                                                   |
+//+------------------------------------------------------------------+
+void SetRightPrice
+(
+    long chart_id,// chart ID
+    string   name,              // object name
+    int      nwin,              // window index
+    datetime time,              // price level time
+    double   price,             // price level
+    color    Color,             // Text color
+    string   Font               // Text font
+)
+//----
+{
+//----
+    if(ObjectFind(chart_id, name) == -1) {
+        CreateRightPrice(chart_id, name, nwin, time, price, Color, Font);
+    } else { 
+        ObjectMove(chart_id, name, 0, time, price);
+    }
+//----
+
+} // void SetRightPrice
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|  CreateRightText                                                 |
+//+------------------------------------------------------------------+
+void CreateRightText
+(
+    long chart_id,// chart ID
+    string   name,              // object name
+    int      nwin,              // window index
+    datetime time,              // price level time
+    double   price,             // price level
+    color    Color,             // Text color
+    string   Font,              // Text font
+    string   Text               // Text text
+)
+//----
+{
+//----
+    ObjectCreate(chart_id, name, OBJ_TEXT, nwin, time, price);
+    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    ObjectSetString(chart_id, name, OBJPROP_FONT, Font);
+    ObjectSetInteger(chart_id, name, OBJPROP_BACK, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, 2);
+    ObjectSetString(chart_id, name, OBJPROP_TEXT, Text);
+//----
+
+} // void CreateRightText
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|  SetRightText                                                    |
+//+------------------------------------------------------------------+
+void SetRightText
+(
+    long chart_id,// chart ID
+    string   name,              // object name
+    int      nwin,              // window index
+    datetime time,              // price level time
+    double   price,             // price level
+    color    Color,             // Text color
+    string   Font,               // Text font
+    string   Text               // Text text
+)
+//----
+{
+//----
+    if(ObjectFind(chart_id, name) == -1) {
+        CreateRightText(chart_id, name, nwin, time, price, Color, Font, Text);
+    } else {
+        ObjectMove(chart_id, name, 0, time, price);
+        ObjectSetString(chart_id, name, OBJPROP_TEXT, Text);
+    }
+//----
+
+} // void SetRightText
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|  CreateTline                                                     |
+//+------------------------------------------------------------------+
+void CreateTline
+(
+    long     chart_id,
+    string   name,
+    int      nwin,
+    datetime time1,
+    double   price1,
+    datetime time2,
+    double   price2,
+    color    Color,
+    int      style,
+    int      width,
+    string   text
+)
+//----
+{
+//----
+    ObjectCreate(chart_id, name, OBJ_TREND, nwin, time1, price1, time2, price2);
+    ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    ObjectSetInteger(chart_id, name, OBJPROP_STYLE, style);
+    ObjectSetInteger(chart_id, name, OBJPROP_WIDTH, width);
+    ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(chart_id, name, OBJPROP_BACK, false);
+    ObjectSetInteger(chart_id, name, OBJPROP_RAY_RIGHT, false);
+    ObjectSetInteger(chart_id, name, OBJPROP_RAY, false);
+    ObjectSetInteger(chart_id, name, OBJPROP_SELECTED, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_SELECTABLE, true);
+    ObjectSetInteger(chart_id, name, OBJPROP_ZORDER, true);
+//----
+
+} // void CreateTline
+//+------------------------------------------------------------------+
+
+
+//+------------------------------------------------------------------+
+//|  SetTline                                                        |
+//+------------------------------------------------------------------+
+void SetTline
+(
+    long     chart_id, 
+    string   name,     
+    int      nwin,     
+    datetime time1,    
+    double   price1,   
+    datetime time2,    
+    double   price2,   
+    color    Color,    
+    int      style,    
+    int      width,    
+    string   text      
+)
+//----
+{
+//----
+    if(ObjectFind(chart_id, name) == -1) {
+        CreateTline(chart_id, name, nwin, time1, price1, time2, price2, Color, style, width, text);
+    } else {
+        ObjectSetString(chart_id, name, OBJPROP_TEXT, text);
+        ObjectMove(chart_id, name, 0, time1, price1);
+        ObjectMove(chart_id, name, 1, time2, price2);
+        ObjectSetInteger(chart_id, name, OBJPROP_COLOR, Color);
+    }
+//----
+
+} // void SetTline
+//+------------------------------------------------------------------+
