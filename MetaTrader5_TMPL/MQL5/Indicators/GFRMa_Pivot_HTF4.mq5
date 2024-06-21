@@ -26,9 +26,9 @@
 //| |
 //+--------------------------------------------+
 
-
-input uint SignalLen = 15;
-uint kInputSampleAvgInSecs = SignalLen*PeriodSeconds();
+input uint SignalNumber     = 1;
+input uint SignalLen        = 15;
+uint kInputSampleAvgInSecs  = SignalLen*PeriodSeconds();
 
 input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
 input ENUM_MA_METHOD     ma_method     = MODE_SMA;
@@ -43,7 +43,6 @@ int hMA1    = INVALID_HANDLE;
 int hCCI1   = INVALID_HANDLE;
 int hRSI1   = INVALID_HANDLE;
 int hStoch1 = INVALID_HANDLE;
-//int hSHL1   = INVALID_HANDLE;
 
 //--- buffers
 double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
@@ -59,43 +58,42 @@ int OnInit()
 
     ObjectsDeleteAll(0);
     ChartRedraw(0);
-
-    hMA1 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
-    //hMA1=iCustom(Symbol(),Period(),"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
-    //Ind_Handle_S1_M1_Ticks=iCustom(Symbol()/*+"_ticks"*/,PERIOD_M1,"GRFLsqFit",s1_Samples,s2_Samples,s3_Samples,s4_Samples);
-    if(hMA1 == INVALID_HANDLE)
-    {
-        Print(" BARS hMA1 failed");
-        return(INIT_FAILED);
+    
+    if( 0 == SignalNumber ) {
+        GlobalVariablesDeleteAll();
     }
 
-    hCCI1 = iCCI( Symbol(), Period(), SignalLen, applied_price );
-    if(hCCI1 == INVALID_HANDLE)
-    {
-        Print(" BARS hCCI1 failed");
-        return(INIT_FAILED);
-    }
+    if( 0 < SignalNumber ) {
 
-    hRSI1 = iRSI( Symbol(), Period(), SignalLen, applied_price );
-    if(hRSI1 == INVALID_HANDLE)
-    {
-        Print(" BARS hRSI1 failed");
-        return(INIT_FAILED);
-    }
-
-    hStoch1 = iStochastic( Symbol(), Period(), SignalLen,3,3, ma_method, sto_price );
-    if(hStoch1 == INVALID_HANDLE)
-    {
-        Print(" BARS hStoch1 failed");
-        return(INIT_FAILED);
-    }
-
-    /*hSHL1=iCustom(Symbol(),Period(),"size_highs_and_lows4",SignalLen);
-    if(hSHL1 == INVALID_HANDLE)
-    {
-        Print(" BARS hMA1 failed");
-        return(INIT_FAILED);
-    }*/
+        hMA1 = iMA( Symbol(), Period(), SignalLen, 0, ma_method, applied_price );
+        if(hMA1 == INVALID_HANDLE)
+        {
+            Print(" BARS hMA1 failed");
+            return(INIT_FAILED);
+        }
+    
+        hCCI1 = iCCI( Symbol(), Period(), SignalLen, applied_price );
+        if(hCCI1 == INVALID_HANDLE)
+        {
+            Print(" BARS hCCI1 failed");
+            return(INIT_FAILED);
+        }
+    
+        hRSI1 = iRSI( Symbol(), Period(), SignalLen, applied_price );
+        if(hRSI1 == INVALID_HANDLE)
+        {
+            Print(" BARS hRSI1 failed");
+            return(INIT_FAILED);
+        }
+    
+        hStoch1 = iStochastic( Symbol(), Period(), SignalLen,3,3, ma_method, sto_price );
+        if(hStoch1 == INVALID_HANDLE)
+        {
+            Print(" BARS hStoch1 failed");
+            return(INIT_FAILED);
+        }
+    
+    }// if( 0 < SignalNumber ) 
 
     //--- buffers for calculations and plot
     //double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
@@ -181,26 +179,26 @@ int OnInit()
 void OnDeinit(const int reason)
 {
 
-    if(INVALID_HANDLE != hMA1)
-    {
-        IndicatorRelease(hMA1);
-    }
-    if(INVALID_HANDLE != hCCI1)
-    {
-        IndicatorRelease(hCCI1);
-    }
-    if(INVALID_HANDLE != hRSI1)
-    {
-        IndicatorRelease(hRSI1);
-    }
-    if(INVALID_HANDLE != hStoch1)
-    {
-        IndicatorRelease(hStoch1);
-    }
-    /*if(INVALID_HANDLE != hSHL1)
-    {
-        IndicatorRelease(hSHL1);
-    }*/
+    if( 0 < SignalNumber ) {
+
+        if(INVALID_HANDLE != hMA1)
+        {
+            IndicatorRelease(hMA1);
+        }
+        if(INVALID_HANDLE != hCCI1)
+        {
+            IndicatorRelease(hCCI1);
+        }
+        if(INVALID_HANDLE != hRSI1)
+        {
+            IndicatorRelease(hRSI1);
+        }
+        if(INVALID_HANDLE != hStoch1)
+        {
+            IndicatorRelease(hStoch1);
+        }
+      
+    } // if( 0 < SignalNumber )
 
     ObjectsDeleteAll(0);
     ChartRedraw(0);
@@ -226,84 +224,20 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
 
-    
+
     //--- checking of bars
-    if(rates_total < (int)SignalLen+10)
+    if(rates_total < (60*24))
         return(0);
+    int bar0 = rates_total - 1;
 
-    if( BarsCalculated(hMA1)    < Bars(Symbol(), Period())  )
-        return(prev_calculated);
-    if( BarsCalculated(hCCI1)   < Bars(Symbol(), Period())  )
-        return(prev_calculated);
-    if( BarsCalculated(hRSI1)   < Bars(Symbol(), Period())  )
-        return(prev_calculated);
-    if( BarsCalculated(hStoch1) < Bars(Symbol(), Period())  )
-        return(prev_calculated);
-    /*if( BarsCalculated(hSHL1)   < Bars(Symbol(), Period())  )
-        return(prev_calculated);*/
-
-
-    int cnt;
-    int limit = rates_total-1*(int)SignalLen-10;
-
-    //--- start SIZE HIGHS / LOWS4 calculations
-    for(cnt=limit+1; cnt<rates_total; cnt++) {
-        //--- size of highs
-        if(close[cnt]>open[cnt]) // bullish candle
-        {
-            //--- calculate the body
-            HighBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
-            maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
-            
-            LowBuffer[cnt]=0.0;
-            maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
-            
-        }
-        else if(close[cnt]<open[cnt]) // bearish candle
-        {
-            LowBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
-            maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
-            
-            HighBuffer[cnt]=0.0;
-            maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
-            
-        }
-        else // Doji
-        {
-            HighBuffer[cnt]=0.0;
-            //---
-            maxHighBuffer[cnt]=maxHighBuffer[cnt-1];
-            //---
-            LowBuffer[cnt]=0.0;
-            //---
-            maxLowBuffer[cnt]=maxLowBuffer[cnt-1];
-            //---
-            
-        }
-        
-        if( maxHighBuffer[cnt] > maxHighBuffer[cnt-1] )
-        {
-            highs[cnt] = high[cnt];
-        }
-        else
-        {
-            highs[cnt] = highs[cnt-1];
-        }
-        
-        if( maxLowBuffer[cnt] < maxLowBuffer[cnt-1] )
-        {
-            lows[cnt] = low[cnt];
-        }
-        else
-        {
-            lows[cnt] = lows[cnt-1];
-        }
-        
-    } // for(cnt=limit; cnt<rates_total; cnt++)
-    //--- end SIZE HIGHS / LOWS4 calculations
-
-
-
+    //
+    // variables start
+    //
+    static double iCCI1[1], iMa1[1], Middle[1], iRSI1[1], 
+                  iStochMain1[1], iStochSignal1[1],
+                  iHSLhighs1[1], iHSLlows1[1];
+                  
+    
     MqlTick tickArray1[];
     int size1    = CopyTicksRange(  Symbol(), 
                     tickArray1, COPY_TICKS_INFO, // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL 
@@ -315,78 +249,292 @@ int OnCalculate(const int rates_total,
     double low1  = 1000000000;
     ExtractHighLowFromMqlTickArray( tickArray1, oc1, hl1, high1, low1 );
     int size_delta1 = (size1*hl1)/(int)kInputSampleAvgInSecs;
-    
-    static double iCCI1[1], iMa1[1], Middle[1], iRSI1[1], 
-                  iStochMain1[1], iStochSignal1[1],
-                  iHSLhighs1[1], iHSLlows1[1];
 
-    if(CopyBuffer(hMA1, 0, 0, 1, iMa1) <= 0)
-        return(0);
-    if(CopyBuffer(hCCI1, 0, 0, 1, iCCI1) <= 0)
-        return(0);
-    if(CopyBuffer(hRSI1, 0, 0, 1, iRSI1) <= 0)
-        return(0);
-
-    // The buffer numbers: 0 - MAIN_LINE, 1 - SIGNAL_LINE.
-    if(CopyBuffer(hStoch1, MAIN_LINE,   0, 1, iStochMain1)   <= 0)
-        return(0);
-    if(CopyBuffer(hStoch1, SIGNAL_LINE, 0, 1, iStochSignal1) <= 0)
-        return(0);
-
-    // The buffer numbers: 0 - price max sizes highs, 1 - price max sizes lows.
-    /*if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
-        return(RESET);
-    if(CopyBuffer(hSHL1, 1, 0, 1, iHSLlows1)  <= 0)
-        return(RESET);*/
-    iHSLhighs1[0] = highs[rates_total-1];
-    iHSLlows1 [0] = lows [rates_total-1];
-
-    int bar0 = rates_total - 1;
-    int bar1 = rates_total - int(MathMax(SignalLen - 1, 0));
     MqlTick tick;
     SymbolInfoTick( Symbol(), tick );
     double ask = tick.ask;
     double bid = tick.bid;
     Middle[0]  = (ask+bid)/2;
     int spread1 = (int)((ask-bid)/ _Point);
-    int ma1 = (int)((Middle[0]-iMa1[0] ) / _Point);
-    
-    int iHSLdelta = (int)MathAbs((iHSLhighs1[0]-iHSLlows1[0] ) / _Point);
+    int ma1 = 0;
+    int iHSLdelta = 0;
     int iHSLBreakoutDelta = 0;
-    if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
-    
-        iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
-        if( iHSLlows1[0] > iHSLhighs1[0] ) {
-            iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
-        } 
-    
-    } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
 
-        iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
-        if( iHSLlows1[0] > iHSLhighs1[0] ) {
-            iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
-        } 
+    //
+    // variables end
+    //
     
-    } else {
+
+    if( 0 < SignalNumber ) {
+    
+        int cnt;
+        int limit = rates_total-1*(int)SignalLen-10;
+    
+        //--- start SIZE HIGHS / LOWS4 calculations
+        for(cnt=limit+1; cnt<rates_total; cnt++) {
+            //--- size of highs
+            if(close[cnt]>open[cnt]) {// bullish candle
+                //--- calculate the body
+                HighBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
+                maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
+                LowBuffer[cnt]=0.0;
+                maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
+                
+            } else if(close[cnt]<open[cnt]) { // bearish candle
+                LowBuffer[cnt]=ND_dgt(close[cnt],_Digits)-ND_dgt(open[cnt],_Digits);
+                maxLowBuffer[cnt]=ND_dgt(Lowest(LowBuffer,SignalLen,cnt),_Digits);
+                HighBuffer[cnt]=0.0;
+                maxHighBuffer[cnt]=ND_dgt(Highest(HighBuffer,SignalLen,cnt),_Digits);
+                
+            } else {
+                HighBuffer[cnt]=0.0;
+                maxHighBuffer[cnt]=maxHighBuffer[cnt-1];
+                LowBuffer[cnt]=0.0;
+                maxLowBuffer[cnt]=maxLowBuffer[cnt-1];
+                
+            } // if(close[cnt]>open[cnt])
             
-    } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
+            if( maxHighBuffer[cnt] > maxHighBuffer[cnt-1] ) {
+                highs[cnt] = high[cnt];
+                
+            } else {
+                highs[cnt] = highs[cnt-1];
+                
+            }
+            
+            if( maxLowBuffer[cnt] < maxLowBuffer[cnt-1] ) {
+                lows[cnt] = low[cnt];
+                
+            } else {
+                lows[cnt] = lows[cnt-1];
+            }
+            
+        } // for(cnt=limit; cnt<rates_total; cnt++)
+        //--- end SIZE HIGHS / LOWS4 calculations
     
     
+        if(CopyBuffer(hMA1, 0, 0, 1, iMa1) <= 0)
+            return(0);
+        if(CopyBuffer(hCCI1, 0, 0, 1, iCCI1) <= 0)
+            return(0);
+        if(CopyBuffer(hRSI1, 0, 0, 1, iRSI1) <= 0)
+            return(0);
+    
+        // The buffer numbers: 0 - MAIN_LINE, 1 - SIGNAL_LINE.
+        if(CopyBuffer(hStoch1, MAIN_LINE,   0, 1, iStochMain1)   <= 0)
+            return(0);
+        if(CopyBuffer(hStoch1, SIGNAL_LINE, 0, 1, iStochSignal1) <= 0)
+            return(0);
+            
+        /*hSHL1=iCustom(Symbol(),Period(),"size_highs_and_lows4",SignalLen);
+        if(hSHL1 == INVALID_HANDLE) {
+            // The buffer numbers: 0 - price max sizes highs, 1 - price max sizes lows.
+            if(CopyBuffer(hSHL1, 0, 0, 1, iHSLhighs1) <= 0)
+                Print(" hSHL1 failed");
+            if(CopyBuffer(hSHL1, 1, 0, 1, iHSLlows1)  <= 0)
+                Print(" hSHL1 failed");
+        }*/
+    
+        iHSLhighs1[0] = highs[rates_total-1];
+        iHSLlows1 [0] = lows [rates_total-1];
+    
+        ma1 = (int)((Middle[0]-iMa1[0] ) / _Point);
+        
+        iHSLdelta = (int)MathAbs((iHSLhighs1[0]-iHSLlows1[0] ) / _Point);
+        iHSLBreakoutDelta = 0;
+        if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
+        
+            iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
+            if( iHSLlows1[0] > iHSLhighs1[0] ) {
+                iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
+            } 
+        
+        } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
+    
+            iHSLBreakoutDelta = (int)((Middle[0]-iHSLlows1[0])/_Point);
+            if( iHSLlows1[0] > iHSLhighs1[0] ) {
+                iHSLBreakoutDelta = (int)((Middle[0]-iHSLhighs1[0])/_Point);
+            } 
+        
+        } else {
+                
+        } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
+        
+    } // if( 0 < SignalNumber ) 
+    
+    if( 0 == SignalNumber ) {
+    
+        string strnum = IntegerToString(SignalNumber);
+        string strlen = IntegerToString(SignalLen);
+        uint idx = SignalNumber;
+        uint cnt = 0; 
+        
+        struct sGlobVar { 
+            string key;
+            double val;
+        }; 
+        sGlobVar globVarArr[5][16]; 
+        
+        for( idx = 1; idx < 5; idx++ ) {
+        
+            cnt = 0; 
+            globVarArr[idx][cnt].key = "SignalNumber_"+IntegerToString(idx)+"_SignalLen";
+            bool OK = GlobalVariableGet(globVarArr[idx][cnt].key, globVarArr[idx][cnt].val );
+            if( false == OK ) {
+                Print( "ERROR: could not get GlobalVariableGet for: " + globVarArr[idx][cnt].key);
+                continue;
+            }
+            
+            strlen = DoubleToString(globVarArr[idx][cnt].val,0);
+            cnt++;
+
+            globVarArr[idx][cnt++].key = strlen + "_s";
+            globVarArr[idx][cnt++].key = strlen + "_v";
+            globVarArr[idx][cnt++].key = strlen + "_sto_main";
+            globVarArr[idx][cnt++].key = strlen + "_sto_signal";
+            globVarArr[idx][cnt++].key = strlen + "_rsi";
+            globVarArr[idx][cnt++].key = strlen + "_cci";
+            globVarArr[idx][cnt++].key = strlen + "_ma";
+            globVarArr[idx][cnt++].key = strlen + "_oc";
+            globVarArr[idx][cnt++].key = strlen + "_shl";
+            globVarArr[idx][cnt++].key = strlen + "_hl";
+            globVarArr[idx][cnt++].key = strlen + "_sd";
+            globVarArr[idx][cnt++].key = strlen + "_shld";
+            globVarArr[idx][cnt++].key = strlen + "_spread";
+            globVarArr[idx][cnt++].key = strlen + "_highs";
+            globVarArr[idx][cnt++].key = strlen + "_lows";
+
+            for( cnt = 1; cnt < 16; cnt ++ ) {
+                bool OK = GlobalVariableGet(globVarArr[idx][cnt].key, globVarArr[idx][cnt].val );
+                if( false == OK ) Print( "ERROR: could not get GlobalVariableGet for: " + globVarArr[idx][cnt].key);
+            } // for( cnt = 0; cnt < 15; cnt ++ )
+        
+        } // for( idx = 1; idx < 5; idx++ )
+        
+        cnt = 0; 
+        idx = SignalNumber;
+
+        // write the SignalLen into the global index of the SignalNumber    
+        //  n: 4  -> SignalNumber: 4 and SignalLen: 240 -->   SignalNumber_4_SignalLen: 240
+        globVarArr[idx][cnt].key = "SignalNumber_"+strnum+"_SignalLen";
+        globVarArr[idx][cnt].val = SignalLen;
+        cnt++;
+        
+        // 1.) TotalSeconds - s:   60*240   -   PeriodSeconds()*SignalLen - (EURUSD,M1) -> 60 seconds period
+        globVarArr[idx][cnt].key = strlen + "_s";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        cnt++;
+        
+        // 2.) ticks per TotalSeconds - v:   9970 
+        globVarArr[idx][cnt].key = strlen + "_v";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        size1 = (int)globVarArr[idx][cnt].val;
+        cnt++;
+    
+        // 3.) sto main per TotalSeconds - sto:   45/  46
+        globVarArr[idx][cnt].key = strlen + "_sto_main";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iStochMain1[0] = (int)globVarArr[idx][cnt].val + 50;
+        cnt++;
+    
+        // 4.) sto signal per TotalSeconds - sto:   45/  46
+        globVarArr[idx][cnt].key = strlen + "_sto_signal";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iStochSignal1[0] = (int)globVarArr[idx][cnt].val + 50;
+        cnt++;
+    
+        // 5.) rsi per TotalSeconds - rsi:    4
+        globVarArr[idx][cnt].key = strlen + "_rsi";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iRSI1[0] = (int)globVarArr[idx][cnt].val + 50;
+        cnt++;
+    
+        // 6.) cci per TotalSeconds - cci:  173
+        globVarArr[idx][cnt].key = strlen + "_cci";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iCCI1[0] = (int)globVarArr[idx][cnt].val;
+        cnt++;
+    
+        // 7.) ma per TotalSeconds - ma:   38
+        globVarArr[idx][cnt].key = strlen + "_ma";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        ma1 = (int)globVarArr[idx][cnt].val;
+        cnt++;
+    
+        // 8.) oc per TotalSeconds - oc:   75
+        globVarArr[idx][cnt].key = strlen + "_oc";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        oc1 = (int)globVarArr[idx][cnt].val;
+        cnt++;
+    
+        // 9.) shl per TotalSeconds - shl:    0
+        globVarArr[idx][cnt].key = strlen + "_shl";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iHSLBreakoutDelta = (int)globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 10.) hl per TotalSeconds - hl:   89
+        globVarArr[idx][cnt].key = strlen + "_hl";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        hl1 = (int)globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 11.) sd per TotalSeconds - sd:   61
+        globVarArr[idx][cnt].key = strlen + "_sd";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        size_delta1 = (int)globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 12.) shld per TotalSeconds - shld:  150
+        globVarArr[idx][cnt].key = strlen + "_shld";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iHSLdelta = (int)globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 13.) spread per TotalSeconds - spread:  2
+        globVarArr[idx][cnt].key = strlen + "_spread";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        spread1 = (int)globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 14.) highs per TotalSeconds - highs: 1.07205
+        globVarArr[idx][cnt].key = strlen + "_highs";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iHSLhighs1[0] = globVarArr[idx][cnt].val; 
+        highs[rates_total-1] = globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        // 15.) lows per TotalSeconds - lows: 1.07055
+        globVarArr[idx][cnt].key = strlen + "_lows";
+        globVarArr[idx][cnt].val = (globVarArr[1][cnt].val+globVarArr[2][cnt].val+globVarArr[3][cnt].val+globVarArr[4][cnt].val)/4;
+        iHSLlows1[0] = globVarArr[idx][cnt].val; 
+        lows[rates_total-1] = globVarArr[idx][cnt].val; 
+        cnt++;
+    
+        for( cnt = 0; cnt < 16; cnt ++ ) {
+            datetime dtc = GlobalVariableSet(globVarArr[idx][cnt].key, globVarArr[idx][cnt].val );
+            if( 0 == dtc ) Print( "ERROR: could not set GlobalVariableSet for: " + globVarArr[idx][cnt].key);
+        }
+    } // if( 0 == SignalNumber )
+    
+        
     //double vb[], sto1b[], sto2b[], rsib[], ccib[], mab[], ocb[], shlb[], hlb[], sdb[], shldb[], spreadb[];
-    vb[rates_total-1] = size1;
-    sto1b[rates_total-1] = iStochMain1[0]-50;
-    sto2b[rates_total-1] = iStochSignal1[0]-50;
-    rsib[rates_total-1]  = iRSI1[0]-50;
-    ccib[rates_total-1]  = iCCI1[0]-50;
-    mab[rates_total-1]   = ma1;
-    ocb[rates_total-1]   = oc1;
-    shlb[rates_total-1]   = iHSLBreakoutDelta;
-    hlb[rates_total-1]   = hl1;
-    sdb[rates_total-1]   = size_delta1;
-    shldb[rates_total-1]   = iHSLdelta;
-    spreadb[rates_total-1]   = spread1;
+    vb[rates_total-1]       = size1;
+    sto1b[rates_total-1]    = iStochMain1[0]-50;
+    sto2b[rates_total-1]    = iStochSignal1[0]-50;
+    rsib[rates_total-1]     = iRSI1[0]-50;
+    ccib[rates_total-1]     = iCCI1[0];
+    mab[rates_total-1]      = ma1;
+    ocb[rates_total-1]      = oc1;
+    shlb[rates_total-1]     = iHSLBreakoutDelta;
+    hlb[rates_total-1]      = hl1;
+    sdb[rates_total-1]      = size_delta1;
+    shldb[rates_total-1]    = iHSLdelta;
+    spreadb[rates_total-1]  = spread1;
     
-    string fmt = StringFormat("s: %4d*%3d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
+    /* // move below open order analysis down below
+    string fmt = StringFormat("n: %d  s: %4d*%3d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f", 
+                                SignalNumber,
                                 PeriodSeconds(), 
                                 SignalLen,
                                 size1, 
@@ -404,6 +552,120 @@ int OnCalculate(const int rates_total,
                                 iHSLhighs1[0],
                                 iHSLlows1[0]);
     Print( fmt );
+    */
+    
+    /*
+    //
+    // set global variables
+    //
+    2024.06.21 08:12:50.238	GFRMa_Pivot_HTF4 (EURUSD,M1) n: 4  s:   60*240  v:   9970  sto:   45/  46  rsi:    4  cci:  173  ma:   38  oc:   75  shl:    0  hl:   89  sd:   61  shld:  150  spread:  2  highs: 1.07205  lows: 1.07055
+    2024.06.21 08:12:50.245	GFRMa_Pivot_HTF4 (EURUSD,M1) n: 3  s:   60* 60  v:   3762  sto:   42/  43  rsi:    7  cci:  113  ma:   19  oc:   23  shl:    0  hl:   60  sd:   62  shld:   39  spread:  2  highs: 1.07205  lows: 1.07165
+    2024.06.21 08:12:50.247	GFRMa_Pivot_HTF4 (EURUSD,M1) n: 2  s:   60* 15  v:   1759  sto:   40/  43  rsi:   13  cci:  111  ma:   17  oc:   28  shl:    0  hl:   42  sd:   82  shld:   39  spread:  2  highs: 1.07205  lows: 1.07165
+    2024.06.21 08:12:50.248	GFRMa_Pivot_HTF4 (EURUSD,M1) n: 1  s:   60*  4  v:    517  sto:   25/  36  rsi:   17  cci:    0  ma:    1  oc:   22  shl:    0  hl:   26  sd:   56  shld:    8  spread:  2  highs: 1.07205  lows: 1.07196
+    
+    */  
+      
+    if( 0 < SignalNumber ) {
+    
+        string strnum = IntegerToString(SignalNumber);
+        string strlen = IntegerToString(SignalLen);
+        uint idx = SignalNumber;
+        uint cnt = 0; 
+        
+        struct sGlobVar { 
+            string key;
+            double val;
+        }; 
+        sGlobVar globVarArr[5][16]; 
+        
+        // write the SignalLen into the global index of the SignalNumber    
+        //  n: 4  -> SignalNumber: 4 and SignalLen: 240 -->   SignalNumber_4_SignalLen: 240
+        globVarArr[idx][cnt].key = "SignalNumber_"+strnum+"_SignalLen";
+        globVarArr[idx][cnt].val = SignalLen;
+        cnt++;
+        
+        // 1.) TotalSeconds - s:   60*240   -   PeriodSeconds()*SignalLen - (EURUSD,M1) -> 60 seconds period
+        globVarArr[idx][cnt].key = strlen + "_s";
+        globVarArr[idx][cnt].val = (PeriodSeconds()*SignalLen);
+        cnt++;
+        
+        // 2.) ticks per TotalSeconds - v:   9970 
+        globVarArr[idx][cnt].key = strlen + "_v";
+        globVarArr[idx][cnt].val = (size1);
+        cnt++;
+    
+        // 3.) sto main per TotalSeconds - sto:   45/  46
+        globVarArr[idx][cnt].key = strlen + "_sto_main";
+        globVarArr[idx][cnt].val = ((int)iStochMain1[0]-50);
+        cnt++;
+    
+        // 4.) sto signal per TotalSeconds - sto:   45/  46
+        globVarArr[idx][cnt].key = strlen + "_sto_signal";
+        globVarArr[idx][cnt].val = ((int)iStochSignal1[0]-50);
+        cnt++;
+    
+        // 5.) rsi per TotalSeconds - rsi:    4
+        globVarArr[idx][cnt].key = strlen + "_rsi";
+        globVarArr[idx][cnt].val = ((int)iRSI1[0]-50);
+        cnt++;
+    
+        // 6.) cci per TotalSeconds - cci:  173
+        globVarArr[idx][cnt].key = strlen + "_cci";
+        globVarArr[idx][cnt].val = ((int)iCCI1[0]);
+        cnt++;
+    
+        // 7.) ma per TotalSeconds - ma:   38
+        globVarArr[idx][cnt].key = strlen + "_ma";
+        globVarArr[idx][cnt].val = (ma1);
+        cnt++;
+    
+        // 8.) oc per TotalSeconds - oc:   75
+        globVarArr[idx][cnt].key = strlen + "_oc";
+        globVarArr[idx][cnt].val = (oc1);
+        cnt++;
+    
+        // 9.) shl per TotalSeconds - shl:    0
+        globVarArr[idx][cnt].key = strlen + "_shl";
+        globVarArr[idx][cnt].val = (iHSLBreakoutDelta);
+        cnt++;
+    
+        // 10.) hl per TotalSeconds - hl:   89
+        globVarArr[idx][cnt].key = strlen + "_hl";
+        globVarArr[idx][cnt].val = (hl1);
+        cnt++;
+    
+        // 11.) sd per TotalSeconds - sd:   61
+        globVarArr[idx][cnt].key = strlen + "_sd";
+        globVarArr[idx][cnt].val = (size_delta1);
+        cnt++;
+    
+        // 12.) shld per TotalSeconds - shld:  150
+        globVarArr[idx][cnt].key = strlen + "_shld";
+        globVarArr[idx][cnt].val = (iHSLdelta);
+        cnt++;
+    
+        // 13.) spread per TotalSeconds - spread:  2
+        globVarArr[idx][cnt].key = strlen + "_spread";
+        globVarArr[idx][cnt].val = (spread1);
+        cnt++;
+    
+        // 14.) highs per TotalSeconds - highs: 1.07205
+        globVarArr[idx][cnt].key = strlen + "_highs";
+        globVarArr[idx][cnt].val = (iHSLhighs1[0]);
+        cnt++;
+    
+        // 15.) lows per TotalSeconds - lows: 1.07055
+        globVarArr[idx][cnt].key = strlen + "_lows";
+        globVarArr[idx][cnt].val = (iHSLlows1[0]);
+        cnt++;
+    
+        for( cnt = 0; cnt < 16; cnt ++ ) {
+            datetime dtc = GlobalVariableSet(globVarArr[idx][cnt].key, globVarArr[idx][cnt].val );
+            if( 0 == dtc ) Print( "ERROR: could not set GlobalVariableSet for: " + globVarArr[idx][cnt].key);
+        }
+
+
+    } // if( 0 < SignalNumber )
 
     //
     // calc offset for chart display
@@ -443,7 +705,7 @@ int OnCalculate(const int rates_total,
                         time[bar0]-12*PeriodSeconds()*offset, Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iStoMain1");
                 
-    fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
+    string fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
     SetRightText (0, "iStoMain1Txt", 0, 
         time[bar0]-14*PeriodSeconds()*offset, stomain - (0*_Point), clrBlack, "Courier", fmt);
 
@@ -507,39 +769,41 @@ int OnCalculate(const int rates_total,
     //
     // ma rectangle
     //
-    if( iMa1[0] < Middle[0] )
+    double iMA1 = Middle[0]- ma1* _Point;
+    if( iMA1 < Middle[0] )
         SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-6*PeriodSeconds()*offset, iMa1[0], 
+                        time[bar0]-6*PeriodSeconds()*offset, iMA1, 
                         time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
                         Up_Color, STYLE_SOLID, 1, "iMA1");
     else
         SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-6*PeriodSeconds()*offset, iMa1[0], 
+                        time[bar0]-6*PeriodSeconds()*offset, iMA1, 
                         time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
                         Dn_Color, STYLE_SOLID, 1, "iMA1");
 
     fmt = StringFormat("MA  %4d", ma1);
     SetRightText (0, "iMa1Txt", 0, 
-        time[bar0]-6*PeriodSeconds()*offset, iMa1[0] - (0*_Point), clrBlack, "Courier", fmt);
+        time[bar0]-6*PeriodSeconds()*offset, iMA1 - (0*_Point), clrBlack, "Courier", fmt);
 
     //
     // oc recatangle
     //
     if( 0 < size1 ) { // only call if there have been any ticks
+        double iOC1 = Middle[0]- oc1* _Point;
         if( 0 < oc1 )
             SetRectangle(0, "iOC1", 0, 
-                            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask, 
+                            time[bar0]-4*PeriodSeconds()*offset, iOC1,
                             time[bar0]-2*PeriodSeconds()*offset, Middle[0],
                             Up_Color, STYLE_SOLID, 1, "iOC1");
         else
             SetRectangle(0, "iOC1", 0, 
-                            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask, 
+                            time[bar0]-4*PeriodSeconds()*offset, iOC1,
                             time[bar0]-2*PeriodSeconds()*offset, Middle[0],
                             Dn_Color, STYLE_SOLID, 1, "iOC1");
     
         fmt = StringFormat("OC  %4d", oc1);
         SetRightText (0, "iOc1Txt", 0, 
-            time[bar0]-4*PeriodSeconds()*offset, tickArray1[0].ask - (0*_Point), clrBlack, "Courier", fmt);
+            time[bar0]-4*PeriodSeconds()*offset, iOC1 - (0*_Point), clrBlack, "Courier", fmt);
     } // if( 0 < size1 )
 
 
@@ -639,20 +903,27 @@ int OnCalculate(const int rates_total,
     //SetRightText (0, middle_name+"1", 0, time[bar0]-10*PeriodSeconds(), Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
 
 
+    string posFmt = "";
+    if( 0 == SignalNumber )                                
+        posFmt = "----   secs:      0  price:       0  points:      0  pointshigh:      0  pointslow:      0";
 
     if(PositionSelect(_Symbol))
     {
+        
+        string BoS = "----";
         int _color = clrWhite;
         int _colorLine = clrWhite;
         double pos_open_price =  PositionGetDouble(POSITION_PRICE_OPEN);
         double pos_open_price_last =  PositionGetDouble(POSITION_PRICE_CURRENT);
         long pos_open_time = PositionGetInteger(POSITION_TIME);
+        long pos_open_time_delta = TimeCurrent() - pos_open_time;
         long posOpenDT = ((TimeCurrent() - pos_open_time)*hl1)/kInputSampleAvgInSecs;
         //Print((long)TimeCurrent(), " ", pos_open_time, " ", TimeCurrent()-pos_open_time, " ", posOpenDT);
         long pos_open_price_delta = 0;
         ENUM_POSITION_TYPE pos_open_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
         if( POSITION_TYPE_BUY == pos_open_type )
         {
+            BoS = "BUY ";
             pos_open_price_delta = (long)((pos_open_price_last - pos_open_price) / _Point);
             _color = clrBlue;
             _colorLine = clrBlue;
@@ -662,6 +933,7 @@ int OnCalculate(const int rates_total,
 
         if( POSITION_TYPE_SELL == pos_open_type )
         {
+            BoS = "SELL ";
             pos_open_price_delta = (long)((pos_open_price - pos_open_price_last) / _Point);
             _color = clrRed;
             _colorLine = clrRed;
@@ -697,11 +969,11 @@ int OnCalculate(const int rates_total,
                                         tickArray2, COPY_TICKS_INFO, 
                                         (pos_open_time * 1000 ), 
                                         (TimeCurrent() * 1000 ));
+        double high2 = 0;
+        double low2  = 1000000000;
         if( 0 < size2 ) { // only call if there have been any ticks
             int oc2   = 0;
             int hl2   = 0;
-            double high2 = 0;
-            double low2  = 1000000000;
             ExtractHighLowFromMqlTickArray( tickArray2, oc2, hl2, high2, low2 );
             int size_delta2 = (size2*hl2)/(int)kInputSampleAvgInSecs;
             //string fmt2 = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size2, oc2, hl2,size_delta2);
@@ -715,6 +987,25 @@ int OnCalculate(const int rates_total,
                 time[bar0]+2*PeriodSeconds()*offset, low2,  
                 clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
         } // if( 0 < size2 )
+
+
+        int pos_open_price_high = 0;
+        int pos_open_price_low  = 0;
+        if( POSITION_TYPE_BUY == pos_open_type ) {
+            pos_open_price_high = (int)MathAbs((pos_open_price - high2)  / _Point);
+            pos_open_price_low  = (int)MathAbs((pos_open_price - low2) / _Point);
+        } else {
+            pos_open_price_high = (int)MathAbs((pos_open_price - low2)  / _Point);
+            pos_open_price_low  = (int)MathAbs((pos_open_price - high2) / _Point);
+        }
+        if( 0 == SignalNumber )                                
+            posFmt = StringFormat("%s  secs: %6d  price: %1.5f  points: %6d  pointshigh: %6d  pointslow: %6d", 
+                BoS,
+                pos_open_time_delta,
+                pos_open_price,
+                pos_open_price_delta,
+                pos_open_price_high,
+                -1*pos_open_price_low  );
 
     }
     else
@@ -733,6 +1024,31 @@ int OnCalculate(const int rates_total,
             ObjectDelete( 0,    "OpenPriceLow");
 
     } // if(PositionSelect(_Symbol))
+
+
+    fmt = StringFormat("n: %d  s: %4d*%3d  v: %6d  sto: %4d/%4d  rsi: %4d  cci: %4d  ma: %4d  oc: %4d  shl: %4d  hl: %4d  sd: %4d  shld: %4d  spread: %2d  highs: %1.5f  lows: %1.5f   %s", 
+                                SignalNumber,
+                                PeriodSeconds(), 
+                                SignalLen,
+                                size1, 
+                                (int)iStochMain1[0]-50,
+                                (int)iStochSignal1[0]-50,
+                                (int)iRSI1[0]-50,
+                                (int)iCCI1[0],
+                                ma1, 
+                                oc1, 
+                                iHSLBreakoutDelta,
+                                hl1,
+                                size_delta1,
+                                iHSLdelta,
+                                spread1,
+                                iHSLhighs1[0],
+                                iHSLlows1[0],
+                                posFmt);
+                                
+    //if( 0 == SignalNumber )                                
+    Print( fmt );
+
 
 //----
     //Print("2");
