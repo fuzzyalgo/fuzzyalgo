@@ -1,0 +1,13 @@
+
+
+#
+# git diff utf-16 text
+#
+# https://stackoverflow.com/questions/777949/can-i-make-git-recognize-a-utf-16-file-as-text
+# and put this here into ~/.gitconfig
+# [diff=utf16]
+#     textconv = "iconv -f utf-16 -t utf-8"
+
+*.chr diff=utf16
+*.wnd diff=utf16
+
