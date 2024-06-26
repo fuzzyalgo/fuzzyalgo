@@ -30,6 +30,8 @@ input uint SignalNumber     = 1;
 input uint SignalLen        = 15;
 uint kInputSampleAvgInSecs  = SignalLen*PeriodSeconds();
 
+input bool DisplayGraphics = false;
+
 input ENUM_APPLIED_PRICE applied_price = PRICE_CLOSE;
 input ENUM_MA_METHOD     ma_method     = MODE_SMA;
 input ENUM_STO_PRICE     sto_price     = STO_CLOSECLOSE;
@@ -259,6 +261,8 @@ int OnCalculate(const int rates_total,
     int ma1 = 0;
     int iHSLdelta = 0;
     int iHSLBreakoutDelta = 0;
+    
+    string fmt;
 
     //
     // variables end
@@ -691,217 +695,226 @@ int OnCalculate(const int rates_total,
 
 
     //
-    // stochastic main rectangle
-    // 
-    double stomain = (Middle[0]-((iStochMain1[0]-50)* _Point));
-    if( 0 < ((int)iStochMain1[0]-50) )
-        SetRectangle(0, "iStoMain1", 0, 
-                        time[bar0]-14*PeriodSeconds()*offset, stomain, 
-                        time[bar0]-12*PeriodSeconds()*offset, Middle[0], 
-                        Up_Color, STYLE_SOLID, 1, "iStoMain1");
-    else
-        SetRectangle(0, "iStoMain1", 0, 
-                        time[bar0]-14*PeriodSeconds()*offset, stomain, 
-                        time[bar0]-12*PeriodSeconds()*offset, Middle[0], 
-                        Dn_Color, STYLE_SOLID, 1, "iStoMain1");
-                
-    string fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
-    SetRightText (0, "iStoMain1Txt", 0, 
-        time[bar0]-14*PeriodSeconds()*offset, stomain - (0*_Point), clrBlack, "Courier", fmt);
+    // GUI start
+    //
+    if( true == DisplayGraphics ) {
 
-    //
-    // stochastic signal rectangle
-    // 
-    double stosignal = (Middle[0]-((iStochSignal1[0]-50)* _Point));
-    if( 0 < ((int)iStochSignal1[0]-50) )
-        SetRectangle(0, "iStoSignal1", 0, 
-                        time[bar0]-12*PeriodSeconds()*offset, stosignal, 
-                        time[bar0]-10*PeriodSeconds()*offset, Middle[0], 
-                        Up_Color, STYLE_SOLID, 1, "iStoSignal1");
-    else
-        SetRectangle(0, "iStoSignal1", 0, 
-                        time[bar0]-12*PeriodSeconds()*offset, stosignal, 
-                        time[bar0]-10*PeriodSeconds()*offset, Middle[0], 
-                        Dn_Color, STYLE_SOLID, 1, "iStoSignal1");
-
-    fmt = StringFormat("STOS%4d", (int)iStochSignal1[0]-50);
-    SetRightText (0, "iStoSignal1Txt", 0, 
-        time[bar0]-12*PeriodSeconds()*offset, stosignal - (0*_Point), clrBlack, "Courier", fmt);
-
-    //
-    // rsi rectangle
-    //
-    double rsi = (Middle[0]-((iRSI1[0]-50)* _Point));
-    if( 0 < ((int)iRSI1[0]-50) )
-        SetRectangle(0, "iRSI1", 0, 
-                        time[bar0]-10*PeriodSeconds()*offset, rsi, 
-                        time[bar0]-8*PeriodSeconds()*offset, Middle[0], 
-                        Up_Color, STYLE_SOLID, 1, "iRSI1");
-    else
-        SetRectangle(0, "iRSI1", 0, 
-                        time[bar0]-10*PeriodSeconds()*offset, rsi, 
-                        time[bar0]-8*PeriodSeconds()*offset, Middle[0], 
-                        Dn_Color, STYLE_SOLID, 1, "iRSI1");
-
-    fmt = StringFormat("RSI %4d", (int)iRSI1[0]-50);
-    SetRightText (0, "iRSI1Txt", 0, 
-        time[bar0]-10*PeriodSeconds()*offset, rsi - (0*_Point), clrBlack, "Courier", fmt);
-
-    //
-    // cci rectangle
-    //
-    double cci = (Middle[0]-(iCCI1[0]* _Point));
-    if( 0 < (int)iCCI1[0] )
-        SetRectangle(0, "iCCI1", 0, 
-                        time[bar0]-8*PeriodSeconds()*offset, cci, 
-                        time[bar0]-6*PeriodSeconds()*offset, Middle[0], 
-                        Up_Color, STYLE_SOLID, 1, "iCCI1");
-    else
-        SetRectangle(0, "iCCI1", 0, 
-                        time[bar0]-8*PeriodSeconds()*offset, cci, 
-                        time[bar0]-6*PeriodSeconds()*offset, Middle[0],
-                        Dn_Color, STYLE_SOLID, 1, "iCCI1");
-                        
-    fmt = StringFormat("CCI %4d", (int)iCCI1[0]);
-    SetRightText (0, "iCCI1Txt", 0, 
-        time[bar0]-8*PeriodSeconds()*offset, cci - (0*_Point), clrBlack, "Courier", fmt);
-
-    //
-    // ma rectangle
-    //
-    double iMA1 = Middle[0]- ma1* _Point;
-    if( iMA1 < Middle[0] )
-        SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-6*PeriodSeconds()*offset, iMA1, 
-                        time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
-                        Up_Color, STYLE_SOLID, 1, "iMA1");
-    else
-        SetRectangle(0, "iMA1", 0, 
-                        time[bar0]-6*PeriodSeconds()*offset, iMA1, 
-                        time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
-                        Dn_Color, STYLE_SOLID, 1, "iMA1");
-
-    fmt = StringFormat("MA  %4d", ma1);
-    SetRightText (0, "iMa1Txt", 0, 
-        time[bar0]-6*PeriodSeconds()*offset, iMA1 - (0*_Point), clrBlack, "Courier", fmt);
-
-    //
-    // oc recatangle
-    //
-    if( 0 < size1 ) { // only call if there have been any ticks
-        double iOC1 = Middle[0]- oc1* _Point;
-        if( 0 < oc1 )
-            SetRectangle(0, "iOC1", 0, 
-                            time[bar0]-4*PeriodSeconds()*offset, iOC1,
-                            time[bar0]-2*PeriodSeconds()*offset, Middle[0],
-                            Up_Color, STYLE_SOLID, 1, "iOC1");
+        //
+        // stochastic main rectangle
+        // 
+        double stomain = (Middle[0]-((iStochMain1[0]-50)* _Point));
+        if( 0 < ((int)iStochMain1[0]-50) )
+            SetRectangle(0, "iStoMain1", 0, 
+                            time[bar0]-14*PeriodSeconds()*offset, stomain, 
+                            time[bar0]-12*PeriodSeconds()*offset, Middle[0], 
+                            Up_Color, STYLE_SOLID, 1, "iStoMain1");
         else
-            SetRectangle(0, "iOC1", 0, 
-                            time[bar0]-4*PeriodSeconds()*offset, iOC1,
-                            time[bar0]-2*PeriodSeconds()*offset, Middle[0],
-                            Dn_Color, STYLE_SOLID, 1, "iOC1");
+            SetRectangle(0, "iStoMain1", 0, 
+                            time[bar0]-14*PeriodSeconds()*offset, stomain, 
+                            time[bar0]-12*PeriodSeconds()*offset, Middle[0], 
+                            Dn_Color, STYLE_SOLID, 1, "iStoMain1");
+                    
+        fmt = StringFormat("STOM%4d", (int)iStochMain1[0]-50);
+        SetRightText (0, "iStoMain1Txt", 0, 
+            time[bar0]-14*PeriodSeconds()*offset, stomain - (0*_Point), clrBlack, "Courier", fmt);
     
-        fmt = StringFormat("OC  %4d", oc1);
-        SetRightText (0, "iOc1Txt", 0, 
-            time[bar0]-4*PeriodSeconds()*offset, iOC1 - (0*_Point), clrBlack, "Courier", fmt);
-    } // if( 0 < size1 )
-
-
-    //
-    // shl (size high low custom) rectangle
-    //  breakout - outside of high and low - the delta between high/low and middle
-    //
-    double hsl = 0;
-    if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
+        //
+        // stochastic signal rectangle
+        // 
+        double stosignal = (Middle[0]-((iStochSignal1[0]-50)* _Point));
+        if( 0 < ((int)iStochSignal1[0]-50) )
+            SetRectangle(0, "iStoSignal1", 0, 
+                            time[bar0]-12*PeriodSeconds()*offset, stosignal, 
+                            time[bar0]-10*PeriodSeconds()*offset, Middle[0], 
+                            Up_Color, STYLE_SOLID, 1, "iStoSignal1");
+        else
+            SetRectangle(0, "iStoSignal1", 0, 
+                            time[bar0]-12*PeriodSeconds()*offset, stosignal, 
+                            time[bar0]-10*PeriodSeconds()*offset, Middle[0], 
+                            Dn_Color, STYLE_SOLID, 1, "iStoSignal1");
     
-        hsl = iHSLhighs1[0];
-        if( iHSLlows1[0] > iHSLhighs1[0] ) {
-            hsl = iHSLlows1[0];
-        } 
-        SetRectangle(0, "iHSL",   0, 
-                            time[bar0]-2*PeriodSeconds()*offset, hsl , 
-                            time[bar0]-0*PeriodSeconds()*offset, Middle[0] , 
-                            Up_Color, STYLE_SOLID, 1, "iHSL");
+        fmt = StringFormat("STOS%4d", (int)iStochSignal1[0]-50);
+        SetRightText (0, "iStoSignal1Txt", 0, 
+            time[bar0]-12*PeriodSeconds()*offset, stosignal - (0*_Point), clrBlack, "Courier", fmt);
     
-    } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
-
-        hsl = iHSLlows1[0];
-        if( iHSLlows1[0] > iHSLhighs1[0] ) {
+        //
+        // rsi rectangle
+        //
+        double rsi = (Middle[0]-((iRSI1[0]-50)* _Point));
+        if( 0 < ((int)iRSI1[0]-50) )
+            SetRectangle(0, "iRSI1", 0, 
+                            time[bar0]-10*PeriodSeconds()*offset, rsi, 
+                            time[bar0]-8*PeriodSeconds()*offset, Middle[0], 
+                            Up_Color, STYLE_SOLID, 1, "iRSI1");
+        else
+            SetRectangle(0, "iRSI1", 0, 
+                            time[bar0]-10*PeriodSeconds()*offset, rsi, 
+                            time[bar0]-8*PeriodSeconds()*offset, Middle[0], 
+                            Dn_Color, STYLE_SOLID, 1, "iRSI1");
+    
+        fmt = StringFormat("RSI %4d", (int)iRSI1[0]-50);
+        SetRightText (0, "iRSI1Txt", 0, 
+            time[bar0]-10*PeriodSeconds()*offset, rsi - (0*_Point), clrBlack, "Courier", fmt);
+    
+        //
+        // cci rectangle
+        //
+        double cci = (Middle[0]-(iCCI1[0]* _Point));
+        if( 0 < (int)iCCI1[0] )
+            SetRectangle(0, "iCCI1", 0, 
+                            time[bar0]-8*PeriodSeconds()*offset, cci, 
+                            time[bar0]-6*PeriodSeconds()*offset, Middle[0], 
+                            Up_Color, STYLE_SOLID, 1, "iCCI1");
+        else
+            SetRectangle(0, "iCCI1", 0, 
+                            time[bar0]-8*PeriodSeconds()*offset, cci, 
+                            time[bar0]-6*PeriodSeconds()*offset, Middle[0],
+                            Dn_Color, STYLE_SOLID, 1, "iCCI1");
+                            
+        fmt = StringFormat("CCI %4d", (int)iCCI1[0]);
+        SetRightText (0, "iCCI1Txt", 0, 
+            time[bar0]-8*PeriodSeconds()*offset, cci - (0*_Point), clrBlack, "Courier", fmt);
+    
+        //
+        // ma rectangle
+        //
+        double iMA1 = Middle[0]- ma1* _Point;
+        if( iMA1 < Middle[0] )
+            SetRectangle(0, "iMA1", 0, 
+                            time[bar0]-6*PeriodSeconds()*offset, iMA1, 
+                            time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
+                            Up_Color, STYLE_SOLID, 1, "iMA1");
+        else
+            SetRectangle(0, "iMA1", 0, 
+                            time[bar0]-6*PeriodSeconds()*offset, iMA1, 
+                            time[bar0]-4*PeriodSeconds()*offset, Middle[0], 
+                            Dn_Color, STYLE_SOLID, 1, "iMA1");
+    
+        fmt = StringFormat("MA  %4d", ma1);
+        SetRightText (0, "iMa1Txt", 0, 
+            time[bar0]-6*PeriodSeconds()*offset, iMA1 - (0*_Point), clrBlack, "Courier", fmt);
+    
+        //
+        // oc recatangle
+        //
+        if( 0 < size1 ) { // only call if there have been any ticks
+            double iOC1 = Middle[0]- oc1* _Point;
+            if( 0 < oc1 )
+                SetRectangle(0, "iOC1", 0, 
+                                time[bar0]-4*PeriodSeconds()*offset, iOC1,
+                                time[bar0]-2*PeriodSeconds()*offset, Middle[0],
+                                Up_Color, STYLE_SOLID, 1, "iOC1");
+            else
+                SetRectangle(0, "iOC1", 0, 
+                                time[bar0]-4*PeriodSeconds()*offset, iOC1,
+                                time[bar0]-2*PeriodSeconds()*offset, Middle[0],
+                                Dn_Color, STYLE_SOLID, 1, "iOC1");
+        
+            fmt = StringFormat("OC  %4d", oc1);
+            SetRightText (0, "iOc1Txt", 0, 
+                time[bar0]-4*PeriodSeconds()*offset, iOC1 - (0*_Point), clrBlack, "Courier", fmt);
+        } // if( 0 < size1 )
+    
+    
+        //
+        // shl (size high low custom) rectangle
+        //  breakout - outside of high and low - the delta between high/low and middle
+        //
+        double hsl = 0;
+        if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) ) {
+        
             hsl = iHSLhighs1[0];
-        } 
-        SetRectangle(0, "iHSL",   0, 
-                            time[bar0]-2*PeriodSeconds()*offset, hsl , 
-                            time[bar0]-0*PeriodSeconds()*offset, Middle[0] , 
-                            Dn_Color, STYLE_SOLID, 1, "iHSL");
+            if( iHSLlows1[0] > iHSLhighs1[0] ) {
+                hsl = iHSLlows1[0];
+            } 
+            SetRectangle(0, "iHSL",   0, 
+                                time[bar0]-2*PeriodSeconds()*offset, hsl , 
+                                time[bar0]-0*PeriodSeconds()*offset, Middle[0] , 
+                                Up_Color, STYLE_SOLID, 1, "iHSL");
+        
+        } else if( (Middle[0] < iHSLhighs1[0]) &&  (Middle[0] < iHSLlows1[0]) ) {
     
-    } else {
+            hsl = iHSLlows1[0];
+            if( iHSLlows1[0] > iHSLhighs1[0] ) {
+                hsl = iHSLhighs1[0];
+            } 
+            SetRectangle(0, "iHSL",   0, 
+                                time[bar0]-2*PeriodSeconds()*offset, hsl , 
+                                time[bar0]-0*PeriodSeconds()*offset, Middle[0] , 
+                                Dn_Color, STYLE_SOLID, 1, "iHSL");
+        
+        } else {
+        
+            if( 0 == ObjectFind( 0, "iHSL") )
+                ObjectDelete( 0,    "iHSL");
+            if( 0 == ObjectFind( 0, "iSHL1Txt") )
+                ObjectDelete( 0,    "iSHL1Txt");
+                
+        } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
     
-        if( 0 == ObjectFind( 0, "iHSL") )
-            ObjectDelete( 0,    "iHSL");
-        if( 0 == ObjectFind( 0, "iSHL1Txt") )
-            ObjectDelete( 0,    "iSHL1Txt");
-            
-    } // if( (Middle[0] > iHSLhighs1[0]) &&  (Middle[0] > iHSLlows1[0]) )
-
-    if( 0 == ObjectFind( 0, "iHSL") ) {
-        fmt = StringFormat("SHL %4d", iHSLBreakoutDelta);
-        SetRightText (0, "iSHL1Txt", 0, 
-            time[bar0]-2*PeriodSeconds()*offset, hsl, clrBlack, "Courier", fmt);
-    }
-
+        if( 0 == ObjectFind( 0, "iHSL") ) {
+            fmt = StringFormat("SHL %4d", iHSLBreakoutDelta);
+            SetRightText (0, "iSHL1Txt", 0, 
+                time[bar0]-2*PeriodSeconds()*offset, hsl, clrBlack, "Courier", fmt);
+        }
+    
+    
+        //
+        // hl rectangle
+        // 
+        SetRectangle(0, "HlRectangle", 0, 
+                            time[bar0]+2*PeriodSeconds()*offset, (Middle[0] - (hl1*_Point)/2), 
+                            time[bar0]+3*PeriodSeconds()*offset, (Middle[0] + (hl1*_Point)/2), 
+                            clrLightGreen, STYLE_SOLID, 1, "HlRectangle");
+                            
+        fmt = StringFormat("%4d", hl1);
+        SetRightText (0, "HlRectangleTxt", 0, 
+                time[bar0]+2*PeriodSeconds()*offset, (Middle[0] + (hl1*_Point)/2), clrBlack, "Courier", fmt);
+                            
+        //
+        // sd rectangle
+        // 
+        SetRectangle(0, "SdRectangle",   0, 
+                            time[bar0]+3*PeriodSeconds()*offset, (Middle[0] - (size_delta1*_Point)/2 ), 
+                            time[bar0]+4*PeriodSeconds()*offset, (Middle[0] + (size_delta1*_Point)/2 ), 
+                            clrGreen, STYLE_SOLID, 1, "SdRectangle");
+    
+        fmt = StringFormat("%4d", size_delta1);
+        SetRightText (0, "SdRectangleTxt", 0, 
+                time[bar0]+3*PeriodSeconds()*offset, (Middle[0] + (size_delta1*_Point)/2), clrBlack, "Courier", fmt);
+    
+        //
+        // shl (size high low custom) rectangle
+        //    the delta between high and low
+        // 
+        SetRectangle(0, "ShlRectangle",   0, 
+                            time[bar0]+4*PeriodSeconds()*offset, (Middle[0] - (iHSLdelta*_Point)/2 ), 
+                            time[bar0]+5*PeriodSeconds()*offset, (Middle[0] + (iHSLdelta*_Point)/2 ), 
+                            clrYellowGreen, STYLE_SOLID, 1, "ShlRectangle");
+    
+        fmt = StringFormat("%4d", iHSLdelta);
+        SetRightText (0, "ShlRectangleTxt", 0, 
+                time[bar0]+4*PeriodSeconds()*offset, (Middle[0] + (iHSLdelta*_Point)/2), clrBlack, "Courier", fmt);
+    
+        //
+        // spread rectangle
+        //
+        SetRectangle(0, "SpreadRectangle",   0, 
+                            time[bar0]+5*PeriodSeconds()*offset, ask , 
+                            time[bar0]+6*PeriodSeconds()*offset, bid , 
+                            clrYellow, STYLE_SOLID, 1, "SpreadRectangle");
+    
+        fmt = StringFormat("%4d", spread1);
+        SetRightText (0, "SpreadRectangleTxt", 0, 
+                time[bar0]+5*PeriodSeconds()*offset, ask, clrBlack, "Courier", fmt);
+    
+        //fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
+        //SetRightText (0, middle_name+"1", 0, time[bar0]-10*PeriodSeconds(), Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
 
     //
-    // hl rectangle
-    // 
-    SetRectangle(0, "HlRectangle", 0, 
-                        time[bar0]+2*PeriodSeconds()*offset, (Middle[0] - (hl1*_Point)/2), 
-                        time[bar0]+3*PeriodSeconds()*offset, (Middle[0] + (hl1*_Point)/2), 
-                        clrLightGreen, STYLE_SOLID, 1, "HlRectangle");
-                        
-    fmt = StringFormat("%4d", hl1);
-    SetRightText (0, "HlRectangleTxt", 0, 
-            time[bar0]+2*PeriodSeconds()*offset, (Middle[0] + (hl1*_Point)/2), clrBlack, "Courier", fmt);
-                        
+    // GUI end
     //
-    // sd rectangle
-    // 
-    SetRectangle(0, "SdRectangle",   0, 
-                        time[bar0]+3*PeriodSeconds()*offset, (Middle[0] - (size_delta1*_Point)/2 ), 
-                        time[bar0]+4*PeriodSeconds()*offset, (Middle[0] + (size_delta1*_Point)/2 ), 
-                        clrGreen, STYLE_SOLID, 1, "SdRectangle");
-
-    fmt = StringFormat("%4d", size_delta1);
-    SetRightText (0, "SdRectangleTxt", 0, 
-            time[bar0]+3*PeriodSeconds()*offset, (Middle[0] + (size_delta1*_Point)/2), clrBlack, "Courier", fmt);
-
-    //
-    // shl (size high low custom) rectangle
-    //    the delta between high and low
-    // 
-    SetRectangle(0, "ShlRectangle",   0, 
-                        time[bar0]+4*PeriodSeconds()*offset, (Middle[0] - (iHSLdelta*_Point)/2 ), 
-                        time[bar0]+5*PeriodSeconds()*offset, (Middle[0] + (iHSLdelta*_Point)/2 ), 
-                        clrYellowGreen, STYLE_SOLID, 1, "ShlRectangle");
-
-    fmt = StringFormat("%4d", iHSLdelta);
-    SetRightText (0, "ShlRectangleTxt", 0, 
-            time[bar0]+4*PeriodSeconds()*offset, (Middle[0] + (iHSLdelta*_Point)/2), clrBlack, "Courier", fmt);
-
-    //
-    // spread rectangle
-    //
-    SetRectangle(0, "SpreadRectangle",   0, 
-                        time[bar0]+5*PeriodSeconds()*offset, ask , 
-                        time[bar0]+6*PeriodSeconds()*offset, bid , 
-                        clrYellow, STYLE_SOLID, 1, "SpreadRectangle");
-
-    fmt = StringFormat("%4d", spread1);
-    SetRightText (0, "SpreadRectangleTxt", 0, 
-            time[bar0]+5*PeriodSeconds()*offset, ask, clrBlack, "Courier", fmt);
-
-    //fmt = StringFormat("%3d %3d %3d", hl1, (int)(size1/hl1), oc1);
-    //SetRightText (0, middle_name+"1", 0, time[bar0]-10*PeriodSeconds(), Middle[0] + (0*_Point), clrBlack, "Courier", fmt);
-
+    } // if( true == DisplayGraphics )
 
     string posFmt = "";
     if( 0 == SignalNumber )                                
@@ -940,30 +953,39 @@ int OnCalculate(const int rates_total,
             if( 0 > pos_open_price_delta )
                 _color = clrYellow;
         }
-        SetTline(0, "OPLine", 0, 
-            pos_open_time, pos_open_price, 
-            time[bar0] + 3 * PeriodSeconds()*offset, pos_open_price, 
-            _colorLine, STYLE_SOLID, 3, "OPLine");
-        SetRightPrice(0, "OPpriceTxt", 0,  
-            time[bar0] + 3 * PeriodSeconds()*offset, pos_open_price, 
-            _colorLine, "Georgia");
-        SetRectangle(0, "OpenPrice", 0, 
-            time[bar0]+0*PeriodSeconds()*offset, pos_open_price, 
-            time[bar0]+1*PeriodSeconds()*offset, Middle[0]/*pos_open_price_last*/,
-             _color, STYLE_SOLID, 1, "OpenPrice");
-        
-        if( Middle[0] >  pos_open_price ) {
-            SetRectangle(0, "OpenPriceTime", 0, 
+
+        //
+        // GUI start
+        //
+        if( true == DisplayGraphics ) {
+            SetTline(0, "OPLine", 0, 
+                pos_open_time, pos_open_price, 
+                time[bar0] + 3 * PeriodSeconds()*offset, pos_open_price, 
+                _colorLine, STYLE_SOLID, 3, "OPLine");
+            SetRightPrice(0, "OPpriceTxt", 0,  
+                time[bar0] + 3 * PeriodSeconds()*offset, pos_open_price, 
+                _colorLine, "Georgia");
+            SetRectangle(0, "OpenPrice", 0, 
                 time[bar0]+0*PeriodSeconds()*offset, pos_open_price, 
-                time[bar0]+1*PeriodSeconds()*offset, pos_open_price-posOpenDT*_Point, 
-                clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
-        } else {
-            SetRectangle(0, "OpenPriceTime", 0, 
-                time[bar0]+0*PeriodSeconds()*offset, pos_open_price, 
-                time[bar0]+1*PeriodSeconds()*offset, pos_open_price+posOpenDT*_Point, 
-                clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
-        }
-        
+                time[bar0]+1*PeriodSeconds()*offset, Middle[0]/*pos_open_price_last*/,
+                 _color, STYLE_SOLID, 1, "OpenPrice");
+            
+            if( Middle[0] >  pos_open_price ) {
+                SetRectangle(0, "OpenPriceTime", 0, 
+                    time[bar0]+0*PeriodSeconds()*offset, pos_open_price, 
+                    time[bar0]+1*PeriodSeconds()*offset, pos_open_price-posOpenDT*_Point, 
+                    clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
+            } else {
+                SetRectangle(0, "OpenPriceTime", 0, 
+                    time[bar0]+0*PeriodSeconds()*offset, pos_open_price, 
+                    time[bar0]+1*PeriodSeconds()*offset, pos_open_price+posOpenDT*_Point, 
+                    clrGreenYellow, STYLE_SOLID, 1, "OpenPriceTime");
+            }
+        } //if( true == DisplayGraphics )
+        //
+        // GUI start
+        //
+                
         MqlTick tickArray2[];
         int size2    = CopyTicksRange(  Symbol(), 
                                         tickArray2, COPY_TICKS_INFO, 
@@ -978,14 +1000,24 @@ int OnCalculate(const int rates_total,
             int size_delta2 = (size2*hl2)/(int)kInputSampleAvgInSecs;
             //string fmt2 = StringFormat("%4d  v: %6d  oc: %4d  hl: %4d  sd: %4d", PeriodSeconds(), size2, oc2, hl2,size_delta2);
             //Print( fmt2 );
-            SetRectangle(0, "OpenPriceHigh", 0, 
-                time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
-                time[bar0]+2*PeriodSeconds()*offset, high2, 
-                clrBlueViolet, STYLE_SOLID, 1, "OpenPriceHigh");
-            SetRectangle(0, "OpenPriceLow" , 0, 
-                time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
-                time[bar0]+2*PeriodSeconds()*offset, low2,  
-                clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
+            
+            //
+            // GUI start
+            //
+            if( true == DisplayGraphics ) {
+                SetRectangle(0, "OpenPriceHigh", 0, 
+                    time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
+                    time[bar0]+2*PeriodSeconds()*offset, high2, 
+                    clrBlueViolet, STYLE_SOLID, 1, "OpenPriceHigh");
+                SetRectangle(0, "OpenPriceLow" , 0, 
+                    time[bar0]+1*PeriodSeconds()*offset, pos_open_price, 
+                    time[bar0]+2*PeriodSeconds()*offset, low2,  
+                    clrViolet, STYLE_SOLID, 1, "OpenPriceLow");
+            } // if( true == DisplayGraphics ) 
+            //
+            // GUI start
+            //
+                
         } // if( 0 < size2 )
 
 
