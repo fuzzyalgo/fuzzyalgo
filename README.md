@@ -15,7 +15,7 @@
 
 ### clone git repo
 
-```CSS
+```bash
 cd \<your-source-path>
 git clone https://github.com/fuzzyalgo/fuzzyalgo.git
 ```
@@ -33,12 +33,12 @@ git clone https://github.com/fuzzyalgo/fuzzyalgo.git
 > conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
 > conda activate fuzzyalgo-py38
 > pip install scikit-fuzzy pynput MetaTrader5
-> pip install C:\<your-source-path>\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install .\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
 > python setup.py
 > conda deactivate
 ```
 
-```CSS
+```bash
 (base) C:\Windows\system32>cd \<your-source-path>\fuzzyalgo
 (base) C:\<your-source-path>\fuzzyalgo>
 (base) C:\<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
@@ -60,17 +60,17 @@ git clone https://github.com/fuzzyalgo/fuzzyalgo.git
 ### populate cf_accounts_\<your-username\>@\<your-hostname\>.json with MT5 login and password
 
 - template:
-```CSS
+```bash
 C:\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts.tmpl
 ```
 
 - original:
-```CSS
+```bash
 C:\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts_<your-username>@<your-hostname>.json
 ```
 
 - links:
-```CSS
+```bash
 C:\%APPDATA%\MetaTrader5_RF5D01\config\cf_accounts_<your-username>@<your-hostname>.json
 C:\%APPDATA%\MetaTrader5_RF5D02\config\cf_accounts_<your-username>@<your-hostname>.json
 C:\%APPDATA%\MetaTrader5_RF5D03\config\cf_accounts_<your-username>@<your-hostname>.json
@@ -117,7 +117,7 @@ C:\%APPDATA%\MetaTrader5_RF5D04\config\cf_accounts_<your-username>@<your-hostnam
 
 #### run from windows start menu 'Spyder (fuzzyalgo-py38)' or 'Jupyter Notebook (fuzzyalgo-py38)'
 
-```CSS
+```bash
 $ cd  "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)"
 $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 	Anaconda Navigator (anaconda3).lnk
@@ -137,7 +137,7 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 - start 'Anaconda Cmd Prompt' or 'Anaconda Powershell Prompt' 
 
 ##### spyder
-``` CSS
+```bash
 > conda activate fuzzyalgo-py38
 > cd \<your-source-path>\fuzzyalgo
 > spyder 
@@ -145,7 +145,7 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 ```
 
 ##### jupyter notebook
-``` CSS
+```bash
 > conda activate fuzzyalgo-py38
 > cd \<your-source-path>\fuzzyalgo
 > jupyter notebook
@@ -153,7 +153,7 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 ```
 
 ##### python
-``` CSS
+```bash
 > conda activate fuzzyalgo-py38
 > cd \<your-source-path>\fuzzyalgo
 > python <your-python>.py
@@ -162,7 +162,7 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 
 ## re-install conda env fuzzyalgo-py38
 
-``` CSS
+```bash
 # if activated, then deactivate first
 > conda activate fuzzyalgo-py38
 > cd \<your-source-path>\fuzzyalgo
@@ -183,6 +183,8 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 ```
 
 #### https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
+
+```bash
 (fuzzyalgo-py38) C:\OneDrive\rfx\git\fuzzyalgo>pip install --upgrade --user nbconvert
 Installing collected packages: mistune, nbconvert
   WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in 'C:\Users\G6\AppData\Roaming\Python\Python38\Scripts' which is not on PATH.
@@ -200,15 +202,15 @@ C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
                2 File(s)        216.828 bytes
 
 (fuzzyalgo-py38) C:\Users\G6> copy C:\Users\G6\AppData\Roaming\Python\Python38\Scripts\jupyter-*.exe C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
+```
 
 
 #### https://stackoverflow.com/questions/40114639/jupyter-conda-tab-an-error-occurred-while-retrieving-package-information/trackback/
 
-
+```bash
 jupyter serverextension disable nb_conda
 jupyter serverextension enable nb_conda
-
-
 conda install -c conda-forge nb_conda_kernels
+```
 
 
