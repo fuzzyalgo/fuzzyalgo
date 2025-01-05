@@ -71,10 +71,10 @@ C:\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_account
 
 - links:
 ```bash
-C:\%APPDATA%\MetaTrader5_RF5D01\config\cf_accounts_<your-username>@<your-hostname>.json
-C:\%APPDATA%\MetaTrader5_RF5D02\config\cf_accounts_<your-username>@<your-hostname>.json
-C:\%APPDATA%\MetaTrader5_RF5D03\config\cf_accounts_<your-username>@<your-hostname>.json
-C:\%APPDATA%\MetaTrader5_RF5D04\config\cf_accounts_<your-username>@<your-hostname>.json
+%APPDATA%\MetaTrader5_RF5D01\config\cf_accounts_<your-username>@<your-hostname>.json
+%APPDATA%\MetaTrader5_RF5D02\config\cf_accounts_<your-username>@<your-hostname>.json
+%APPDATA%\MetaTrader5_RF5D03\config\cf_accounts_<your-username>@<your-hostname>.json
+%APPDATA%\MetaTrader5_RF5D04\config\cf_accounts_<your-username>@<your-hostname>.json
 ```
 
 - note: config\*.json are excluded from git
@@ -82,29 +82,24 @@ C:\%APPDATA%\MetaTrader5_RF5D04\config\cf_accounts_<your-username>@<your-hostnam
 ```JSON
 {
    "RF5D01":{
-      "path" : "MetaTrader5_RF5D01\\terminal64.exe",
       "login" : 0,
       "password" : "your-password-here",
       "server" : "RoboForex-ECN",
       "portable" : "True"
    },
    "RF5D02":{
-      "path" : "MetaTrader5_RF5D02\\terminal64.exe",
       "login" : 0,
       "password" : "your-password-here",
       "server" : "RoboForex-ECN",
       "portable" : "True"
    },
    "RF5D03":{
-   
-      "path" : "MetaTrader5_RF5D03\\terminal64.exe",
       "login" : 0,
       "password" : "your-password-here",
       "server" : "RoboForex-ECN",
       "portable" : "True"
    },
    "RF5D04":{
-      "path" : "MetaTrader5_RF5D03\\terminal64.exe",
       "login" : 0,
       "password" : "your-password-here",
       "server" : "RoboForex-ECN",
@@ -119,7 +114,7 @@ C:\%APPDATA%\MetaTrader5_RF5D04\config\cf_accounts_<your-username>@<your-hostnam
 
 ```bash
 $ cd  "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)"
-$ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
+$ %APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 	Anaconda Navigator (anaconda3).lnk
 	Anaconda Powershell Prompt (anaconda3).lnk
 	Anaconda Prompt (anaconda3).lnk
@@ -185,23 +180,20 @@ $ C:\%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 #### https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
 
 ```bash
-(fuzzyalgo-py38) C:\OneDrive\rfx\git\fuzzyalgo>pip install --upgrade --user nbconvert
-Installing collected packages: mistune, nbconvert
-  WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in 'C:\Users\G6\AppData\Roaming\Python\Python38\Scripts' which is not on PATH.
-  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
-Successfully installed mistune-2.0.4 nbconvert-7.2.7
+(fuzzyalgo-py38) >pip install --upgrade --user nbconvert
+	Installing collected packages: mistune, nbconvert
+	  WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in '%APPDATA%\Python\Python38\Scripts' which is not on PATH.
+	  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+	Successfully installed mistune-2.0.4 nbconvert-7.2.7
 
-C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
+(fuzzyalgo-py38) > dir %APPDATA%\Python\Python38\Scripts
 
-(fuzzyalgo-py38) C:\Users\G6>dir C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
+	Directory of %APPDATA%\Python\Python38\Scripts
+	23/05/2023  20:09           108.421 jupyter-dejavu.exe
+	23/05/2023  20:09           108.407 jupyter-nbconvert.exe
+				   2 File(s)        216.828 bytes
 
- Directory of C:\Users\G6\AppData\Roaming\Python\Python38\Scripts
-
-23/05/2023  20:09           108.421 jupyter-dejavu.exe
-23/05/2023  20:09           108.407 jupyter-nbconvert.exe
-               2 File(s)        216.828 bytes
-
-(fuzzyalgo-py38) C:\Users\G6> copy C:\Users\G6\AppData\Roaming\Python\Python38\Scripts\jupyter-*.exe C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
+(fuzzyalgo-py38) > copy %APPDATA%\Python\Python38\Scripts\Python\Python38\Scripts\jupyter-*.exe C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
 ```
 
 

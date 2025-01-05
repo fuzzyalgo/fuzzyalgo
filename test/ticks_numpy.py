@@ -27,14 +27,14 @@ gTimezoneUTC = timezone.utc
 gTdOffset= timedelta(hours=2)   # TODO recognise me - summer time 3h and winter time 2h
 
 # normal operation
-gTicksPerPeriod = 36#36000  #  10hours * 36000secs/hours -> 36000 ticks per period
-gTimeDelta = timedelta( hours=10 )   # TODO config var 10 hours -> related to 36000 (gTicksPerPeriod) elements for ticks array
-gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
+#gTicksPerPeriod = 36#36000  #  10hours * 36000secs/hours -> 36000 ticks per period
+#gTimeDelta = timedelta( hours=10 )   # TODO config var 10 hours -> related to 36000 (gTicksPerPeriod) elements for ticks array
+#gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
 
 # investigate a certain time
-# gTicksPerPeriod = -1  #  
-# gTimeDelta = timedelta( minutes=60 )
-#gDtTo   = datetime(2023, 3, 3, 17, 2, 50, 0, tzinfo=gTimezoneUTC)
+gTicksPerPeriod = 100  #  
+gTimeDelta = timedelta( minutes=240 )
+gDtTo   = datetime(2025, 1, 3, 17, 2, 50, 0, tzinfo=gTimezoneUTC)
 
 
 #
