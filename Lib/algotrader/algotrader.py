@@ -818,15 +818,15 @@ class Algotrader():
 
     
     # =============================================================================
-    # def get_date_range(dt_from):
+    # def get_date_range(dt_to):
     #     
     # =============================================================================
-    def get_date_range(self, dt_from):
+    def get_date_range(self, dt_to):
         
         # =============================================================================
         #     self.gDt = {}
-        #     self.gDt['dt_from']    = dt_from - timedelta(seconds=(max_seconds*self.gDt['dt_count']))
-        #     self.gDt['dt_to']      = dt_from
+        #     self.gDt['dt_from']    = dt_to - timedelta(seconds=(max_seconds*self.gDt['dt_count']))
+        #     self.gDt['dt_to']      = dt_to
         #     self.gDt['dt_count']   = 0
         #     self.gDt['dt_volume']  = 0
         #     self.gDt['dt_seconds'] = 0
@@ -852,7 +852,7 @@ class Algotrader():
         self.gDt['dt_count'] = self.KDtCount
         self.gDt['dt_volume'] = max_volume
         self.gDt['dt_seconds'] = max_seconds
-        self.gDt['dt_to'] = dt_from
+        self.gDt['dt_to'] = dt_to
         if 0 == max_seconds:
             max_seconds = 3600
         self.gDt['dt_from'] = self.gDt['dt_to']  - timedelta(seconds=(max_seconds*self.gDt['dt_count']))
@@ -860,9 +860,7 @@ class Algotrader():
         #
         # TODO FIXME make this optional DT_TO starts at beginning of the day
         #
-        dt_to = dt_from
-        dt_to = dt_to.replace(hour=0, minute=5, second=0, microsecond=0)
-        self.gDt['dt_from'] = dt_to
+        self.gDt['dt_from'] = dt_to.replace(hour=0, minute=5, second=0, microsecond=0)
     
     
     # def get_date_range():
@@ -2618,15 +2616,15 @@ class Algotrader():
             c0 = df.iloc[lendf-1].close
             # print( c1 )
             # print( c0 )
-	    
-	    
+            
             DELTA = int(0.0)
             if None != self.g_c0[sym]:
                 DELTA = int( (c0 - self.g_c0[sym]) / points ) 
             OC = int( (c0 -c1)/points ) 
-            HL = int(df.Phigh.max() - df.Plow.min()) # int(df.iloc[lendf-2].Pclose)
+            HL = int((df.high.max() - df.low.min())/points) # int(df.iloc[lendf-2].Pclose)
             TD = int((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[0].time_msc)/1000) # int(df.iloc[lendf-1].Pclose)
             VOLS = df.volume.sum()
+            
             # print( OC )
             # print( HL )
             # print( TD )
