@@ -143,9 +143,7 @@ class Algotrader():
         else:
             self.gACCOUNT = account
           
-        # TODO this shall be read from self.cf_accounts[self.gACCOUNT]['path']  
-        # but at this point the path for cf_accounts is unknown
-        # hence hardcode it here - find a better way later
+        # TODO consolidate create CONFIG CLASS that reads path_mt5_bin and path_mt5_config
         dir_appdata =  os.getenv('APPDATA') 
         path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
         path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
@@ -334,7 +332,9 @@ class Algotrader():
         # TODO make me optional - with hours and minutes or not
         #self.dt_start_str = str(dt_start.strftime("%Y%m%d_%H%M%S"))  
         self.dt_start_str = str(dt_start.strftime("%Y%m%d"))  
-        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../MQL5/logs/" + self.dt_start_str + ".log"
+        # TODO consolidate create CONFIG CLASS that reads path_mt5_bin and path_mt5_config
+        path_mt5_log = dir_appdata +  "/MetaTrader5_" + self.gACCOUNT + "/MQL5/logs/"
+        log_filename = path_mt5_log + self.dt_start_str + ".log"
         #format_str = '%(asctime)s: %(message)s'
         format_str = '%(message)s'
         # https://stackoverflow.com/questions/15199816/python-logging-multiple-files-using-the-same-logger
@@ -347,7 +347,7 @@ class Algotrader():
         # at kalman logging
         dt_start     = datetime.now(timezone.utc) + self.tdOffset
         dtstr = str(dt_start.strftime("%Y%m%d_"))  
-        log_filename = self.cf_accounts[self.gACCOUNT]['path'] + "/../MQL5/logs/" + dtstr + self.gACCOUNT + "_kalman.log"
+        log_filename = path_mt5_log + dtstr + self.gACCOUNT + "_kalman.log"
         format_str = '%(message)s'
         #atlogkalman.basicConfig(filename=log_filename, level=atlogkalman.DEBUG, format=format_str)
         self.set_logger( name = 'atlogkalman', filename = log_filename, level = logging.INFO, format = format_str, use_stdout = False )
@@ -3784,28 +3784,18 @@ class Algotrader():
 
         ret = False   
 
-        path     = self.cf_accounts[self.gACCOUNT]['path']
         login    = self.cf_accounts[self.gACCOUNT]['login']
         password = self.cf_accounts[self.gACCOUNT]['password']
         server   = self.cf_accounts[self.gACCOUNT]['server']
         portable = bool(self.cf_accounts[self.gACCOUNT]['portable'])
 
-        # TODO this shall be read from self.cf_accounts[self.gACCOUNT]['path']  
-        # but at this point the path for cf_accounts is unknown
-        # hence hardcode it here - find a better way later
+        # TODO consolidate create CONFIG CLASS that reads path_mt5_bin and path_mt5_config
         dir_appdata =  os.getenv('APPDATA') 
         path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
         path_mt5_bin = path_mt5 + "\\terminal64.exe"
         path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
         path_mt5_config = path_mt5 + "\\config\\cf_accounts_" + path_mt5_user + ".json"
 
-        if not path.lower() ==  path_mt5_bin.lower():
-            raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
-                                       please set correct 'path' in config file [%s] to [%s: path=%s]", \
-                                       path_mt5_config,\
-                                       self.gACCOUNT,\
-                                       path_mt5_bin ) )
-            
         if (1000 > login) or  ( "your-password-here" == password ):
             raise ValueError( _sprintf("ERROR: algotrader.mt5_init.mt5.initialize - \
                                        please check and correct 'login/password' in config file [%s] in section [%s: login= , password= ]", \
@@ -3827,7 +3817,7 @@ class Algotrader():
         # connect to MetaTrader 5
         self.mt5.shutdown()
         ret = self.mt5.initialize( \
-                path     = path,\
+                path     = path_mt5_bin,\
                 login    = login,\
                 password = password,\
                 server   = server,\

@@ -123,17 +123,18 @@ def setup():
     name_user, name_host, conda_env = get_environment()
     
     print( 'Run: win-64bit in conda env: ', conda_env  )
-    print( 'dir_py_lib: ', dir_py_lib )
-    print( 'dir_cwd:    ', dir_cwd )
-    print( 'dir_script: ', dir_script )
-    print( 'name_user:  ', name_user )
-    print( 'name_host:  ', name_host )
+    print( 'dir_appdata: ', dir_appdata )
+    print( 'dir_py_lib:  ', dir_py_lib )
+    print( 'dir_cwd:     ', dir_cwd )
+    print( 'dir_script:  ', dir_script )
+    print( 'name_user:   ', name_user )
+    print( 'name_host:   ', name_host )
     
     
     supported_mt5_servers = []
     supported_mt5_servers.append( 'RoboForex-ECN' )
     for srv in supported_mt5_servers:
-        print( 'mt5-server: ', srv )
+        print( 'mt5-server:  ', srv )
         
         # copy template files - cf_periods, cf_symbols, cf_pid_params
         #  TODO later they will be part of cf_accounts
@@ -154,8 +155,7 @@ def setup():
         if not os.path.exists( cf_fn ): 
             with open( tp_fn, 'r') as f: cf_accounts = json.load(f)
             for account in cf_accounts:
-                cf_accounts[account]['path'] = dir_appdata +  "\\MetaTrader5_" + account + "\\terminal64.exe"
-                #print( account, cf_accounts[account] )
+                print( account, cf_accounts[account] )
             with open(cf_fn, 'w') as f: json.dump(cf_accounts, f, indent=4)
             print( tp_fn, cf_accounts )
         # if not os.path.exists( cf_fn ): 
@@ -193,49 +193,74 @@ def setup():
                 # https://www.geeksforgeeks.org/python-move-or-copy-files-and-directories/
                 shutil.rmtree(mt5_cac_fn)      
 
+        # unzipping mt5 exes
+        # https://stackoverflow.com/questions/3451111/unzipping-files-in-python
+        mt5_zipped_bins = ['terminal64', 'metaeditor64', 'metatester64']
+        for mt5_bin in mt5_zipped_bins:
+            mt5_bin_exe = dir_script + "\\MetaTrader5_TMPL\\" + mt5_bin + ".exe"
+            mt5_bin_zip = dir_script + "\\MetaTrader5_TMPL\\" + mt5_bin + ".zip"
+            mt5_zip_extract_dir = dir_script + "\\MetaTrader5_TMPL\\."
+            if os.path.exists( mt5_bin_exe ):
+                os.remove( mt5_bin_exe )
+            shutil.unpack_archive(mt5_bin_zip, mt5_zip_extract_dir)
+
+        # create Default profile in MetaTrader5_TMPL directory
+        #  copy 
+        #    MetaTrader5_TMPL/MQL5/Profiles/Charts/Latest ->
+        #    MetaTrader5_TMPL/MQL5/Profiles/Charts/Default
+        mt5_mql5_src_fn = dir_script + "\\MetaTrader5_TMPL\\MQL5\\Profiles\\Charts\\Latest"
+        mt5_mql5_dst_fn = dir_script + "\\MetaTrader5_TMPL\\MQL5\\Profiles\\Charts\\Default"
+        if os.path.exists( mt5_mql5_dst_fn ):
+            shutil.rmtree(mt5_mql5_dst_fn)      
+        shutil.copytree(mt5_mql5_src_fn, mt5_mql5_dst_fn, dirs_exist_ok=False)
+
         # create MetaTrader5 directories
         for account in cf_accounts:
-            # remove the 'terminal64.exe from mt5 target path
-            path = re.sub( "terminal64.exe", "", cf_accounts[account]['path'] )
+            # TODO consolidate create CONFIG CLASS that reads path_mt5_bin and path_mt5_config
+            path_mt5 = dir_appdata +  "\\MetaTrader5_" + account
+            path_mt5_bin = path_mt5 + "\\terminal64.exe"
+            #path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
+            #path_mt5_config = path_mt5 + "\\config\\cf_accounts_" + path_mt5_user + ".json"
+            path = path_mt5
             if os.path.exists( path ):
                 shutil.rmtree(path)      
-            mql5_path = path + "MQL5"
+            mql5_path = path + "\\MQL5"
             os.makedirs( mql5_path )
-            conf_path = path + "config"
+            conf_path = path + "\\config"
             os.makedirs( conf_path )
             
             mt5_org_bins = ['terminal64.exe', 'metaeditor64.exe', 'metatester64.exe', 'Terminal.ico', 'uninstall.exe']
             for mt5_bin in mt5_org_bins:
                 mt5_bin_src_fn = dir_script + "\\MetaTrader5_TMPL\\" + mt5_bin
-                mt5_bin_dst_fn = path       + mt5_bin
+                mt5_bin_dst_fn = path       + "\\" + mt5_bin
                 shutil.copy( mt5_bin_src_fn, mt5_bin_dst_fn )
 
             # link servers.dat - main reason for existence of config_RoboForex-ECN directory
             #   if servers.dat is same for all mt5 servers like 'RoboForex-ECN'
             #   then there shall be one config dir only -> TODO consolidate
             mt5_cnf_src_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\servers.dat"
-            mt5_cnf_dst_fn = path       + "config\\servers.dat"
+            mt5_cnf_dst_fn = path       + "\\config\\servers.dat"
             symlink( mt5_cnf_src_fn, mt5_cnf_dst_fn )
             
             mt5_org_confs = ['cf_accounts', 'cf_periods', 'cf_symbols', 'cf_pid_params' ]
             for mt5_cnf in mt5_org_confs:
                 mt5_cnf_src_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\" + mt5_cnf + "_" + name_user + "@" + name_host + ".json"
-                mt5_cnf_dst_fn = path       + "config\\"  + mt5_cnf + "_" + name_user + "@" + name_host + ".json"
+                mt5_cnf_dst_fn = path       + "\\config\\"  + mt5_cnf + "_" + name_user + "@" + name_host + ".json"
                 symlink( mt5_cnf_src_fn, mt5_cnf_dst_fn )
                 
             mt5_org_MQL5s = ['Experts', 'Images', 'Include', 'Indicators', 'Libraries', 'Presets', 'Profiles', 'Scripts']
             for mt5_mql5 in mt5_org_MQL5s:
                 mt5_mql5_src_fn = dir_script + "\\MetaTrader5_TMPL\\MQL5\\" + mt5_mql5
-                mt5_mql5_dst_fn = path       + "MQL5\\"  + mt5_mql5
+                mt5_mql5_dst_fn = path       + "\\MQL5\\"  + mt5_mql5
                 symlink( mt5_mql5_src_fn, mt5_mql5_dst_fn )
-
+                
             mt5_org_MQL5s = ['Files', 'Logs', 'Services', 'Shared Project']
             for mt5_mql5 in mt5_org_MQL5s:
-                mt5_mql5_dst_fn = path       + "MQL5\\"  + mt5_mql5
+                mt5_mql5_dst_fn = path       + "\\MQL5\\"  + mt5_mql5
                 os.makedirs( mt5_mql5_dst_fn )
 
             mt5_mql5_src_fn = dir_script + "\\MetaTrader5_TMPL\\MQL5\\experts.dat"
-            mt5_mql5_dst_fn = path       + "MQL5\\experts.dat"
+            mt5_mql5_dst_fn = path       + "\\MQL5\\experts.dat"
             shutil.copy( mt5_mql5_src_fn, mt5_mql5_dst_fn )
 
 
