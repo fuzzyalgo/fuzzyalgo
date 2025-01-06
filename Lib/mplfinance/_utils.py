@@ -570,6 +570,7 @@ def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_
     atr_length = wf_params['atr_length']
     
     lendata = len(closes)
+    #print( dates, opens,highs,lows,closes,volumes )
     
 
     if brick_size == 'atr':

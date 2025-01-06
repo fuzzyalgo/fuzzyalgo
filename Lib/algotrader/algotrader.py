@@ -881,18 +881,25 @@ class Algotrader():
         while True:
             # TICKS
             npa = self.mt5.copy_ticks_range(sym,dt_from ,dt_to , self.mt5.COPY_TICKS_ALL)
-            len_npa = len(npa)    # end of numpy array
-            if (0 < len_npa):
-                if( 30 < len_npa):
-                    break
+            print(sym,dt_from,dt_to,npa)
+            if None != npa:
+                len_npa = len(npa)    # end of numpy array
+                if (0 < len_npa):
+                    if( 30 < len_npa):
+                        break
+                    else:
+                        dt_from = dt_from - timedelta(seconds=(60)) 
                 else:
                     dt_from = dt_from - timedelta(seconds=(60)) 
             else:
                 dt_from = dt_from - timedelta(seconds=(60)) 
-                fail_cnt = fail_cnt + 1
-                if 60 < fail_cnt:
-                    strerror = _sprintf("copy_ticks_range error [sym:%s lennpa: %d dt_from:%s dt_to:%s]",sym,len_npa,dt_from ,dt_to)
-                    raise( ValueError( strerror))
+
+            fail_cnt = fail_cnt + 1
+            if 60 < fail_cnt:
+                strerror = _sprintf("copy_ticks_range error [sym:%s lennpa: %d dt_from:%s dt_to:%s]",sym,len_npa,dt_from ,dt_to)
+                raise( ValueError( strerror))
+
+        # while True:
     
         self.gNpa = npa
         
@@ -3509,8 +3516,8 @@ class Algotrader():
             # SYMBOLS
             for sym in self.cf_symbols[self.gACCOUNT]: 
     
-                lkeys=list(self.gDF.keys())
-                len_d = len( self.gDF )
+                lkeys=list(self.gDF['RATES'].keys())
+                len_d = len( self.gDF['RATES'] )
                 start = len_d - 28
                 if 0 > start:
                     start = 0
@@ -3519,6 +3526,7 @@ class Algotrader():
                 fig_sym = _mpf_figure_open(self.gShowFig,self.gTightLayout,32,20)
             
                 df = self.get_df_rates(lkeys[(len_d-1)], per, sym )
+                
                 lendf = len(df)-1
                 if 'TDs' in df.columns:
                     dt_from = df.iloc[lendf].DT + timedelta(seconds=(df.iloc[lendf].TDs))   
@@ -3534,10 +3542,10 @@ class Algotrader():
                 
                 while cnt < len_d:
                     # print ( lkeys[cnt] )
-                    # print ( self.gDF[lkeys[cnt]][per][sym].iloc[9].DT )
-                    # print ( self.gDF[lkeys[cnt]][per][sym].iloc[9].TDs )
-                    # print ( self.gDF[lkeys[cnt]][per][sym] )
-                    df = self.gDF[lkeys[cnt]][per][sym]
+                    # print ( self.gDF['RATES'][lkeys[cnt]][per][sym].iloc[9].DT )
+                    # print ( self.gDF['RATES'][lkeys[cnt]][per][sym].iloc[9].TDs )
+                    # print ( self.gDF['RATES'][lkeys[cnt]][per][sym] )
+                    df = self.gDF['RATES'][lkeys[cnt]][per][sym]
                     lendf = len(df)
                     myhline = -42
                     if cnt == start:
@@ -3561,7 +3569,7 @@ class Algotrader():
                     _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
                     key0 = 'PID4MAXMIN2'
                     key1 = 'PID4MAXMIN2_1'
-                    _mpf_plot(df,type='ohlc',hlines=[myhline],ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                    #_mpf_plot(df,type='ohlc',hlines=[myhline],ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
     
                     # # orig keep        
                     # key0 = 'PID1_MAX_MIN_ALL_2'
@@ -3572,7 +3580,9 @@ class Algotrader():
                     
                     cnt = cnt+1
                 
-                _mpf_figure_close(fig_sym, filename_sym)
+                _mpf_figure_save (fig_sym,filename_sym)
+                _mpf_figure_show ()
+                _mpf_figure_close(fig_sym)
     
     # END def print_past_entries_per_sym():
     # =============================================================================
@@ -3602,7 +3612,7 @@ class Algotrader():
                 # print(sym)
                     
                 print(sym + str(dt_to.strftime("_%Y%m%d_%H%M%S_PER_")) + per)
-                df = self.gDF[str(dt_to)][per][sym]
+                df = self.gDF['RATES'][str(dt_to)][per][sym]
                 lendf    = len(df)
                 if 0 >= lendf :
                     raise ValueError("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(len) )
@@ -3641,12 +3651,12 @@ class Algotrader():
                 #             
                 # =============================================================================
                 _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                key0 = 'PID4MAXMIN2'
-                key1 = 'PID4MAXMIN2_1'
-                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                #print( df )
                 
-                
-            _mpf_figure_close(fig_sym, filename_sym)
+            _mpf_figure_save (fig_sym,filename_sym)
+            _mpf_figure_show ()
+            _mpf_figure_close(fig_sym)
                 
     
     # END def print_fig_all_periods_and_all_syms(self):
@@ -3696,6 +3706,7 @@ class Algotrader():
                     #npa = self.mt5.copy_rates_from(sym, get_mt5_TIMEFRAME_from_String(per), (dt_cnt+gTdOffset), (15*4+10))
                     
                     df = pd.DataFrame(npa)
+                    print(df)
                     df = self.set_excel_func_to_df(df,self.cf_symbols[self.gACCOUNT][sym],sym,per)
                     self.gDF[key] = df
                     
