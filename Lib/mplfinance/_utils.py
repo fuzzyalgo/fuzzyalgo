@@ -62,26 +62,26 @@ def _check_input(opens, closes, highs, lows):
     if not same_missing:
         raise ValueError('O,H,L,C must have the same missing data!')
 
-def _construct_mpf_collections(ptype,dates,xdates,opens,highs,lows,closes,volumes,config,style):
+def _construct_mpf_collections(ptype,dates,xdates,xdatesc,opens,highs,lows,closes,volumes,config,style):
     collections = None
     if ptype == 'candle' or ptype == 'candlestick':
-        collections = _construct_candlestick_collections(xdates, opens, highs, lows, closes,
+        collections = _construct_candlestick_collections(xdates, xdatesc, opens, highs, lows, closes,
                                                          marketcolors=style['marketcolors'],config=config )
     elif ptype == 'ohlc' or ptype == 'bars' or ptype == 'ohlc_bars':
-        collections = _construct_ohlc_collections(xdates, opens, highs, lows, closes,
+        collections = _construct_ohlc_collections(xdates, xdatesc, opens, highs, lows, closes,
                                                   marketcolors=style['marketcolors'],config=config )
 
     elif ptype == 'wf':
         collections = _construct_wf_collections(
-            dates,opens,highs,lows,closes,volumes, config['wf_params'], marketcolors=style['marketcolors'])
+            xdates, xdatesc, opens,highs,lows,closes,volumes, config['wf_params'], marketcolors=style['marketcolors'])
 
     elif ptype == 'renko':
         collections = _construct_renko_collections(
-            dates, highs, lows, volumes, config['renko_params'], closes, marketcolors=style['marketcolors'])
+            xdates, xdatesc, highs, lows, volumes, config['renko_params'], closes, marketcolors=style['marketcolors'])
 
     elif ptype == 'pnf':
         collections = _construct_pointnfig_collections(
-            dates, highs, lows, volumes, config['pnf_params'], closes, marketcolors=style['marketcolors'])
+            xdates, xdatesc, highs, lows, volumes, config['pnf_params'], closes, marketcolors=style['marketcolors'])
     else:
         raise TypeError('Unknown ptype="',str(ptype),'"')
      
@@ -338,7 +338,7 @@ def _valid_lines_kwargs():
     return vkwargs
 
 
-def _construct_ohlc_collections(dates, opens, highs, lows, closes, marketcolors=None, config=None):
+def _construct_ohlc_collections(dates, datesc, opens, highs, lows, closes, marketcolors=None, config=None):
     """Represent the time, open, high, low, close as a vertical line
     ranging from low to high.  The left tick is the open and the right
     tick is the close.
@@ -372,21 +372,16 @@ def _construct_ohlc_collections(dates, opens, highs, lows, closes, marketcolors=
     else:
         mktcolors = marketcolors['ohlc']
 
-    rangeSegments = [((dt, low), (dt, high)) for dt, low, high in zip(dates, lows, highs)]
+    rangeSegments  = []
+    openSegments   = []
+    closeSegments  = []
+    for dt, dtc, open, high, low, close in zip(dates, datesc, opens, highs, lows, closes ):
 
-    datalen = len(dates)
+        dt2 = (dt+dtc)/2
+        rangeSegments.append( ((dt2, low),   (dt2, high )) )
+        openSegments.append ( ((dt,  open),  (dt2, open )) )
+        closeSegments.append( ((dt2, close), (dtc, close)) )
 
-    avg_dist_between_points = (dates[-1] - dates[0]) / float(datalen)
-
-    ticksize = config['_width_config']['ohlc_ticksize']
-
-    # the ticks will be from ticksize to 0 in points at the origin and
-    # we'll translate these to the date, open location
-    openSegments = [((dt-ticksize, op), (dt, op)) for dt, op in zip(dates, opens)]
-
-    # the ticks will be from 0 to ticksize in points at the origin and
-    # we'll translate these to the date, close location
-    closeSegments = [((dt, close), (dt+ticksize, close)) for dt, close in zip(dates, closes)]
 
     if mktcolors['up'] == mktcolors['down']:
         colors = mktcolors['up']
@@ -416,7 +411,7 @@ def _construct_ohlc_collections(dates, opens, highs, lows, closes, marketcolors=
     return [rangeCollection, openCollection, closeCollection]
 
 
-def _construct_candlestick_collections(dates, opens, highs, lows, closes, marketcolors=None, config=None):
+def _construct_candlestick_collections(dates, datesc, opens, highs, lows, closes, marketcolors=None, config=None):
     """Represent the open, close as a bar line and high low range as a
     vertical line.
 
@@ -450,25 +445,34 @@ def _construct_candlestick_collections(dates, opens, highs, lows, closes, market
         marketcolors = _get_mpfstyle('classic')['marketcolors']
         #print('default market colors:',marketcolors)
 
-    datalen = len(dates)
-
-    avg_dist_between_points = (dates[-1] - dates[0]) / float(datalen)
-
-    delta = config['_width_config']['candle_width'] / 2.0
-
-    barVerts = [((date - delta, open),
-                 (date - delta, close),
-                 (date + delta, close),
-                 (date + delta, open))
-                for date, open, close in zip(dates, opens, closes)]
+    # datalen = len(dates)
+    # avg_dist_between_points = (dates[-1] - dates[0]) / float(datalen)
+    # delta = config['_width_config']['candle_width'] / 2.0
+    # barVerts = [((date - delta, open),
+    #              (date - delta, close),
+    #              (date + delta, close),
+    #              (date + delta, open))
+    
+    barVerts = [((datec , open),
+                 (datec , close),
+                 (date, close),
+                 (date, open))
+                for date, datec, open, close in zip(dates, datesc, opens, closes)]
 
     rangeSegLow   = [((date, low), (date, min(open,close)))
-                     for date, low, open, close in zip(dates, lows, opens, closes)]
+                     for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes)]
     
     rangeSegHigh  = [((date, high), (date, max(open,close)))
-                     for date, high, open, close in zip(dates, highs, opens, closes)]
+                     for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes)]
+
+    rangeSegLowC   = [((datec, low), (datec, min(open,close)))
+                     for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes)]
+    
+    rangeSegHighC  = [((datec, high), (datec, max(open,close)))
+                     for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes)]
+
                       
-    rangeSegments = rangeSegLow + rangeSegHigh
+    rangeSegments = rangeSegLow + rangeSegHigh + rangeSegLowC + rangeSegHighC
 
     alpha  = marketcolors['alpha']
 
@@ -507,7 +511,7 @@ def sprintf( fmt, *args):
 
 
 
-def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_params, marketcolors=None):
+def _construct_wf_collections(dates, datesc, opens,highs,lows,closes,volumes, config_wf_params, marketcolors=None):
     """Represent the price change with bricks
 
     NOTE: this code assumes if any value open, low, high, close is
@@ -590,6 +594,8 @@ def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_
 
     nc     = mcolors.to_rgba('w', alpha)
     enc    = mcolors.to_rgba('w', 1.0)
+    #nc     = mcolors.to_rgba('y', alpha)
+    #enc    = mcolors.to_rgba('y', 1.0)
 
     uc     = mcolors.to_rgba(marketcolors['candle'][ 'up' ], alpha)
     dc     = mcolors.to_rgba(marketcolors['candle']['down'], alpha)
@@ -638,6 +644,7 @@ def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_
     colors = [] # holds the facecolors for each brick
     edge_colors = [] # holds the edgecolors for each brick
     brick_values = [] # holds the brick values for each brick
+    # print( brick_size, cdiff )
     for index, number in enumerate(cdiff):
         
         if number == 0: # zero brick
@@ -654,15 +661,18 @@ def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_
         brick_values.append(curr_price)
         
         #x, y = index, curr_price
-        x = index
-        #print( index, number )
+        # print( index, number, dates[index], datesc[number] )
         y1 = closes[index]
         y2 = opens [index]
+        # x1 = index
+        # x2 = x1 + 1
+        x1 = dates[index]
+        x2 = datesc[index]
         verts.append((
-            (x,   y1),
-            (x,   y2),
-            (x+1, y2),
-            (x+1, y1)))
+            (x1, y1),
+            (x1, y2),
+            (x2, y2),
+            (x2, y1)))
 
         # x, y = index, curr_price
         # verts.append((
@@ -694,7 +704,7 @@ def _construct_wf_collections(dates, opens,highs,lows,closes,volumes, config_wf_
 
 
 
-def _construct_renko_collections(dates, highs, lows, volumes, config_renko_params, closes, marketcolors=None):
+def _construct_renko_collections(dates, datesc, highs, lows, volumes, config_renko_params, closes, marketcolors=None):
     """Represent the price change with bricks
 
     NOTE: this code assumes if any value open, low, high, close is
@@ -772,6 +782,11 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
 
     alpha  = marketcolors['alpha']
 
+    nc     = mcolors.to_rgba('w', alpha)
+    enc    = mcolors.to_rgba('w', 1.0)
+    #nc     = mcolors.to_rgba('y', alpha)
+    #enc    = mcolors.to_rgba('y', 1.0)
+
     uc     = mcolors.to_rgba(marketcolors['candle'][ 'up' ], alpha)
     dc     = mcolors.to_rgba(marketcolors['candle']['down'], alpha)
     euc    = mcolors.to_rgba(marketcolors['edge'][ 'up' ], 1.0)
@@ -783,19 +798,23 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
     new_dates = [] # holds the dates corresponding with the index
     new_volumes = [] # holds the volumes corresponding with the index.  If more than one index for the same day then they all have the same volume.
 
-    for i in range(len(closes)-1):
-        brick_diff = int((closes[i+1] - prev_close_brick) / brick_size)
+    for i in range(len(closes)):
+        brick_diff = int((closes[i] - prev_close_brick) / brick_size)
         if brick_diff == 0:
             if volumes is not None:
                 volume_cache += volumes[i]
-            continue
-
-        cdiff.extend([int(brick_diff/abs(brick_diff))] * abs(brick_diff))
+            cdiff.extend( [int(brick_diff)] )
+        else:
+            cdiff.extend( [int(brick_diff/abs(brick_diff))] )
         if volumes is not None:
-            new_volumes.extend([volumes[i] + volume_cache] * abs(brick_diff))
+            new_volumes.extend([volumes[i] + volume_cache] )
             volume_cache = 0
-        new_dates.extend([dates[i]] * abs(brick_diff))
+        new_dates.extend([dates[i]] )
         prev_close_brick += brick_diff *brick_size
+
+
+    if len(closes) != len(cdiff):
+        raise ValueError( sprintf("ERROR: lendata[%d] != lencdiff[%d]: ", len(closes), len(cdiff)) )
 
     bricks = [] # holds bricks, -1 for down bricks, 1 for up bricks
     curr_price = closes[0]
@@ -804,7 +823,10 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
     dates_volumes_index = 0 # keeps track of the index of the current date/volume
     for diff in cdiff:
         
-        curr_diff_sign = diff/abs(diff)
+        curr_diff_sign = 0
+        if 0 != diff:
+            curr_diff_sign = diff/abs(diff)
+            
         if last_diff_sign != 0 and curr_diff_sign != last_diff_sign:
             last_diff_sign = curr_diff_sign
             new_dates.pop(dates_volumes_index)
@@ -814,13 +836,16 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
                 else:
                     new_volumes[dates_volumes_index+1] += new_volumes[dates_volumes_index]
                 new_volumes.pop(dates_volumes_index)
-            continue
-        last_diff_sign = curr_diff_sign
+            #continue
+            
+        #last_diff_sign = curr_diff_sign
     
-        if diff > 0:
-            bricks.extend([1]*abs(diff))
+        if 0 == diff:
+            bricks.extend([0])
+        elif diff > 0:
+            bricks.extend([1])
         else:
-            bricks.extend([-1]*abs(diff))
+            bricks.extend([-1])
         dates_volumes_index += 1
 
 
@@ -829,23 +854,42 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
     edge_colors = [] # holds the edgecolors for each brick
     brick_values = [] # holds the brick values for each brick
     for index, number in enumerate(bricks):
-        if number == 1: # up brick
+        
+        if number == 0: # zero brick
+            colors.append(nc)
+            edge_colors.append(enc)
+        elif number > 0: # up brick
             colors.append(uc)
             edge_colors.append(euc)
-        else: # down brick
+        elif number < 0: # down brick
             colors.append(dc)
             edge_colors.append(edc)
 
         curr_price += (brick_size * number)
         brick_values.append(curr_price)
         
-        x, y = index, curr_price
+        # x, y = index, curr_price
+        # verts.append((
+        #     (x, y),
+        #     (x, y+brick_size),
+        #     (x+1, y+brick_size),
+        #     (x+1, y)))
 
+
+        #x, y = index, curr_price
+        # print( index, number, brick_size, dates[index], datesc[number] )
+        y1 = curr_price
+        y2 = curr_price+brick_size
+        # x1 = index
+        # x2 = x1 + 1
+        x1 = dates[index]
+        x2 = datesc[index]
         verts.append((
-            (x, y),
-            (x, y+brick_size),
-            (x+1, y+brick_size),
-            (x+1, y)))
+            (x1, y1),
+            (x1, y2),
+            (x2, y2),
+            (x2, y1)))
+
 
     useAA = 0,    # use tuple here
     lw = None
@@ -858,7 +902,7 @@ def _construct_renko_collections(dates, highs, lows, volumes, config_renko_param
     return [rectCollection,], new_dates, new_volumes, brick_values, brick_size
 
 
-def _construct_pointnfig_collections(dates, highs, lows, volumes, config_pointnfig_params, closes, marketcolors=None):
+def _construct_pointnfig_collections(dates, datesc, highs, lows, volumes, config_pointnfig_params, closes, marketcolors=None):
     """Represent the price change with Xs and Os
 
     NOTE: this code assumes if any value open, low, high, close is
@@ -950,12 +994,14 @@ def _construct_pointnfig_collections(dates, highs, lows, volumes, config_pointnf
     tfc    = mcolors.to_rgba(marketcolors['edge']['down'], 0) # transparent face color
 
     boxes = [] # each element in an integer representing the number of boxes to be drawn on that indexes column (negative numbers -> Os, positive numbers -> Xs)
+    boxes1 = [] # each element in an integer representing the number of boxes to be drawn on that indexes column (negative numbers -> Os, positive numbers -> Xs)
     prev_close_box = closes[0] # represents the value of the last box in the previous column
     volume_cache = 0 # holds the volumes for the dates that were skipped
     temp_volumes, temp_dates = [], [] # holds the temp adjusted volumes and dates respectively
     
-    for i in range(len(closes)-1):
-        box_diff = int((closes[i+1] - prev_close_box) / box_size)
+    for i in range(len(closes)):
+        box_diff = int((closes[i] - prev_close_box) / box_size)
+        boxes1.append(box_diff)
         if box_diff == 0:
             if volumes is not None:
                 volume_cache += volumes[i]
@@ -968,8 +1014,13 @@ def _construct_pointnfig_collections(dates, highs, lows, volumes, config_pointnf
         temp_dates.append(dates[i])
         prev_close_box += box_diff *box_size
 
+    #print(len(boxes1),boxes1)
     # combine adjacent similarly signed differences
+    #lenbox = len(boxes)
+    #print(lenbox, boxes)
     boxes, indexes = combine_adjacent(boxes)
+    #lenbox1 = len(boxes)
+    #print(lenbox1,boxes, indexes)
     new_volumes, new_dates = coalesce_volume_dates(temp_volumes, temp_dates, indexes)
     
     #subtract 1 from the abs of each diff except the first to account for the first box using the last box in the opposite direction
@@ -986,6 +1037,7 @@ def _construct_pointnfig_collections(dates, highs, lows, volumes, config_pointnf
             temp_volumes.append(new_volumes[i] + volume_cache)
             volume_cache = 0
             temp_dates.append(new_dates[i])
+
     
     #remove 0s from boxes
     boxes = list(filter(lambda diff: diff != 0, boxes))
@@ -998,31 +1050,66 @@ def _construct_pointnfig_collections(dates, highs, lows, volumes, config_pointnf
     box_values = [] # y values for the boxes
     circle_patches = [] # list of circle patches to be used to create the cirCollection
     line_seg = [] # line segments that make up the Xs
-    
-    for index, difference in enumerate(boxes):
-        diff = abs(difference)
 
-        sign = (difference / abs(difference)) # -1 or 1
-        start_iteration = 0 if sign > 0 else 1
+
+    # for index, difference in enumerate(boxes):
+    #     diff = abs(difference)
+
+    #     sign = (difference / abs(difference)) # -1 or 1
+    #     start_iteration = 0 if sign > 0 else 1
         
-        x = [index] * (diff)
-        y = [curr_price + (i * box_size * sign) for i in range(start_iteration, diff+start_iteration)]
+    #     x = [index] * (diff)
+    #     y = [curr_price + (i * box_size * sign) for i in range(start_iteration, diff+start_iteration)]
         
-        curr_price += (box_size * sign * (diff))
-        box_values.append(sum(y) / len(y))
+    #     curr_price += (box_size * sign * (diff))
+    #     box_values.append(sum(y) / len(y))
         
-        for i in range(len(x)): # x and y have the same length
-            height = box_size * 0.85
-            width = 0.6
-            if height < 0.5:
-                width = height
+    #     for i in range(len(x)): # x and y have the same length
+    #         height = box_size * 0.85
+    #         width = 0.6
+    #         if height < 0.5:
+    #             width = height
             
-            padding = (box_size * 0.075)
-            if sign == 1: # X
-                line_seg.append([(x[i]-width/2, y[i] + padding), (x[i]+width/2, y[i]+height + padding)]) # create / part of the X
-                line_seg.append([(x[i]-width/2, y[i]+height+padding), (x[i]+width/2, y[i]+padding)]) # create \ part of the X
-            else: # O
-                circle_patches.append(Ellipse((x[i], y[i]-(height/2) - padding), width, height))
+    #         padding = (box_size * 0.075)
+    #         if sign == 1: # X
+    #             line_seg.append([(x[i]-width/2, y[i] + padding), (x[i]+width/2, y[i]+height + padding)]) # create / part of the X
+    #             line_seg.append([(x[i]-width/2, y[i]+height+padding), (x[i]+width/2, y[i]+padding)]) # create \ part of the X
+    #         else: # O
+    #             circle_patches.append(Ellipse((x[i], y[i]-(height/2) - padding), width, height))
+    
+    
+    if len(closes) != len(boxes1):
+        raise ValueError( sprintf("ERROR: lendata[%d] != lenboxes1[%d]: ", len(closes), len(boxes1)) )
+    
+    for index, difference in enumerate(boxes1):
+        
+        if 0 != difference:
+            diff = abs(difference)
+    
+            sign = (difference / abs(difference)) # -1 or 1
+            start_iteration = 0 if sign > 0 else 1
+            
+            x = [(datesc[index]+datesc[index])/2] * (diff)
+            #x = (dates[index] + datesc[index])/2
+            y = [curr_price + (i * box_size * sign) for i in range(start_iteration, diff+start_iteration)]
+            #print( x, y )
+            
+            curr_price += (box_size * sign * (diff))
+            box_values.append(sum(y) / len(y))
+            
+            for i in range(len(x)): # x and y have the same length
+                height = box_size * 0.85
+                width = 0.6
+                if height < 0.5:
+                    width = height
+                
+                width = (datesc[index]-dates[index])/2
+                padding = (box_size * 0.075)
+                if sign == 1: # X
+                    line_seg.append([(x[i]-width/2, y[i] + padding), (x[i]+width/2, y[i]+height + padding)]) # create / part of the X
+                    line_seg.append([(x[i]-width/2, y[i]+height+padding), (x[i]+width/2, y[i]+padding)]) # create \ part of the X
+                else: # O
+                    circle_patches.append(Ellipse((x[i], y[i]-(height/2) - padding), width, height))
     
     useAA = 0,    # use tuple here
     lw = 0.5        
@@ -1357,7 +1444,13 @@ class IntegerIndexDateTimeFormatter(Formatter):
             dateformat = ''
         else:
             date = self.dates[ix]
-            dateformat = mdates.num2date(date).strftime(self.fmt)
+            # for millisecond format '%H:%M:%S.%f' remove the last 3 digits 
+            # as strftime %f handles only microseconds
+            #  https://stackoverflow.com/questions/7588511/format-a-datetime-into-a-string-with-milliseconds
+            if '.%f' in self.fmt:
+                dateformat = mdates.num2date(date).strftime(self.fmt)[:-3]
+            else:
+                dateformat = mdates.num2date(date).strftime(self.fmt)
         #print('x=',x,'pos=',pos,'dates[',ix,']=',date,'dateformat=',dateformat)
         return dateformat
 

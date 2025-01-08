@@ -83,10 +83,6 @@ def _determine_width_config( xdates, config ):
     datalen = len(xdates)
     avg_dist_between_points = (xdates[-1] - xdates[0]) / float(datalen)
 
-    tweak  = 1.06 if datalen > 100 else 1.03
-
-    adjust = tweak*avg_dist_between_points if config['show_nontrading'] else 1.0
-
     width_config = {}
 
     if config['width_adjuster_version'] == 'v0':  # Behave like original version of code:
@@ -101,11 +97,11 @@ def _determine_width_config( xdates, config ):
 
     else: # config['width_adjuster_version'] == 'v1'
 
-        width_config['volume_width'    ] = _dfinterpolate(_widths,datalen,'vw' ) * adjust
+        width_config['volume_width'    ] = _dfinterpolate(_widths,datalen,'vw' )
         width_config['volume_linewidth'] = _dfinterpolate(_widths,datalen,'vlw')
-        width_config['ohlc_ticksize'   ] = _dfinterpolate(_widths,datalen,'ow' ) * adjust
+        width_config['ohlc_ticksize'   ] = _dfinterpolate(_widths,datalen,'ow' )
         width_config['ohlc_linewidth'  ] = _dfinterpolate(_widths,datalen,'olw')
-        width_config['candle_width'    ] = _dfinterpolate(_widths,datalen,'cw' ) * adjust
+        width_config['candle_width'    ] = _dfinterpolate(_widths,datalen,'cw' )
         width_config['candle_linewidth'] = _dfinterpolate(_widths,datalen,'clw')
         width_config['line_width'      ] = _dfinterpolate(_widths,datalen,'lw')
 

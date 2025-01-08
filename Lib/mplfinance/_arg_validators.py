@@ -25,8 +25,8 @@ def _check_and_prepare_data(data, config):
     if not isinstance(data, pd.core.frame.DataFrame):
         raise TypeError('Expect data as DataFrame')
 
-    if not isinstance(data.index,pd.core.indexes.datetimes.DatetimeIndex):
-        raise TypeError('Expect data.index as DatetimeIndex')
+    #if not isinstance(data.index,pd.core.indexes.datetimes.DatetimeIndex):
+    #    raise TypeError('Expect data.index as DatetimeIndex')
 
     # We will not be fully case-insensitive (since Pandas columns as NOT case-insensitive)
     # but because so many people have requested it, for the default column names we will
@@ -39,9 +39,20 @@ def _check_and_prepare_data(data, config):
         
     o, h, l, c, v = columns
     cols = [o, h, l, c]
-
+    
+    dates  = None
+    dto = pd.DataFrame({'DT':data['DT'] } )
+    dto = dto.set_index('DT')
+    datesc = None
+    dtc = pd.DataFrame({'DTC':data['DTC'] } )
+    dtc = dtc.set_index('DTC')
+    # datesc -> datetime closing value -> data['DTC']
+    # dates  -> datetime opening value -> data.index -> data['DT']
     if config['tz_localize']:
-        dates   = mdates.date2num(data.index.tz_localize(None).to_pydatetime())
+        
+        dates   = mdates.date2num(dto.index.tz_localize(None).to_pydatetime())
+        datesc  = mdates.date2num(dtc.index.tz_localize(None).to_pydatetime())
+
     else:  # Just in case someone was depending on this bug (Issue 236)
         # https://matplotlib.org/3.3.3/api/dates_api.html
         # print ( data.index )
@@ -52,13 +63,14 @@ def _check_and_prepare_data(data, config):
         # [datetime.datetime(2020, 12, 18, 20, 56, 45)
         #  datetime.datetime(2020, 12, 18, 20, 59, 17)
         #  datetime.datetime(2020, 12, 18, 21, 1, 12)]
-        dates   = mdates.date2num(data.index.to_pydatetime())
+        dates   = mdates.date2num(dto.index.to_pydatetime())
+        datesc  = mdates.date2num(dtc.index.to_pydatetime())
         # print ( dates )
         # [18614.87274306 18614.87450231 18614.87583333]
         # import matplotlib.dates  as mdates
         # mdates.num2date(18614.87274306)
         # Out[214]: datetime.datetime(2020, 12, 18, 20, 56, 45, 384, tzinfo=datetime.timezone.utc)
-       
+
     opens   = data[o].values
     highs   = data[h].values
     lows    = data[l].values
@@ -73,7 +85,8 @@ def _check_and_prepare_data(data, config):
         if not all( isinstance(v,(float,int)) for v in data[col] ):
             raise ValueError('Data for column "'+str(col)+'" must be ALL float or int.')
 
-    return dates, opens, highs, lows, closes, volumes
+
+    return dates, opens, highs, lows, closes, volumes, datesc
 
 
 def _mav_validator(mav_value):

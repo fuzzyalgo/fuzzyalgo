@@ -33,9 +33,9 @@ gDtTo   = None
 if None == gDtTo:
     gDtTo = datetime.now(timezone.utc) + gH.tdOffset
 
-# gDtTo   = datetime(2025, 1, 3, 17, 2, 50, 0, tzinfo=timezone.utc)
+gDtTo   = datetime(2025, 1, 7, 17, 0, 2, 0, tzinfo=timezone.utc)
+gH.g_c0[gSym] = 1.03905
 
-gH.g_c0[gSym] = 1.03900
 
 
 # 
@@ -52,6 +52,7 @@ if None == gSym:
 start = time.time()
 
 gH.get_date_range(gDtTo)
+print( gH.gDt)
 gH.get_ticks_and_rates(gSym)
 ret = gH.analyse_df(gSym)
 gH.print_analyse_df( ret )
@@ -60,10 +61,10 @@ gH.print_analyse_df( ret )
 endticks = time.time()
 
 
-gH.print_fig_all_periods_per_sym()
+#gH.print_fig_all_periods_per_sym()
 gH.print_fig_all_periods_and_all_syms()
-gH.print_past_entries_per_sym()
-#gH.print_fig_all_periods_and_one_sym_and_all_times()
+# gH.print_past_entries_per_sym()
+# #gH.print_fig_all_periods_and_one_sym_and_all_times()
 
     
 #write_pickle_raw( 'file.pickle', gH.gDF )

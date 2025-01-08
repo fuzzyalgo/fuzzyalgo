@@ -122,6 +122,9 @@ def _calc_subplot_rows_x_cols( num_of_plots ):
         if 4 == num_of_plots:
             ncols  = 2
             nrows  = 2
+    elif 6 == num_of_plots:
+        ncols  = 3
+        nrows  = 2
     else:
         ncols  = 4
         nrows  = int(num_of_plots / 4)

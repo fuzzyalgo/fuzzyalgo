@@ -204,7 +204,10 @@ class Algotrader():
         self.gSaveFig = False
         self.gVerbose = 0
         self.gTightLayout = True
-        self.gShowNonTrading = False
+        self.gShowNonTrading = True
+        self.gDateFormatMS = '%H:%M:%S.%f'
+        self.gDateFormatS  = '%H:%M:%S'
+        self.gDateFormat   = self.gDateFormatS
         
         self.offset = 25
         
@@ -1190,6 +1193,7 @@ class Algotrader():
         # self.gDF[key] = df
         
         self.set_df( 'TICKS', sym, df )
+        return df
     
         # =============================================================================
         #     print (df.dtypes)
@@ -1298,9 +1302,57 @@ class Algotrader():
         if 0 < secs :
             start = dt_from
             end   = dt_from - timedelta(seconds=(count * secs ))
-            strstart = start.strftime("%Y-%m-%d %H:%M:%S")
-            strend   = end.  strftime("%Y-%m-%d %H:%M:%S")
-            df = df.loc[strend:strstart]
+            strstart = start.strftime("%Y-%m-%d %H:%M:%S.000")
+            strend   = end.  strftime("%Y-%m-%d %H:%M:%S.000")
+            #df = df.loc[strend:strstart]
+            # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.loc.html
+            df.loc[(df.DTMS >= strend) & (df.DTMS <= strstart)]
+            
+            '''
+            df
+            Out[60]: 
+                                     index                    DTMS  ...    tdmsc     price
+            DTMS                                                    ...                   
+            2025-01-07 15:26:11.206  58492 2025-01-07 15:26:11.206  ...    223.0  1.040155
+            2025-01-07 15:26:10.983  58491 2025-01-07 15:26:10.983  ...    288.0  1.040160
+            2025-01-07 15:26:10.695  58490 2025-01-07 15:26:10.695  ...    385.0  1.040155
+            2025-01-07 15:26:10.310  58489 2025-01-07 15:26:10.310  ...    384.0  1.040160
+            2025-01-07 15:26:09.926  58488 2025-01-07 15:26:09.926  ...    383.0  1.040165
+                                   ...                     ...  ...      ...       ...
+            2025-01-07 00:05:41.060      4 2025-01-07 00:05:41.060  ...    225.0  1.038680
+            2025-01-07 00:05:40.835      3 2025-01-07 00:05:40.835  ...    255.0  1.038645
+            2025-01-07 00:05:40.580      2 2025-01-07 00:05:40.580  ...    512.0  1.038650
+            2025-01-07 00:05:40.068      1 2025-01-07 00:05:40.068  ...  31649.0  1.038775
+            2025-01-07 00:05:08.419      0 2025-01-07 00:05:08.419  ...      0.0  1.038875
+            
+            [58493 rows x 13 columns]
+            
+            df.loc[(df.DTMS >= strend) & (df.DTMS <= strstart)]
+            Out[61]: 
+                                     index                    DTMS  ...   tdmsc     price
+            DTMS                                                    ...                  
+            2025-01-07 15:26:11.206  58492 2025-01-07 15:26:11.206  ...   223.0  1.040155
+            2025-01-07 15:26:10.983  58491 2025-01-07 15:26:10.983  ...   288.0  1.040160
+            2025-01-07 15:26:10.695  58490 2025-01-07 15:26:10.695  ...   385.0  1.040155
+            2025-01-07 15:26:10.310  58489 2025-01-07 15:26:10.310  ...   384.0  1.040160
+            2025-01-07 15:26:09.926  58488 2025-01-07 15:26:09.926  ...   383.0  1.040165
+                                   ...                     ...  ...     ...       ...
+            2025-01-07 15:25:16.966  58364 2025-01-07 15:25:16.966  ...   736.0  1.040260
+            2025-01-07 15:25:16.230  58363 2025-01-07 15:25:16.230  ...   159.0  1.040255
+            2025-01-07 15:25:16.071  58362 2025-01-07 15:25:16.071  ...   992.0  1.040250
+            2025-01-07 15:25:15.079  58361 2025-01-07 15:25:15.079  ...  2945.0  1.040250
+            2025-01-07 15:25:12.134  58360 2025-01-07 15:25:12.134  ...   192.0  1.040255
+            
+            [133 rows x 13 columns]
+            
+            strstart
+            Out[62]: '2025-01-07 15:26:12.000'
+            
+            
+            strend
+            Out[64]: '2025-01-07 15:25:12.000'
+            
+            '''            
             
             # TODO TICKS kaputt  -  limit the size of df here for smaller periods
             ## do NOT set lendf here !!! as the .index of the partial df.loc[strstart:strend]
@@ -1312,6 +1364,8 @@ class Algotrader():
             
             if self.gVerbose: print( _sprintf("%s [%s : %s] %d %d ",per, strstart, strend, count, len(df)) )
     
+        # if 0 < secs :
+
         # TODO TICKS kaputt
         fuzzy_cnt = 0
 
@@ -1777,11 +1831,60 @@ class Algotrader():
                 # meaning removes row 0..34
                 df = df[self.gScalpOffset:]
             
+           
+            # mod index
             # convert to itself (column) from epoch to datetime string 
-            # df['time']=pd.to_datetime(df['time'], unit='s')
-            df.insert(0,"DT",pd.to_datetime(df['time'], unit='s'))
-            df.reset_index(level=0, inplace=True)
-            df.set_index(['DT'],drop=False,inplace=True)
+            df.insert(0,"DT",pd.to_datetime(df['time_msc'], unit='ms'))
+            df.reset_index(level=0, inplace=False)
+            df.set_index(['DT'],drop=False,inplace=False)
+
+            # orig index
+            #df.insert(0,"DT",pd.to_datetime(df['time'], unit='s'))
+            #df.reset_index(level=0, inplace=True)
+            #df.set_index(['DT'],drop=False,inplace=True)
+            
+            #
+            # datetime closing time value df.DTC  (nb datetime opening value is df.DT)
+            #
+            # https://stackoverflow.com/questions/13703720/converting-between-datetime-timestamp-and-datetime64
+            # https://stackoverflow.com/questions/22800079/converting-time-zone-pandas-dataframe
+            dfdtc = pd.to_datetime(df['time_msc'].shift(-1), unit='ms')
+            dfdtc[dfdtc.index[-1]] = pd.to_datetime(dt_from).tz_convert(None)
+            df.insert(1,"DTC",dfdtc)
+            '''
+            df.DT
+            Out[224]: 
+            DT
+            2025-01-07 16:50:02.745   2025-01-07 16:50:02.745
+            2025-01-07 16:50:46.425   2025-01-07 16:50:46.425
+            2025-01-07 16:52:06.585   2025-01-07 16:52:06.585
+            2025-01-07 16:53:08.164   2025-01-07 16:53:08.164
+            2025-01-07 16:54:20.133   2025-01-07 16:54:20.133
+            2025-01-07 16:55:34.244   2025-01-07 16:55:34.244
+            2025-01-07 16:56:23.012   2025-01-07 16:56:23.012
+            2025-01-07 16:57:29.636   2025-01-07 16:57:29.636
+            2025-01-07 16:58:31.492   2025-01-07 16:58:31.492
+            2025-01-07 16:59:23.204   2025-01-07 16:59:23.204
+            Name: DT, dtype: datetime64[ns]
+            
+            df.DTC
+            Out[225]: 
+            DT
+            2025-01-07 16:50:02.745   2025-01-07 16:50:46.424999936
+            2025-01-07 16:50:46.425   2025-01-07 16:52:06.584999936
+            2025-01-07 16:52:06.585   2025-01-07 16:53:08.164000000
+            2025-01-07 16:53:08.164   2025-01-07 16:54:20.132999936
+            2025-01-07 16:54:20.133   2025-01-07 16:55:34.244000000
+            2025-01-07 16:55:34.244   2025-01-07 16:56:23.012000000
+            2025-01-07 16:56:23.012   2025-01-07 16:57:29.636000000
+            2025-01-07 16:57:29.636   2025-01-07 16:58:31.492000000
+            2025-01-07 16:58:31.492   2025-01-07 16:59:23.204000000
+            2025-01-07 16:59:23.204   2025-01-07 17:00:02.000000000
+            Name: DTC, dtype: datetime64[ns]
+            '''
+            
+            # example test for retrieving df on ipython console
+            # df = gH.gDF['RATES']['2025-01-07 17:00:02+00:00']['T100']['EURUSD']
             
             self.set_df_rates( dt_from, per, sym, df )
         
@@ -3613,6 +3716,7 @@ class Algotrader():
                     
                 print(sym + str(dt_to.strftime("_%Y%m%d_%H%M%S_PER_")) + per)
                 df = self.gDF['RATES'][str(dt_to)][per][sym]
+                df1 = self.gDF['RATES'][str(dt_to)]['T1'][sym]
                 lendf    = len(df)
                 if 0 >= lendf :
                     raise ValueError("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(len) )
@@ -3650,8 +3754,17 @@ class Algotrader():
                 #             
                 #             
                 # =============================================================================
-                _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                self.gShowNonTrading = True
+                #_mpf_plot(df,type='candle', ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='ohlc',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=3),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                
+                #_mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="starsandstripes",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='renko',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df,type='pnf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df1,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df1,type='line',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 #print( df )
                 
             _mpf_figure_save (fig_sym,filename_sym)
@@ -7209,7 +7322,7 @@ class Algotrader():
             if 1 < self.gVerbose: print( '... noop ...' )    
         
         # if 'RFX2' == self.gACCOUNT:
-            
+        #    
         #     if self.gShowFig or self.gSaveFig:
         #         self.print_fig_all_periods_per_sym()
         #         # self.print_fig_all_periods_and_all_syms()

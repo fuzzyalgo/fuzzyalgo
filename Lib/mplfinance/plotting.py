@@ -281,7 +281,7 @@ def plot( data, **kwargs ):
 
     config = _process_kwargs(kwargs, _valid_plot_kwargs())
     
-    dates,opens,highs,lows,closes,volumes = _check_and_prepare_data(data, config)
+    dates,opens,highs,lows,closes,volumes, datesc = _check_and_prepare_data(data, config)
 
     if config['type'] in VALID_PMOVE_TYPES and config['addplot'] is not None:
         err = "`addplot` is not supported for `type='" + config['type'] +"'`"
@@ -355,10 +355,15 @@ def plot( data, **kwargs ):
 
     if config['show_nontrading']:
         formatter = mdates.DateFormatter(fmtstring)
-        xdates = dates
+        xdates  = dates
+        xdatesc = datesc
     else:
         formatter = IntegerIndexDateTimeFormatter(dates, fmtstring)
-        xdates = np.arange(len(dates))
+        xdates  = np.arange(len(dates))
+        xdatesc = np.arange(len(datesc))
+
+        
+    #print( fmtstring, dates, xdates, xdatesc )
 
     if external_axes_mode:
         axA1 = config['ax']
@@ -378,14 +383,14 @@ def plot( data, **kwargs ):
     collections = None
     if ptype == 'line':
         lw = config['_width_config']['line_width']
-        axA1.plot(xdates, closes, color=config['linecolor'], linewidth=lw)
+        axA1.plot(xdatesc, closes, color=config['linecolor'], linewidth=lw)
     else:
-        collections =_construct_mpf_collections(ptype,dates,xdates,opens,highs,lows,closes,volumes,config,style)
+        collections =_construct_mpf_collections(ptype,dates,xdates,xdatesc,opens,highs,lows,closes,volumes,config,style)
 
     if ptype in VALID_PMOVE_TYPES:
         collections, new_dates, volumes, brick_values, size = collections
-        formatter = IntegerIndexDateTimeFormatter(new_dates, fmtstring)
-        xdates = np.arange(len(new_dates))
+        #formatter = IntegerIndexDateTimeFormatter(new_dates, fmtstring)
+        #xdates = np.arange(len(new_dates))
     # TODO fix this for RENKO charts with no output 
     if 1 > len(xdates): 
         print ( xdates )
@@ -416,7 +421,7 @@ def plot( data, **kwargs ):
         _highs = highs
     else:
         _lows  = brick_values
-        _highs = [brick+size for brick in brick_values]
+        _highs = [(brick+size) for brick in brick_values]
 
     miny = np.nanmin(_lows)
     maxy = np.nanmax(_highs)
