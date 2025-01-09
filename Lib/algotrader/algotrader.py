@@ -3483,8 +3483,9 @@ class Algotrader():
                 # TODO NORMalise
                 if None != self.g_c0[sym]:
 
-                    # Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-g_c0[sym]) / cf_symbols[gACCOUNT][sym]['points'])
-                    Pc0 = 0
+                    c0 = df.iloc[lendf-1].close
+                    Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+                    #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
                     Pc0B  = None # Pc0 + 20
                     Pc0B1 = None # Pc0 + 10
                     Pc0S  = None # Pc0 - 10
@@ -3533,9 +3534,15 @@ class Algotrader():
                         key1 = 'Pc0S1'
                         _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
                     
-                    #print( per, c0, g_c0[sym], Pc0)
+                    #print( per, self.g_c0[sym], Pc0)
 					
-                    _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
+                    #_mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    _mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    
+                    #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    _mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr2',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    
 					
 
                 if True == self.gUseScalp:
@@ -3754,14 +3761,16 @@ class Algotrader():
                 #             
                 #             
                 # =============================================================================
-                #_mpf_plot(df,type='candle', ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                #_mpf_plot(df,type='ohlc',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                _mpf_plot(df,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=3),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df,type='candle', ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df,type='ohlc',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 
-                #_mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="starsandstripes",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                #_mpf_plot(df,type='renko',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                _mpf_plot(df,type='pnf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                _mpf_plot(df1,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # _mpf_plot(df,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=3),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                
+                # #_mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="starsandstripes",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # #_mpf_plot(df,type='renko',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # _mpf_plot(df,type='pnf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # _mpf_plot(df1,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                
                 #_mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 #_mpf_plot(df1,type='line',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 #print( df )

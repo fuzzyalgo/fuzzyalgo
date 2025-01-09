@@ -61,8 +61,8 @@ gH.print_analyse_df( ret )
 endticks = time.time()
 
 
-#gH.print_fig_all_periods_per_sym()
-gH.print_fig_all_periods_and_all_syms()
+gH.print_fig_all_periods_per_sym()
+#gH.print_fig_all_periods_and_all_syms()
 # gH.print_past_entries_per_sym()
 # #gH.print_fig_all_periods_and_one_sym_and_all_times()
 
