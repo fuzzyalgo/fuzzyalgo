@@ -3754,7 +3754,6 @@ class Algotrader():
                 #             
                 #             
                 # =============================================================================
-                self.gShowNonTrading = True
                 #_mpf_plot(df,type='candle', ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 #_mpf_plot(df,type='ohlc',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 _mpf_plot(df,type='line',   ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=3),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)

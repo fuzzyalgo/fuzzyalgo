@@ -28,15 +28,15 @@ if not gH.mt5_init():
     raise( "E: mt5_init failed") 
 
 
-gDtTo   = datetime.now(timezone.utc) + gH.tdOffset
 gDtTo   = None
 if None == gDtTo:
     gDtTo = datetime.now(timezone.utc) + gH.tdOffset
 
-gDtTo   = datetime(2025, 1, 7, 17, 0, 2, 0, tzinfo=timezone.utc)
-gH.g_c0[gSym] = 1.03905
+## 2025-01-07_17:00:02
+# gDtTo   = datetime(2025, 1, 7, 17, 0, 2, 0, tzinfo=timezone.utc)
+# gH.g_c0[gSym] = 1.03905
 
-
+gH.set_gc0()
 
 # 
 # START gH.run_now()
