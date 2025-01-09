@@ -37,41 +37,41 @@ git clone git@github.com:fuzzyalgo/fuzzyalgo.git
 > cd \<your-source-path>\fuzzyalgo
 > conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
 > conda activate fuzzyalgo-py38
-> pip install scikit-fuzzy pynput MetaTrader5
-> pip install .\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install scikit-fuzzy networkx pynput MetaTrader5
+> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
 > python setup.py
 > conda deactivate
 ```
 
 ```bash
 (base) C:\Windows\system32>cd \<your-source-path>\fuzzyalgo
-(base) C:\<your-source-path>\fuzzyalgo>
-(base) C:\<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
-(fuzzyalgo-py38) C:\<your-source-path>\fuzzyalgo>
-(fuzzyalgo-py38) C:\<your-source-path>\fuzzyalgo> pip install scikit-fuzzy pynput MetaTrader5
-(fuzzyalgo-py38) C:\<your-source-path>\fuzzyalgo> pip install C:\<your-source-path>\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
-(fuzzyalgo-py38) C:\<your-source-path>\fuzzyalgo> python setup.py
+(base) \<your-source-path>\fuzzyalgo>
+(base) \<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo>
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install scikit-fuzzy pynput MetaTrader5
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> python setup.py
 	Run: win-64bit in conda env:  fuzzyalgo-py38
-	dir_py_lib:  C:\<your-anaconda3-path>\anaconda3\envs\fuzzyalgo-py38\Lib
-	dir_cwd:     C:\<your-source-path>\fuzzyalgo
-	dir_script:  C:\<your-source-path>\fuzzyalgo
+	dir_py_lib:  \<your-anaconda3-path>\anaconda3\envs\fuzzyalgo-py38\Lib
+	dir_cwd:     \<your-source-path>\fuzzyalgo
+	dir_script:  \<your-source-path>\fuzzyalgo
 	name_user:   <your-username>
 	name_host:   <your-hostname>
 	mt5-server:  RoboForex-ECN
-(fuzzyalgo-py38) C:\<your-source-path>\fuzzyalgo> conda deactivate
-(base) C:\<your-source-path>\fuzzyalgo>
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> conda deactivate
+(base) \<your-source-path>\fuzzyalgo>
 ```
 
 ### populate cf_accounts_\<your-username\>@\<your-hostname\>.json with MT5 login and password
 
 - template:
 ```bash
-C:\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts.tmpl
+\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts.tmpl
 ```
 
 - original:
 ```bash
-C:\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts_<your-username>@<your-hostname>.json
+\<your-source-path>\fuzzyalgo\MetaTrader5_TMPL\config_RoboForex-ECN\cf_accounts_<your-username>@<your-hostname>.json
 ```
 
 - links:
@@ -172,12 +172,12 @@ $ %APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 > conda env remove -n fuzzyalgo-py38
 # re-install the env
 > cd \<your-source-path>\fuzzyalgo
-> conda create -n fuzzyalgo-py38 spyder numpy scipy pandas matplotlib sympy cython nb_conda
+> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
 > conda activate fuzzyalgo-py38
 > python --version
 	Python 3.8.15
-> pip install scikit-fuzzy pynput MetaTrader5
-> pip install C:\<your-source-path>\fuzzyalgo\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install scikit-fuzzy networkx pynput MetaTrader5
+> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
 > python setup.py
 > conda deactivate
 ```
