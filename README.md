@@ -16,8 +16,13 @@
 ### clone git repo
 
 ```bash
+
+# test you access to github
+ssh -T git@github.com
 cd \<your-source-path>
-git clone https://github.com/fuzzyalgo/fuzzyalgo.git
+# clone the directory
+git clone git@github.com:fuzzyalgo/fuzzyalgo.git
+
 ```
 
 ### install anaconda3 for windows 64bit
