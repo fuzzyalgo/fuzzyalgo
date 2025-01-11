@@ -444,6 +444,14 @@ class Algotrader():
         self.gKalmanStdDevAcc  = 0.25
         self.gKalmanStdDevMeas = 1.2
         self.gKalmanChartIntervalInSeconds = 60
+
+        self.gKalmanDt         = 0.01
+        self.gKalmanU          = 2
+        self.gKalmanStdDevAcc  = 25
+        self.gKalmanStdDevMeas = 1.2
+        self.gKalmanChartIntervalInSeconds = 60
+       
+        
         
     # END def __init__(self, account= None, usePid = False, useScalp=False):
     # =============================================================================
@@ -7076,7 +7084,7 @@ class Algotrader():
         self.get_date_range(dt_from)
         # dt_from0 start of the day
         dt_from0 = self.gDt['dt_from']
-        self.gDt['dt_from'] = self.gDt['dt_to']  - timedelta(seconds=(self.gKalmanChartIntervalInSeconds))
+        self.gDt['dt_from'] = self.gDt['dt_to']  - timedelta(seconds=self.gKalmanChartIntervalInSeconds)
         dt_from = self.gDt['dt_from']
         dt_to = self.gDt['dt_to']
         
@@ -7129,7 +7137,23 @@ class Algotrader():
         #t = np.arange(0, len(gNPA), 1)
         gRealTrack = (gNpaPrice - gNPAoffset)/points
         #gRealTrack = gNpaPrice
+
+        # take algo system settings here        
+        # self.gKalmanDt         = 0.01
+        # self.gKalmanU          = 2
+        # self.gKalmanStdDevAcc  = 25
+        # self.gKalmanStdDevMeas = 1.2
+        # self.gKalmanChartIntervalInSeconds = 60
+        
         gPredictions = self.calc_kalman_predictions(gRealTrack)
+
+        self.gKalmanDt         = 0.1
+        self.gKalmanU          = 2
+        self.gKalmanStdDevAcc  = 2.5
+        self.gKalmanStdDevMeas = 1.2
+        self.gKalmanChartIntervalInSeconds = 60
+        
+        gPredictions1 = self.calc_kalman_predictions(gRealTrack)
         
 
         """
@@ -7147,6 +7171,8 @@ class Algotrader():
 
         tarr = np.squeeze(gPredictions)
         tarr = np.around( tarr )
+        tarr1 = np.squeeze(gPredictions1)
+        tarr1 = np.around( tarr1 )
         lent = 5
         x = np.arange(lent)
         y = tarr[-lent:]
@@ -7192,47 +7218,86 @@ class Algotrader():
             self.atlogkalman.info(tstr)
             
             
+        '''    
+        c0 = df.iloc[lendf-1].close
+        Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+        #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
+        Pc0B  = None # Pc0 + 20
+        Pc0B1 = None # Pc0 + 10
+        Pc0S  = None # Pc0 - 10
+        Pc0S1 = None # Pc0 - 20
+        
+        op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+        # print( dfbs )
+        
+        if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
+            Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
+            Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
+
+        if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
+            Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
+
+        if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
+            Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
+            Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
+
+        if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
+            Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
+
+
+            df['Pc0'] = Pc0
+            key1 = 'Pc0'
+            _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+        '''    
             
         ret = price, pcm, tstr
         """
          graphical proc-
         """
 
-        # fig = plt.figure()
-        # gTitleStr = _sprintf("%s( %s - %s %s - dt:%0.2f/%d/%0.2f/%0.2f )",\
-        #   gAccount, gPeriod, sym, gDtTo.strftime("%Y.%m.%d %H:%M:%S"), gKalmanDt, gKalmanU, gKalmanStdDevAcc, gKalmanStdDevMeas )
-        # fig.suptitle(gTitleStr, fontsize=gFontSize)
+        import matplotlib.pyplot as plt
+        import talib
 
-        # # if (33 + 10) < lencmp:
-        # #     upper, mid, lower = talib.BBANDS(np.squeeze(gRealTrack[sym]), 
-	       # #                       nbdevup=1, nbdevdn=1, timeperiod=33)
-        # #     for cnt in range(0,33,1):
-	       # #           mid[cnt] = 0
-        # #     plt.plot(upper, label="Upper band", linewidth=0.3)
-        # #     plt.plot(mid,   label='Middle band',linewidth=0.3)
-        # #     plt.plot(lower, label='Lower band', linewidth=0.3)
+        fig = plt.figure()
+        gFontSize         = 10        
+        gTitleStr = _sprintf("%s( %d - %s %s - dt:%0.2f/%d/%0.2f/%0.2f )",\
+          self.gACCOUNT, len(gNPA), sym, dt_from.strftime("%Y.%m.%d %H:%M:%S"), self.gKalmanDt, self.gKalmanU, self.gKalmanStdDevAcc, self.gKalmanStdDevMeas )
+        gLabelXstr        = "timeseries (n*dt)"
+        gLabelYstr        = "out (digits)"            
+        fig.suptitle(gTitleStr, fontsize=gFontSize)
+
+        # if (33 + 10) < lencmp:
+        #     upper, mid, lower = talib.BBANDS(np.squeeze(gRealTrack), 
+	       #                       nbdevup=1, nbdevdn=1, timeperiod=33)
+        #     for cnt in range(0,33,1):
+	       #           mid[cnt] = 0
+        #     plt.plot(upper, label="Upper band", linewidth=0.3)
+        #     plt.plot(mid,   label='Middle band',linewidth=0.3)
+        #     plt.plot(lower, label='Lower band', linewidth=0.3)
         
-        # t = np.arange(0, len(gRealTrack[sym]), 1)
-        # plt.plot(t, tarr, label='PredBid', color='r', linewidth=0.5)
-        # linreg60 = talib.LINEARREG(np.squeeze(gRealTrack[sym]), 60)
-        # linreg120 = talib.LINEARREG(np.squeeze(gRealTrack[sym]), 120)
-        # linreg30 = talib.LINEARREG(np.squeeze(gRealTrack[sym]), 30)
-        # plt.plot(linreg60, label="LINEARREG60", linewidth=0.3)
-        # plt.plot(linreg120, label="LINEARREG120", linewidth=0.3)
-        # plt.plot(linreg30, label="LINEARREG30", linewidth=0.3)
+        self.gNpa = gRealTrack
+        t = np.arange(0, len(gRealTrack), 1)
+        plt.plot(t, tarr,  label='Predict1', color='b', linewidth=0.5)
+        plt.plot(t, tarr1, label='Predict2', color='g', linewidth=0.5)
+        linreg60 = talib.LINEARREG(np.squeeze(gRealTrack), 60)
+        linreg120 = talib.LINEARREG(np.squeeze(gRealTrack), 120)
+        linreg30 = talib.LINEARREG(np.squeeze(gRealTrack), 30)
+        #plt.plot(linreg60, label="LINEARREG60", linewidth=0.3)
+        #plt.plot(linreg120, label="LINEARREG120", linewidth=0.3)
+        #plt.plot(linreg30, label="LINEARREG30", linewidth=0.3)
         
-        # #plt.plot(t, gRealTrack[sym], label='MeasBid', color='r',linewidth=0.1)
-        # # if False == gUseRates:
-        # #     plt.plot(t, gRealTrackAsk[sym], label='MeasAsk', color='b',linewidth=0.1)
-        # #     plt.plot(t, np.squeeze(gPredictionsAsk[sym]), label='PredAsk', color='b',linewidth=0.5)
-        # #     plt.plot(t, np.squeeze(gRealSpread[sym]), label='RealSpread', color='y',linewidth=0.1)
-        # #     plt.plot(t, np.squeeze(gPredSpread[sym]), label='PredSpread', color='y',linewidth=0.5)
+        plt.plot(t, gRealTrack, label='MeasBid', color='r',linewidth=1)
+        # if False == gUseRates:
+        #     plt.plot(t, gRealTrackAsk[sym], label='MeasAsk', color='b',linewidth=0.1)
+        #     plt.plot(t, np.squeeze(gPredictionsAsk[sym]), label='PredAsk', color='b',linewidth=0.5)
+        #     plt.plot(t, np.squeeze(gRealSpread[sym]), label='RealSpread', color='y',linewidth=0.1)
+        #     plt.plot(t, np.squeeze(gPredSpread[sym]), label='PredSpread', color='y',linewidth=0.5)
 
 
-        # plt.xlabel( gLabelXstr, fontsize=gFontSize)
-        # plt.ylabel( gLabelYstr, fontsize=gFontSize)
-        # plt.legend()
-        # plt.show()
+        plt.xlabel( gLabelXstr, fontsize=gFontSize)
+        plt.ylabel( gLabelYstr, fontsize=gFontSize)
+        plt.legend()
+        plt.show()
         
         
 

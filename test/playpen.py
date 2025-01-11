@@ -36,7 +36,12 @@ if None == gDtTo:
 # gDtTo   = datetime(2025, 1, 7, 17, 0, 2, 0, tzinfo=timezone.utc)
 # gH.g_c0[gSym] = 1.03905
 
-gH.set_gc0()
+# 2025-01-10_15:30:02
+gDtTo   = datetime(2025, 1, 10, 15, 30, 2, 0, tzinfo=timezone.utc)
+gH.g_c0[gSym] = 1.03043
+
+
+#gH.set_gc0()
 
 # 
 # START gH.run_now()
@@ -60,6 +65,7 @@ gH.print_analyse_df( ret )
 
 endticks = time.time()
 
+gH.run_analyse_kalman(gDtTo, gSym )
 
 gH.print_fig_all_periods_per_sym()
 #gH.print_fig_all_periods_and_all_syms()
