@@ -1378,7 +1378,12 @@ class Algotrader():
         fuzzy_cnt = 0
 
         # create numpy array
-        dtype = np.dtype([('time', '<i8'), ('time_msc', '<i8'), ('volume', '<u8'), ('open', '<f8'), ('high', '<f8'), ('low', '<f8'), ('close', '<f8'), ('openbid', '<f8'), ('highbid', '<f8'), ('lowbid', '<f8'), ('closebid', '<f8'), ('openspread', '<f8'), ('highspread', '<f8'), ('lowspread', '<f8'), ('closespread', '<f8'), ('opentdmsc', '<f8'), ('hightdmsc', '<f8'), ('lowtdmsc', '<f8'), ('closetdmsc', '<f8')])
+        dtype = np.dtype([('time', '<i8'), ('time_msc', '<i8'), ('volume', '<u8'),\
+                          ('open', '<f8'), ('high', '<f8'), ('low', '<f8'), ('close', '<f8'),\
+                          ('openbid', '<f8'), ('highbid', '<f8'), ('lowbid', '<f8'), ('closebid', '<f8'),\
+                          ('openspread', '<f8'), ('highspread', '<f8'), ('lowspread', '<f8'), ('closespread', '<f8'),\
+                          ('opentdmsc', '<f8'), ('hightdmsc', '<f8'), ('lowtdmsc', '<f8'), ('closetdmsc', '<f8'),\
+                          ('pdopen', '<f8'), ('pdhigh', '<f8'), ('pdlow', '<f8'), ('pdclose', '<f8') ])
         npa = np.zeros(count, dtype=dtype)
         # =============================================================================
         #     adjust dtypes    
@@ -1749,9 +1754,16 @@ class Algotrader():
             npa[ari]['hightdmsc']  = hightdmsc
             npa[ari]['lowtdmsc']   = lowtdmsc
             npa[ari]['closetdmsc'] = closetdmsc
+
+            npa[ari]['pdopen']     = openask
+            npa[ari]['pdhigh']     = highask
+            npa[ari]['pdlow']      = lowask
+            npa[ari]['pdclose']    = closeask
             
             #print ( per + " " + str(cnt)  + " " + str(count) )
             cnt   = cnt + 1
+    
+        # while cnt < count
     
         # np.isnan(np.sum(npa['time']))
         # npa.dtype
@@ -7155,11 +7167,14 @@ class Algotrader():
         
         gPredictions1 = self.calc_kalman_predictions(gRealTrack)
         
+        print( 'preds:  ', int(gPredictions1[-1]), int(gPredictions[-1]) )
 
-        """
-         post proc
-        """
+
+        #"""
+        # post proc
+        #"""
         
+        '''
         t0 = 0
         c0 = 0.0
         tnpa = self.mt5.copy_rates_from_pos(sym,self.mt5.TIMEFRAME_M1, 0, 1)
@@ -7216,45 +7231,46 @@ class Algotrader():
         if 0 < self.verbose:
             print( tstr, tarr[-lent:], t0, c0  )
             self.atlogkalman.info(tstr)
-            
-            
-        '''    
-        c0 = df.iloc[lendf-1].close
-        Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
-        #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
-        Pc0B  = None # Pc0 + 20
-        Pc0B1 = None # Pc0 + 10
-        Pc0S  = None # Pc0 - 10
-        Pc0S1 = None # Pc0 - 20
-        
-        op, dfbs = self.mt5_cnt_orders_and_positions( sym )
-        # print( dfbs )
-        
-        if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
-            Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
-            Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
-
-        if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
-            Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
-
-        if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
-            Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
-            Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
-
-        if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
-            Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
-
-
-            df['Pc0'] = Pc0
-            key1 = 'Pc0'
-            _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
         '''    
             
+        # '''    
+        # c0 = df.iloc[lendf-1].close
+        # Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+        # #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
+        # Pc0B  = None # Pc0 + 20
+        # Pc0B1 = None # Pc0 + 10
+        # Pc0S  = None # Pc0 - 10
+        # Pc0S1 = None # Pc0 - 20
+        
+        # op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+        # # print( dfbs )
+        
+        # if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
+        #     Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
+        #     Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
+
+        # if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
+        #     Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
+
+        # if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
+        #     Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
+        #     Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
+
+        # if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
+        #     Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
+
+
+        #     df['Pc0'] = Pc0
+        #     key1 = 'Pc0'
+        #     _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+        # '''    
+            
+        #
+        # graphical proc-
+        #
+
+        '''
         ret = price, pcm, tstr
-        """
-         graphical proc-
-        """
-
         import matplotlib.pyplot as plt
         import talib
 
@@ -7298,6 +7314,7 @@ class Algotrader():
         plt.ylabel( gLabelYstr, fontsize=gFontSize)
         plt.legend()
         plt.show()
+        '''
         
         
 
