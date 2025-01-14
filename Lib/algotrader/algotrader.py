@@ -1125,8 +1125,11 @@ class Algotrader():
         fail_cnt = 0
         while True:
             # TICKS
+            len_npa = 0
             npa = self.mt5.copy_ticks_range(sym,dt_from ,dt_to , self.mt5.COPY_TICKS_ALL)
-            len_npa = len(npa) - 1    # end of numpy array
+            #if type(None) == type(npa):
+            if type(npa) is np.ndarray:
+                len_npa = len(npa) - 1    # end of numpy array
             if (0 < len_npa):
                 break
             else:
@@ -1306,6 +1309,12 @@ class Algotrader():
         #             count = int( lendf / vol )
         #             if self.gVerbose: print( _sprintf("%s %s [%s : %s] %d %d ",per, locper, strstart,strend,count, lendf) )
         #             break        
+
+        if 0 <vol:
+            df    = df.iloc[0:((vol*count))]
+            if len(df) != count*vol:
+                raise ValueError(_sprintf("copy_rates_from: len(df) != count*vol - %d != %d ", len(df), count*vol) )
+                
     
         if 0 < secs :
             start = dt_from
@@ -1373,6 +1382,44 @@ class Algotrader():
             if self.gVerbose: print( _sprintf("%s [%s : %s] %d %d ",per, strstart, strend, count, len(df)) )
     
         # if 0 < secs :
+
+
+        # #
+        # # start cleanup kalman code later
+        # #
+        # dfkal = df[::-1]['price']
+        # #self.gNpa = gNPA
+        # #gNPAoffset = gNpaPrice[len(gNPA)-1] * np.ones(len(gNPA))
+        # # if None == gNpaPrice0[sym]:
+        # #     gNpaPrice0[sym] = gNpaPrice[0]
+        # # TODO do not remember the first ever price
+        # gNpaPrice0 = dfkal[0]
+            
+        # gNPAoffset = gNpaPrice0 * np.ones(len(df))
+        # #t = np.arange(0, len(gNPA), 1)
+        # points = self.cf_symbols[self.gACCOUNT][sym]['points']
+        # gRealTrack = (dfkal - gNPAoffset)/points
+        # #gRealTrack = gNpaPrice
+
+        # # take algo system settings here        
+        # self.gKalmanDt         = 0.01
+        # self.gKalmanU          = 2
+        # self.gKalmanStdDevAcc  = 25
+        # self.gKalmanStdDevMeas = 1.2
+        # self.gKalmanChartIntervalInSeconds = 60
+        # gPredictions = self.calc_kalman_predictions(gRealTrack)
+        
+        # tarr = np.squeeze(np.flip(gPredictions))
+        # tarr = np.around( tarr )
+            
+        # df.insert(2, 'pd', tarr)
+        # print( per, (vol*count), len(df), df['pd'])
+
+        # #
+        # # end cleanup kalman code later
+        # #
+
+
 
         # TODO TICKS kaputt
         fuzzy_cnt = 0
@@ -1905,6 +1952,43 @@ class Algotrader():
             
             # example test for retrieving df on ipython console
             # df = gH.gDF['RATES']['2025-01-07 17:00:02+00:00']['T100']['EURUSD']
+            
+            #
+            # start cleanup kalman code later
+            #
+            dfkal = df['Pclose']
+            #self.gNpa = gNPA
+            #gNPAoffset = gNpaPrice[len(gNPA)-1] * np.ones(len(gNPA))
+            # if None == gNpaPrice0[sym]:
+            #     gNpaPrice0[sym] = gNpaPrice[0]
+            # TODO do not remember the first ever price
+            gNpaPrice0 = dfkal[0]
+                
+            gNPAoffset = gNpaPrice0 * np.ones(len(df))
+            #t = np.arange(0, len(gNPA), 1)
+            gRealTrack = (dfkal - gNPAoffset)
+            #gRealTrack = gNpaPrice
+    
+            # take algo system settings here        
+            self.gKalmanDt         = 0.01
+            self.gKalmanU          = 2
+            self.gKalmanStdDevAcc  = 25
+            self.gKalmanStdDevMeas = 1.2
+            self.gKalmanChartIntervalInSeconds = 60
+            gPredictions = self.calc_kalman_predictions(gRealTrack)
+            
+            tarr = np.squeeze(gPredictions)
+            tarr = np.around( tarr )
+            tarr = tarr + gNpaPrice0
+            #tarr = tarr.astype( np.int64)
+            df.insert(2, 'pd2', tarr)
+    
+            print( df['pd2'] )
+            #
+            # end cleanup kalman code later
+            #
+            
+            
             
             self.set_df_rates( dt_from, per, sym, df )
         
@@ -3560,9 +3644,12 @@ class Algotrader():
                     _mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     
                     #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    _mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr2',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     
+                    key1 = 'pd2'
+                    #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
 					
 
                 if True == self.gUseScalp:
@@ -7151,12 +7238,11 @@ class Algotrader():
         #gRealTrack = gNpaPrice
 
         # take algo system settings here        
-        # self.gKalmanDt         = 0.01
-        # self.gKalmanU          = 2
-        # self.gKalmanStdDevAcc  = 25
-        # self.gKalmanStdDevMeas = 1.2
-        # self.gKalmanChartIntervalInSeconds = 60
-        
+        self.gKalmanDt         = 0.01
+        self.gKalmanU          = 2
+        self.gKalmanStdDevAcc  = 25
+        self.gKalmanStdDevMeas = 1.2
+        self.gKalmanChartIntervalInSeconds = 60
         gPredictions = self.calc_kalman_predictions(gRealTrack)
 
         self.gKalmanDt         = 0.1
@@ -7164,7 +7250,6 @@ class Algotrader():
         self.gKalmanStdDevAcc  = 2.5
         self.gKalmanStdDevMeas = 1.2
         self.gKalmanChartIntervalInSeconds = 60
-        
         gPredictions1 = self.calc_kalman_predictions(gRealTrack)
         
         print( 'preds:  ', int(gPredictions1[-1]), int(gPredictions[-1]) )

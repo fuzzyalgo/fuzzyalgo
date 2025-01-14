@@ -798,7 +798,16 @@ def _construct_renko_collections(dates, datesc, highs, lows, volumes, config_ren
     new_dates = [] # holds the dates corresponding with the index
     new_volumes = [] # holds the volumes corresponding with the index.  If more than one index for the same day then they all have the same volume.
 
+
+
+    if 0 == len(closes) or np.isnan( prev_close_brick ) or np.isnan( brick_size ):
+        raise ValueError( sprintf("ERROR if 0 == len(%d) or np.isnan( %d ) or np.isnan( %d )", len(closes), np.isnan( prev_close_brick ), np.isnan( brick_size ) ) )
+        
     for i in range(len(closes)):
+
+        if 0 == len(closes) or np.isnan( prev_close_brick ) or np.isnan( brick_size )  or np.isnan( closes[i] ):
+            raise ValueError( sprintf("ERROR if 0 == len(%d) or np.isnan( %d ) or np.isnan( %d )  or np.isnan( closes[%d] )", len(closes), np.isnan( prev_close_brick ), np.isnan( brick_size ), np.isnan( closes[i] ) ) )
+        
         brick_diff = int((closes[i] - prev_close_brick) / brick_size)
         if brick_diff == 0:
             if volumes is not None:
