@@ -10,6 +10,7 @@ import algotrader as at
 from algotrader._utils import _sprintf
 gAccount = 'RF5D03'
 gSym = 'EURUSD'
+gVol = 0.01
 
 
 
@@ -42,7 +43,9 @@ if None == gDtTo:
 
 
 #gH.g_c0[gSym] = 1.02191
-gH.set_gc0()
+
+if None == gH.g_c0[gSym]:
+    gH.set_gc0()
 
 # 
 # START gH.run_now()
@@ -60,17 +63,60 @@ start = time.time()
 gH.get_date_range(gDtTo)
 print( gH.gDt)
 gH.get_ticks_and_rates(gSym)
-ret = gH.analyse_df(gSym)
-gH.print_analyse_df( ret )
+dfana = gH.analyse_df(gSym)
+gH.print_analyse_df( dfana )
+
+op, dfbs = gH.mt5_cnt_orders_and_positions( gSym )
+print( dfbs )
+
+buy_or_sell = 'neutral'
+if 1 < dfana.PS.SUMROW and 1 < dfana.OC.SUMROW:
+    buy_or_sell = 'buy'
+
+if -1 > dfana.PS.SUMROW and -1 > dfana.OC.SUMROW:
+    buy_or_sell = 'sell'
+
+if 'buy' == buy_or_sell:
+    if 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+        print(buy_or_sell, ' - do nothing')    
+    elif 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
+        gH.set_gc0()
+        gH.mt5_position_reverse( gSym )
+    elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+        gH.set_gc0()
+        gH.mt5_position_buy(gSym, gVol)
+    else:
+        gH.set_gc0()
+        gH.mt5_position_close(gSym)    
+        gH.mt5_position_buy(gSym, gVol)
+
+elif 'sell' == buy_or_sell:
+    if 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
+        print(buy_or_sell, ' - do nothing')    
+    elif 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+        gH.set_gc0()
+        gH.mt5_position_reverse( gSym )
+    elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+        gH.set_gc0()
+        gH.mt5_position_sell(gSym, gVol)
+    else:
+        gH.set_gc0()
+        gH.mt5_position_close(gSym)    
+        gH.mt5_position_sell(gSym, gVol)
+
+elif 'neutral' == buy_or_sell:
+    print(buy_or_sell, ' - do nothing')    
+
+
 #self.get_ticks_and_rates2(sym)
 
 endticks = time.time()
 
-#gH.run_analyse_kalman(gDtTo, gSym )
-gH.print_fig_all_periods_per_sym()
-# #gH.print_fig_all_periods_and_all_syms()
-# # gH.print_past_entries_per_sym()
-# # #gH.print_fig_all_periods_and_one_sym_and_all_times()
+# #gH.run_analyse_kalman(gDtTo, gSym )
+# gH.print_fig_all_periods_per_sym()
+# # #gH.print_fig_all_periods_and_all_syms()
+# # # gH.print_past_entries_per_sym()
+# # # #gH.print_fig_all_periods_and_one_sym_and_all_times()
 
     
 #write_pickle_raw( 'file.pickle', gH.gDF )

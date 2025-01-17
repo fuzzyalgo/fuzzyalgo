@@ -34,7 +34,7 @@ gTdOffset= timedelta(hours=2)   # TODO recognise me - summer time 3h and winter 
 # investigate a certain time
 gTicksPerPeriod = 100  #  
 gTimeDelta = timedelta( minutes=240 )
-gDtTo   = datetime(2025, 1, 3, 17, 2, 50, 0, tzinfo=gTimezoneUTC)
+gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
 
 
 #

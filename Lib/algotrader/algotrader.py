@@ -3612,8 +3612,8 @@ class Algotrader():
         for sym in self.cf_symbols[self.gACCOUNT]: 
 
             # print(sym)
-            op, dfbs = self.mt5_cnt_orders_and_positions( sym )
-            print( dfbs )
+            # op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+            # print( dfbs )
 
             fig_sym = self.g_fig_all_periods_per_sym[sym]['fig_sym']
     
@@ -7534,12 +7534,54 @@ class Algotrader():
     # =============================================================================
     
         start = time.time()
+        gVol = 0.01
     
         self.get_date_range(dt_from)
         self.get_ticks_and_rates(sym)
-        ret = self.analyse_df(sym)
-        self.print_analyse_df( ret )
+        dfana = self.analyse_df(sym)
+        self.print_analyse_df( dfana )
         #self.get_ticks_and_rates2(sym)
+    
+        op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+        print( dfbs )
+        
+        buy_or_sell = 'neutral'
+        if 1 < dfana.PS.SUMROW and 1 < dfana.OC.SUMROW:
+            buy_or_sell = 'buy'
+        
+        if -1 > dfana.PS.SUMROW and -1 > dfana.OC.SUMROW:
+            buy_or_sell = 'sell'
+        
+        if 'buy' == buy_or_sell:
+            if 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+                print(buy_or_sell, 'do nothing')    
+            elif 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
+                self.set_gc0()
+                self.mt5_position_reverse( sym )
+            elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+                self.set_gc0()
+                self.mt5_position_buy(sym, gVol)
+            else:
+                self.set_gc0()
+                self.mt5_position_close(sym)    
+                self.mt5_position_buy(sym, gVol)
+        
+        elif 'sell' == buy_or_sell:
+            if 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
+                print(buy_or_sell, 'do nothing')    
+            elif 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+                self.set_gc0()
+                self.mt5_position_reverse( sym )
+            elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
+                self.set_gc0()
+                self.mt5_position_sell(sym, gVol)
+            else:
+                self.set_gc0()
+                self.mt5_position_close(sym)    
+                self.mt5_position_sell(sym, gVol)
+    
+        elif 'neutral' == buy_or_sell:
+            print(buy_or_sell, 'do nothing')    
     
         endticks = time.time()
         
