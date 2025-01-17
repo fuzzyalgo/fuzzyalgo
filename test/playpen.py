@@ -108,6 +108,8 @@ elif 'neutral' == buy_or_sell:
     print(buy_or_sell, ' - do nothing')    
 
 
+gH.mt5_position_sltp_follow2( gSym, 20 )
+
 #self.get_ticks_and_rates2(sym)
 
 endticks = time.time()

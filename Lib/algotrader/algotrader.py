@@ -5645,13 +5645,10 @@ class Algotrader():
                 
             if self.mt5.ORDER_TYPE_BUY == position.type:
                 profitp = (pos_price_current-pos_price_open)/points
-                if 0 < tpoffset:
-                    tp = pos_price_open + tpoffset*points
-                if 0 < tpoffset:
-                    if tpoffset < profitp:
-                        tp = 0 # pos_price_open + (tpoffset + profitp)*points
-                if 0 < sloffset:    
-                    sl = pos_price_open - sloffset*points
+                if 0 < tpoffset and ( 10  < profitp ) :
+                    tp = pos_price_current + tpoffset*points
+                #if 0 < sloffset:    
+                #    sl = pos_price_open - sloffset*points
                 
                 # if( 10 < profitp ):
                 #    sl = pos_price_open + 2*points
@@ -5680,13 +5677,10 @@ class Algotrader():
 
             if self.mt5.ORDER_TYPE_SELL == position.type:
                 profitp = (pos_price_open-pos_price_current)/points
-                if 0 < tpoffset:
-                    tp = pos_price_open - tpoffset*points
-                if 0 < tpoffset:
-                    if tpoffset < profitp:
-                        tp = 0 # pos_price_open - (tpoffset + profitp)*points
-                if 0 < sloffset:    
-                    sl = pos_price_open + sloffset*points
+                if 0 < tpoffset and ( 10  < profitp ) :
+                    tp = pos_price_current - tpoffset*points
+                #if 0 < sloffset:    
+                #    sl = pos_price_open + sloffset*points
                 
                 # if( 10 < profitp ):
                 #     sl = pos_price_open - 2*points
@@ -5715,7 +5709,7 @@ class Algotrader():
 
             sl = round( sl, digits )
             tp = round( tp, digits )
-
+            
             if (pos_sl != sl) or (pos_tp != tp):
                 for tries in range(10):
                     info = self.mt5.symbol_info_tick(symbol)
@@ -7583,6 +7577,8 @@ class Algotrader():
         elif 'neutral' == buy_or_sell:
             print(buy_or_sell, 'do nothing')    
     
+        self.mt5_position_sltp_follow2( sym, 20 )
+
         endticks = time.time()
         
         if self.gShowFig or self.gSaveFig:
