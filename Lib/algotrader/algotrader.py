@@ -27,6 +27,11 @@ import logging
 # pip install scikit-fuzzy
 import skfuzzy.control as ctrl
 
+# pip install filterpy
+# https://github.com/rlabbe/filterpy
+from filterpy.kalman import KalmanFilter as KalmanFilterFilterPy
+from filterpy.common import Q_discrete_white_noise
+
 
 #import MetaTrader5 as mt5
 
@@ -1966,24 +1971,54 @@ class Algotrader():
                 
             gNPAoffset = gNpaPrice0 * np.ones(len(df))
             #t = np.arange(0, len(gNPA), 1)
-            gRealTrack = (dfkal - gNPAoffset)
-            #gRealTrack = gNpaPrice
+            #gRealTrack = (dfkal - gNpaPrice0)/points
+            gRealTrack = (dfkal - gNpaPrice0)
     
-            # take algo system settings here        
-            self.gKalmanDt         = 0.01
-            self.gKalmanU          = 2
-            self.gKalmanStdDevAcc  = 25
-            self.gKalmanStdDevMeas = 1.2
-            self.gKalmanChartIntervalInSeconds = 60
-            gPredictions = self.calc_kalman_predictions(gRealTrack)
+            #
+            # start filterpy
+            #
+            # https://github.com/rlabbe/filterpy
+            my_filter = KalmanFilterFilterPy(dim_x=2, dim_z=1)
+            # Initialize the filter's matrices.
             
-            tarr = np.squeeze(gPredictions)
+            my_filter.x = np.array([[2.],
+                            [0.]])       # initial state (location and velocity)
+            
+            my_filter.F = np.array([[1.,1.],
+                            [0.,1.]])    # state transition matrix
+            
+            my_filter.H = np.array([[1.,0.]])    # Measurement function
+            my_filter.P *= 1000.                 # covariance matrix
+            my_filter.R = 5                      # state uncertainty
+            my_filter.Q = Q_discrete_white_noise(dim=2, dt=0.1, var=0.1) # process uncertainty
+
+            # filter data with Kalman filter, than run smoother on it
+            # https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/13-Smoothing.ipynb
+            mu, cov, _, _ = my_filter.batch_filter(gRealTrack)
+            M, P, C, _ = my_filter.rts_smoother(mu, cov)
+            
+            # measurement values
+            index = 0
+            # velocity values
+            #index = 1
+
+            # KF values
+            tarr = np.squeeze(mu[:, index])
             tarr = np.around( tarr )
             tarr = tarr + gNpaPrice0
             #tarr = tarr.astype( np.int64)
-            df.insert(2, 'pd2', tarr)
-    
-            print( df['pd2'] )
+            df.insert(2, 'pd', tarr)
+
+            # RTS smoother
+            tarr = np.squeeze(M[:, index])
+            tarr = np.around( tarr )
+            tarr = tarr + gNpaPrice0
+            #tarr = tarr.astype( np.int64)
+            df.insert(2, 'ps', tarr)
+            
+
+            #print( sym, per, gRealTrack, df['pd'], df['ps'], df.close[0] )
+
             #
             # end cleanup kalman code later
             #
@@ -2790,8 +2825,8 @@ class Algotrader():
         # create numpy array
         dtype = np.dtype([('sec', '<u8'), ('vol', '<u8'), ('cnt', '<u8'),\
                           ('t1', '<i8'),  ('t0', '<i8'),  ('dt_to', '<i8'),\
-                          ('c1', '<f8'), ('c0', '<f8'),\
-                          ('DELTA', '<i8'), ('OC', '<i8'), ('HL', '<i8'), ('TD', '<i8'), ('VOLS', '<i8'),\
+                          ('c1', '<f8'), ('c0', '<f8'),('ps1', '<f8'), ('ps0', '<f8'),\
+                          ('DELTA', '<i8'), ('PS', '<i8'), ('OC', '<i8'), ('HL', '<i8'), ('TD', '<i8'), ('VOLS', '<i8'),\
                           ('TT', '<i8'), ('HL/TD', '<f8'), ('HL/VOLS', '<f8') ])
                           
         npa = np.zeros(lenper, dtype=dtype)
@@ -2830,10 +2865,15 @@ class Algotrader():
             c0 = df.iloc[lendf-1].close
             # print( c1 )
             # print( c0 )
+
+            ps1 = df.iloc[0].ps
+            ps0 = df.iloc[lendf-1].ps
+            #print( int( round( ps0 - ps1 )), ps1,ps0 )
             
             DELTA = int(0.0)
             if None != self.g_c0[sym]:
                 DELTA = int( (c0 - self.g_c0[sym]) / points ) 
+            PS = int( round( ps0 - ps1 ))
             OC = int( (c0 -c1)/points ) 
             HL = int((df.high.max() - df.low.min())/points) # int(df.iloc[lendf-2].Pclose)
             TD = int((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[0].time_msc)/1000) # int(df.iloc[lendf-1].Pclose)
@@ -2858,11 +2898,14 @@ class Algotrader():
             dfana.loc[per,'vol']        = self.cf_periods[self.gACCOUNT][per]['volume']
             dfana.loc[per,'cnt']        = int(lendf)
             dfana.loc[per,'DELTA']      = DELTA
+            dfana.loc[per,'PS']         = PS
             dfana.loc[per,'OC']         = OC
             dfana.loc[per,'HL']         = HL
             dfana.loc[per,'TD']         = TD
             dfana.loc[per,'c1']         = c1
             dfana.loc[per,'c0']         = c0
+            dfana.loc[per,'ps1']        = ps1
+            dfana.loc[per,'ps0']        = ps0
             dfana.loc[per,'VOLS']       = VOLS
             dfana.loc[per,'HL/TD']      = HL_TD
             dfana.loc[per,'TT']         = TT
@@ -2891,7 +2934,10 @@ class Algotrader():
         dfana.loc['SUMROW','t1']    = int(dfana['t1'].iloc[0:lenper].sum()/lenper)
         dfana.loc['SUMROW','c1']    = dfana['c1'].iloc[0:lenper].sum()/lenper
         dfana.loc['SUMROW','c0']    = dfana['c0'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','ps1']   = dfana['ps1'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','ps0']   = dfana['ps0'].iloc[0:lenper].sum()/lenper
         dfana.loc['SUMROW','DELTA'] = int(dfana['DELTA'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','PS']    = int(dfana['PS'].iloc[0:lenper].sum()/lenper)
         dfana.loc['SUMROW','OC']    = int(dfana['OC'].iloc[0:lenper].sum()/lenper)
         dfana.loc['SUMROW','HL']    = int(dfana['HL'].iloc[0:lenper].sum()/lenper)
         dfana.loc['SUMROW','TD']    = int(dfana['TD'].iloc[0:lenper].sum()/lenper)
@@ -2915,7 +2961,7 @@ class Algotrader():
         self.set_df_rates( dt_to, 'ANA', sym, dfana )
         
         # =============================================================================
-        if self.gVerbose: print( dfana[['DELTA','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']] )
+        if self.gVerbose: print( dfana[['DELTA','PS','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']] )
         if self.gVerbose: print( list(round(dfana['SUMCOL'],1)) )
         if self.gVerbose: print( list(dfana['OC']) )
         if self.gVerbose: print( dfana.loc['SUMROW','OC'], dfana.loc['SUMROW','SUMCOL'] )
@@ -2946,7 +2992,7 @@ class Algotrader():
     # =============================================================================
     def print_analyse_df(self,dfana):
     
-        print( dfana[['DELTA','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']] )
+        print( dfana[['DELTA','PS','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']] )
     
     # END def print_analyse_df(self,dfana):
     # =============================================================================
@@ -3562,9 +3608,13 @@ class Algotrader():
     
         if self.gGlobalFig and not self.gCrazyFigPattern: self.clear_ax_fig_all_periods_per_sym()
         if not self.gGlobalFig: self.open_fig_all_periods_per_sym()
-        
+
         for sym in self.cf_symbols[self.gACCOUNT]: 
+
             # print(sym)
+            op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+            print( dfbs )
+
             fig_sym = self.g_fig_all_periods_per_sym[sym]['fig_sym']
     
             if True == self.gUsePid:
@@ -3596,7 +3646,7 @@ class Algotrader():
                     Pc0S1 = None # Pc0 - 20
                     
                     op, dfbs = self.mt5_cnt_orders_and_positions( sym )
-                    # print( dfbs )
+                    #print( dfbs )
                     
                     if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
                         Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
@@ -3641,16 +3691,20 @@ class Algotrader():
                     #print( per, self.g_c0[sym], Pc0)
 					
                     #_mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    _mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    #_mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     
                     #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     
-                    key1 = 'pd2'
+                    # key1 = 'pd'
+                    # #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+                    key1 = 'ps'
                     #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                     _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-					
+
 
                 if True == self.gUseScalp:
                     # display last 10 rows

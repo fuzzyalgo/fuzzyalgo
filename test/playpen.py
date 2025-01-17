@@ -41,8 +41,8 @@ if None == gDtTo:
 # gH.g_c0[gSym] = 1.03043
 
 
-gH.g_c0[gSym] = 1.02191
-#gH.set_gc0()
+#gH.g_c0[gSym] = 1.02191
+gH.set_gc0()
 
 # 
 # START gH.run_now()
