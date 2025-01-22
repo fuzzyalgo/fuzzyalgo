@@ -29,12 +29,12 @@ gTdOffset= timedelta(hours=2)   # TODO recognise me - summer time 3h and winter 
 # normal operation
 #gTicksPerPeriod = 36#36000  #  10hours * 36000secs/hours -> 36000 ticks per period
 #gTimeDelta = timedelta( hours=10 )   # TODO config var 10 hours -> related to 36000 (gTicksPerPeriod) elements for ticks array
-#gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
+gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
 
 # investigate a certain time
-gTicksPerPeriod = 100  #  
+gTicksPerPeriod = 1000*2  #  
 gTimeDelta = timedelta( minutes=240 )
-gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
+#gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
 
 
 #
@@ -554,9 +554,11 @@ gLabelXstr        = "X"
 gLabelYstr        = "Y"
 
 
+
+
 tclose = gNpa['time_msc'][0].astype('datetime64[ms]')
 
-fig = plt.figure()
+fig = plt.figure(figsize=(24,16),dpi=100)
 gTitleStr = _sprintf("%s( %s - %s %s - dt:%0.2f/%d/%0.2f/%0.2f )",\
   gAccount, gTicksPerPeriod, gSym, tclose, gKalmanDt, gKalmanU, gKalmanStdDevAcc, gKalmanStdDevMeas )
 fig.suptitle(gTitleStr, fontsize=gFontSize)
@@ -572,8 +574,32 @@ fig.suptitle(gTitleStr, fontsize=gFontSize)
 
 t = np.arange(0, len(gNpa), 1)
 
-plt.plot(t, gNpaRealTrack, label='price', color='r', linewidth=0.1)
-plt.plot(t, gNpaPricePrediction, label='prediction', color='b', linewidth=0.5)
+indexv = 100
+
+import talib
+rsi = talib.RSI( gNpaRealTrack,150 )
+plt.plot(t[-indexv:], rsi[-indexv:]-50, label='RSI', color='b', linewidth=1)
+
+sto = talib.STOCH( gNpaRealTrack, gNpaRealTrack, gNpaRealTrack, 150, 90, 0, 30, 0)
+#print( sto[0][-indexv:] )
+plt.plot(t[-indexv:], sto[0][-indexv:]-50, label='STO1', color='y', linewidth=1)
+plt.plot(t[-indexv:], sto[1][-indexv:]-50, label='STO2', color='g', linewidth=1)
+        
+upper, mid, lower = talib.BBANDS(np.squeeze(gNpaRealTrack), 
+ 	                              nbdevup=1, nbdevdn=1, timeperiod=100)
+# for cnt in range(0,33,1):
+#  	                  mid[cnt] = 0
+plt.plot(t[-indexv:], upper[-indexv:], label="Upper band", linewidth=0.3)
+plt.plot(t[-indexv:], mid[-indexv:],   label='Middle band',linewidth=0.3)
+plt.plot(t[-indexv:], lower[-indexv:], label='Lower band', linewidth=0.3)
+
+
+plt.plot(t[-indexv:], gNpaRealTrack[-indexv:], label='price', color='r', linewidth=1)
+plt.plot(t[-indexv:], gNpaPricePrediction[-indexv:], label='prediction', color='b', linewidth=0.5)
+
+z = np.zeros(len(gNpa))
+plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=1)
+
 
 # plt.plot(t, gNpa['price'], label='price', color='r', linewidth=0.1)
 # plt.plot(t, gNpaPricePrediction1, label='prediction', color='b', linewidth=0.5)

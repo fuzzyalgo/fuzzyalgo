@@ -205,7 +205,7 @@ class Algotrader():
         self.gCrazyFigPattern = False
         if False == self.gGlobalFig and True == self.gCrazyFigPattern:
             raise ValueError( "ERROR: self.gGlobalFig[False] does not work with self.gCrazyFigPattern[True]: ")
-        self.gShowFig = True
+        self.gShowFig = False
         self.gSaveFig = False
         self.gVerbose = 0
         self.gTightLayout = True
@@ -1190,7 +1190,7 @@ class Algotrader():
         #         #diff = df.iloc[start].TD
         #         #npa[ari]['td_msc']   = time_delta_to_msc(diff)
         # =============================================================================
-        
+
         # reverse the array
         df = df[::-1]
         # df['index']=df.reindex(list(np.arange(2332,0,-1)),columns='index')
@@ -1200,6 +1200,8 @@ class Algotrader():
         
         df.reset_index(inplace=True,drop=False)
         df.set_index(['DTMS'],drop=False,inplace=True)
+
+
         
         # df.reindex(index=list(np.arange(0,891,1)), columns=['index2'])
         
@@ -4833,7 +4835,7 @@ class Algotrader():
     #  def mt5_pending_order_buy_stop( self, sym, volume = 0.01, startoffset= 50, number = 20, offsetpar = 20, price = None ):
     #     
     # =============================================================================
-    def mt5_pending_order_buy_stop( self, sym, volume = 0.01, startoffset= 50, number = 20, offsetpar = 20, price = None ):
+    def mt5_pending_order_buy_stop( self, sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = None ):
     # =============================================================================
     
         #self.offset = int(offsetpar)
@@ -5602,7 +5604,7 @@ class Algotrader():
     #     
     #   sltp follow profit
     # =============================================================================
-    def mt5_position_sltp_follow2(self, symbol, tpoffset = 20, sloffset = 20 ):
+    def mt5_position_sltp_follow2(self, symbol, tpoffset = 0, sloffset = 20 ):
     # =============================================================================
 
         # generic variables
@@ -5645,14 +5647,12 @@ class Algotrader():
                 
             if self.mt5.ORDER_TYPE_BUY == position.type:
                 profitp = (pos_price_current-pos_price_open)/points
-                if 0 < tpoffset and ( 10  < profitp ) :
+                #if 0 < tpoffset and ( 10  < profitp ) :
+                if 0 < tpoffset and 0 == pos_tp :
                     tp = pos_price_current + tpoffset*points
-                #if 0 < sloffset:    
+                # if 0 < sloffset:    
                 #    sl = pos_price_open - sloffset*points
                 
-                # if( 10 < profitp ):
-                #    sl = pos_price_open + 2*points
-                   
                 if( 500 < profitp ):
                     sl = pos_price_open + 300*points
                 elif( 250 < profitp ):
@@ -5677,13 +5677,11 @@ class Algotrader():
 
             if self.mt5.ORDER_TYPE_SELL == position.type:
                 profitp = (pos_price_open-pos_price_current)/points
-                if 0 < tpoffset and ( 10  < profitp ) :
+                #if 0 < tpoffset and ( 10  < profitp ) :
+                if 0 < tpoffset and 0 == pos_tp :
                     tp = pos_price_current - tpoffset*points
-                #if 0 < sloffset:    
+                # if 0 < sloffset:    
                 #    sl = pos_price_open + sloffset*points
-                
-                # if( 10 < profitp ):
-                #     sl = pos_price_open - 2*points
                 
                 if( 500 < profitp ):
                     sl = pos_price_open - 300*points
@@ -7528,7 +7526,7 @@ class Algotrader():
     # =============================================================================
     
         start = time.time()
-        gVol = 0.01
+        gVol = 0.1
     
         self.get_date_range(dt_from)
         self.get_ticks_and_rates(sym)
@@ -7552,13 +7550,22 @@ class Algotrader():
             elif 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
                 self.set_gc0()
                 self.mt5_position_reverse( sym )
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_sell_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
             elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
                 self.set_gc0()
                 self.mt5_position_buy(sym, gVol)
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_sell_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
             else:
                 self.set_gc0()
                 self.mt5_position_close(sym)    
                 self.mt5_position_buy(sym, gVol)
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_sell_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
         
         elif 'sell' == buy_or_sell:
             if 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
@@ -7566,18 +7573,27 @@ class Algotrader():
             elif 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
                 self.set_gc0()
                 self.mt5_position_reverse( sym )
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_buy_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
             elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
                 self.set_gc0()
                 self.mt5_position_sell(sym, gVol)
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_buy_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
             else:
                 self.set_gc0()
                 self.mt5_position_close(sym)    
                 self.mt5_position_sell(sym, gVol)
+                self.mt5_pending_order_remove(sym)
+                self.mt5_pending_order_buy_limit(\
+                    sym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = self.g_c0[sym])
     
         elif 'neutral' == buy_or_sell:
             print(buy_or_sell, 'do nothing')    
     
-        self.mt5_position_sltp_follow2( sym, 20 )
+        self.mt5_position_sltp_follow2( sym )
 
         endticks = time.time()
         

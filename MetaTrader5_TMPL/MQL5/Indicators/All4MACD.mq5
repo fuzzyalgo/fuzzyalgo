@@ -186,25 +186,37 @@ int OnCalculate(const int rates_total,
         ExtMacd04Buffer[i]=(ExtMa03Buffer[i]-ExtMa04Buffer[i])/Point();
         
         if(
+            //( ExtMacd01Buffer[i] > 1 )
             ( ExtMacd01Buffer[i] > ExtMacd01Buffer[i-1] ) 
             &&( ExtMacd02Buffer[i] > ExtMacd02Buffer[i-1] ) 
-            &&( ExtMacd03Buffer[i] > ExtMacd03Buffer[i-1] ) 
-            &&( ExtMacd04Buffer[i] > ExtMacd04Buffer[i-1] ) 
+            //&&( ExtMacd03Buffer[i] > ExtMacd03Buffer[i-1] ) 
+            //&&( ExtMacd04Buffer[i] > ExtMacd04Buffer[i-1] ) 
             //&&( ExtMacd01Buffer[i] > ExtMacd02Buffer[i] ) && ( ExtMacd02Buffer[i] > ExtMacd03Buffer[i] ) && ( ExtMacd03Buffer[i] > ExtMacd04Buffer[i] )
+            //&&( ExtMacd01Buffer[i] > ExtMacd04Buffer[i] )
         )
         {
             ExtMacdSigBufferB[i] = ExtMacd04Buffer[i]; 
         }
+        else
+        {
+            ExtMacdSigBufferB[i] = 0.0; 
+        }
 
         if(
+            //( ExtMacd01Buffer[i] < -1 )
             ( ExtMacd01Buffer[i] < ExtMacd01Buffer[i-1] ) 
             &&( ExtMacd02Buffer[i] < ExtMacd02Buffer[i-1] ) 
-            &&( ExtMacd03Buffer[i] < ExtMacd03Buffer[i-1] ) 
-            &&( ExtMacd04Buffer[i] < ExtMacd04Buffer[i-1] ) 
+            //&&( ExtMacd03Buffer[i] < ExtMacd03Buffer[i-1] ) 
+            //&&( ExtMacd04Buffer[i] < ExtMacd04Buffer[i-1] ) 
             //&&( ExtMacd01Buffer[i] < ExtMacd02Buffer[i] ) && ( ExtMacd02Buffer[i] < ExtMacd03Buffer[i] ) && ( ExtMacd03Buffer[i] < ExtMacd04Buffer[i] )
+            //&&( ExtMacd01Buffer[i] < ExtMacd04Buffer[i] )
         )
         {
             ExtMacdSigBufferS[i] = ExtMacd04Buffer[i]; 
+        }
+        else
+        {
+            ExtMacdSigBufferS[i] = 0.0; 
         }
    
    }   

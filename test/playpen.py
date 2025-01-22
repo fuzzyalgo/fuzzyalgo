@@ -10,7 +10,7 @@ import algotrader as at
 from algotrader._utils import _sprintf
 gAccount = 'RF5D03'
 gSym = 'EURUSD'
-gVol = 0.01
+gVol = 0.1
 
 
 
@@ -82,13 +82,22 @@ if 'buy' == buy_or_sell:
     elif 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
         gH.set_gc0()
         gH.mt5_position_reverse( gSym )
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_sell_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
     elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
         gH.set_gc0()
         gH.mt5_position_buy(gSym, gVol)
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_sell_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
     else:
         gH.set_gc0()
         gH.mt5_position_close(gSym)    
         gH.mt5_position_buy(gSym, gVol)
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_sell_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
 
 elif 'sell' == buy_or_sell:
     if 0 == dfbs.cnt.POS_BUY and 1 == dfbs.cnt.POS_SELL:
@@ -96,26 +105,35 @@ elif 'sell' == buy_or_sell:
     elif 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
         gH.set_gc0()
         gH.mt5_position_reverse( gSym )
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_buy_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
     elif 0 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
         gH.set_gc0()
         gH.mt5_position_sell(gSym, gVol)
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_buy_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
     else:
         gH.set_gc0()
         gH.mt5_position_close(gSym)    
         gH.mt5_position_sell(gSym, gVol)
+        gH.mt5_pending_order_remove(gSym)
+        gH.mt5_pending_order_buy_limit(\
+            gSym, volume = 0.01, startoffset= 10, number = 10, offsetpar = 2, price = gH.g_c0[gSym])
 
 elif 'neutral' == buy_or_sell:
     print(buy_or_sell, ' - do nothing')    
 
 
-gH.mt5_position_sltp_follow2( gSym, 20 )
+gH.mt5_position_sltp_follow2( gSym )
 
 #self.get_ticks_and_rates2(sym)
 
 endticks = time.time()
 
 # #gH.run_analyse_kalman(gDtTo, gSym )
-# gH.print_fig_all_periods_per_sym()
+gH.print_fig_all_periods_per_sym()
 # # #gH.print_fig_all_periods_and_all_syms()
 # # # gH.print_past_entries_per_sym()
 # # # #gH.print_fig_all_periods_and_one_sym_and_all_times()
