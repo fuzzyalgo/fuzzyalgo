@@ -35,7 +35,8 @@ gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
 gTicksPerPeriod = 1000*2  #  
 gTimeDelta = timedelta( minutes=240 )
 #gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
-
+#gDtTo   = datetime(2025, 1, 24, 16, 45, 1, 0, tzinfo=gTimezoneUTC)
+gIndexV = 1000
 
 #
 # global(g) variables
@@ -574,10 +575,14 @@ fig.suptitle(gTitleStr, fontsize=gFontSize)
 
 t = np.arange(0, len(gNpa), 1)
 
-indexv = 100
+indexv = gIndexV
 
 import talib
-rsi = talib.RSI( gNpaRealTrack,150 )
+
+# cci = talib.CCI( gNpaRealTrack,gNpaRealTrack,gNpaRealTrack,15 ) 
+# plt.plot(t[-indexv:], cci[-indexv:], label='CCI', color='y', linewidth=1)
+
+rsi = talib.RSI( gNpaRealTrack,150 ) 
 plt.plot(t[-indexv:], rsi[-indexv:]-50, label='RSI', color='b', linewidth=1)
 
 sto = talib.STOCH( gNpaRealTrack, gNpaRealTrack, gNpaRealTrack, 150, 90, 0, 30, 0)
@@ -608,6 +613,7 @@ plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=1)
 plt.xlabel( "X", fontsize=gFontSize)
 plt.ylabel( "Y", fontsize=gFontSize)
 plt.legend()
+plt.grid(True)
 plt.show()
 
 

@@ -69,11 +69,13 @@ gH.print_analyse_df( dfana )
 op, dfbs = gH.mt5_cnt_orders_and_positions( gSym )
 print( dfbs )
 
+bs_threshold = 20
+
 buy_or_sell = 'neutral'
-if 1 < dfana.PS.SUMROW and 1 < dfana.OC.SUMROW:
+if 1*bs_threshold < dfana.PS.SUMROW and 1*bs_threshold < dfana.OC.SUMROW:
     buy_or_sell = 'buy'
 
-if -1 > dfana.PS.SUMROW and -1 > dfana.OC.SUMROW:
+if -1*bs_threshold > dfana.PS.SUMROW and -1*bs_threshold > dfana.OC.SUMROW:
     buy_or_sell = 'sell'
 
 if 'buy' == buy_or_sell:

@@ -7537,12 +7537,15 @@ class Algotrader():
         op, dfbs = self.mt5_cnt_orders_and_positions( sym )
         print( dfbs )
         
+        bs_threshold = 20
+        
         buy_or_sell = 'neutral'
-        if 1 < dfana.PS.SUMROW and 1 < dfana.OC.SUMROW:
+        if 1*bs_threshold < dfana.PS.SUMROW and 1*bs_threshold < dfana.OC.SUMROW:
             buy_or_sell = 'buy'
         
-        if -1 > dfana.PS.SUMROW and -1 > dfana.OC.SUMROW:
+        if -1*bs_threshold > dfana.PS.SUMROW and -1*bs_threshold > dfana.OC.SUMROW:
             buy_or_sell = 'sell'
+        
         
         if 'buy' == buy_or_sell:
             if 1 == dfbs.cnt.POS_BUY and 0 == dfbs.cnt.POS_SELL:
