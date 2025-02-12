@@ -5,7 +5,7 @@
 ### Dependencies
 
 - forex MT5 ECN accounts from [roboforex.com](https://www.roboforex.com/)
-- anaconda python (spyder and notebooks) on windows 64bit
+- miniforge python (spyder and notebooks) on windows 64bit
 
 ### Create free MT5 demo ECN account at [roboforex.com](https://www.roboforex.com/)
 
@@ -25,13 +25,29 @@ git clone git@github.com:fuzzyalgo/fuzzyalgo.git
 
 ```
 
-### install anaconda3 for windows 64bit
+### install miniforge3 for windows 64bit
 
-- [https://www.anaconda.com/products/distribution](https://www.anaconda.com/products/distribution/)
+- [https://github.com/conda-forge/miniforge](https://github.com/conda-forge/miniforge)
+
+```bash
+https://github.com/conda-forge/miniforge
+https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe
+
+Start Windows Command Prompt:
+
+> wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe -o Miniforge3-Windows-x86_64.exe
+> start /wait "" Miniforge3-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=1 /S /D=%UserProfile%\Miniforge3
+> del Miniforge3-Windows-x86_64.exe
+
+    Please update conda by running
+        $ conda update -n base -c conda-forge conda
+
+```
+
 
 ### setup fuzzyalgo as conda env fuzzyalgo-py38
 
-- run "Anaconda Prompt" or "Anaconda Powershell" as Administrator (admin previledges for creating symlinks)
+- run "Miniforge Prompt" or "Miniforge Powershell" as Administrator (admin previledges for creating symlinks)
 
 ```PowerShell
 > cd \<your-source-path>\fuzzyalgo
@@ -52,7 +68,7 @@ git clone git@github.com:fuzzyalgo/fuzzyalgo.git
 (fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
 (fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> python setup.py
 	Run: win-64bit in conda env:  fuzzyalgo-py38
-	dir_py_lib:  \<your-anaconda3-path>\anaconda3\envs\fuzzyalgo-py38\Lib
+	dir_py_lib:  \<your-miniforge3-path>\miniforge3\envs\fuzzyalgo-py38\Lib
 	dir_cwd:     \<your-source-path>\fuzzyalgo
 	dir_script:  \<your-source-path>\fuzzyalgo
 	name_user:   <your-username>
@@ -115,26 +131,9 @@ git clone git@github.com:fuzzyalgo/fuzzyalgo.git
 
 ### run fuzzyalgo conda env fuzzyalgo-py38
 
-#### run from windows start menu 'Spyder (fuzzyalgo-py38)' or 'Jupyter Notebook (fuzzyalgo-py38)'
+#### run from 'Miniforge Prompt'
 
-```bash
-$ cd  "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)"
-$ %APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
-	Anaconda Navigator (anaconda3).lnk
-	Anaconda Powershell Prompt (anaconda3).lnk
-	Anaconda Prompt (anaconda3).lnk
-	Jupyter Notebook (anaconda3).lnk
-->	Jupyter Notebook (fuzzyalgo-py38).lnk
-	Reset Spyder Settings (anaconda3).lnk
-	Reset Spyder Settings (fuzzyalgo-py38).lnk
-	Spyder (anaconda3).lnk
-->	Spyder (fuzzyalgo-py38).lnk
-```
-
-
-#### run from 'Anaconda Prompt'
-
-- start 'Anaconda Cmd Prompt' or 'Anaconda Powershell Prompt' 
+- start 'Miniforge Cmd Prompt' or 'Miniforge Powershell Prompt' 
 
 ##### spyder
 ```bash
@@ -198,7 +197,7 @@ $ %APPDATA%\Microsoft\Windows\Start Menu\Programs\Anaconda3 (64-bit)>dir /b
 	23/05/2023  20:09           108.407 jupyter-nbconvert.exe
 				   2 File(s)        216.828 bytes
 
-(fuzzyalgo-py38) > copy %APPDATA%\Python\Python38\Scripts\Python\Python38\Scripts\jupyter-*.exe C:\apps\anaconda3\envs\fuzzyalgo-py38\Scripts
+(fuzzyalgo-py38) > copy %APPDATA%\Python\Python38\Scripts\Python\Python38\Scripts\jupyter-*.exe C:\apps\miniforge3\envs\fuzzyalgo-py38\Scripts
 ```
 
 
@@ -211,3 +210,30 @@ conda install -c conda-forge nb_conda_kernels
 ```
 
 
+#### TBD use it under linux
+
+```bash
+
+win
+> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install MetaTrader5
+
+linux
+   https://pypi.org/project/ta-lib
+   https://github.com/ta-lib/ta-lib-python
+   https://ta-lib.org/
+      $ pip install ta-lib
+
+   https://pypi.org/project/MetaTrader5/
+      from: MetaTrader5-5.0.4803-cp39-cp39-win_amd64.whl
+      to:  MetaTrader5-5.0.4803-cp39-none-any.whl
+      $ pip install .\install\MetaTrader5-5.0.4803-cp39-none-any.whl
+
+linux links
+   https://pypi.org/project/mt5linux/
+      https://github.com/lucas-campagna/mt5linux
+   https://pypi.org/project/mt5linux-tc/
+      https://github.com/Traders-Connect/mt5linux-tc   
+   https://medium.com/@asc686f61/use-mt5-in-linux-with-docker-and-python-f8a9859d65b1
+      https://github.com/ASC689561/fx-tinny/
+```
