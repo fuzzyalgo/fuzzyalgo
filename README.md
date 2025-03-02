@@ -44,6 +44,38 @@ Start Windows Command Prompt:
 
 ```
 
+### setup fuzzyalgo as linux conda env fuzzyalgo-py384
+
+
+
+```bash
+$ cd \<your-source-path>\fuzzyalgo
+$ conda create -n fuzzyalgo-py312  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.12
+$ conda activate fuzzyalgo-py312
+# https://github.com/TA-Lib/ta-lib-python
+$ conda install -c conda-forge ta-lib
+$ conda install -c conda-forge libta-lib
+# https://ta-lib.org/install/#linux-build-from-source
+# $ wget https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4-src.tar.gz
+$ cd install
+$ tar -xvf ./install/ta-lib-0.6.4-src.tar.gz
+$ cd ta-lib-0.6.4
+$ ./configure -prefix=/usr
+$ make 
+$ sudo make install
+$ sudo ldconfig
+$ python 
+>>> import talib
+$ cd ..
+$ rm -Rf ta-lib-0.6.4
+$ cd ..
+$ pip install filterpy scikit-fuzzy networkx pynput 
+# do that later in wine python installation
+# $ pip install MetaTrader5
+$ python setup.py
+$ conda deactivate
+```
+
 
 ### setup fuzzyalgo as conda env fuzzyalgo-py38
 
