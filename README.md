@@ -81,7 +81,7 @@ $ conda deactivate
 ```
 
 
-### setup fuzzyalgo as conda env fuzzyalgo-py38
+### setup fuzzyalgo as conda env fuzzyalgo-py313
 
 - run "Miniforge Prompt" or "Miniforge Powershell" as Administrator (admin previledges for creating symlinks)
 
@@ -105,10 +105,10 @@ $ conda deactivate
 (base) \<your-source-path>\fuzzyalgo>
 (base) \<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
 (base) \<your-source-path>\fuzzyalgo> conda activate fuzzyalgo-py313
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo>
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> python setup.py
+(fuzzyalgo-py313) \<your-source-path>\fuzzyalgo>
+(fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
+(fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
+(fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> python setup.py
 	Run: win-64bit in conda env:  fuzzyalgo-py313
 	dir_py_lib:  \<your-miniforge3-path>\miniforge3\envs\fuzzyalgo-py313\Lib
 	dir_cwd:     \<your-source-path>\fuzzyalgo
@@ -116,7 +116,7 @@ $ conda deactivate
 	name_user:   <your-username>
 	name_host:   <your-hostname>
 	mt5-server:  RoboForex-ECN
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> conda deactivate
+(fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> conda deactivate
 (base) \<your-source-path>\fuzzyalgo>
 ```
 
@@ -226,20 +226,20 @@ $ conda deactivate
 #### https://stackoverflow.com/questions/36851746/jupyter-notebook-500-internal-server-error?rq=1
 
 ```bash
-(fuzzyalgo-py38) >pip install --upgrade --user nbconvert
+(fuzzyalgo-py313) >pip install --upgrade --user nbconvert
 	Installing collected packages: mistune, nbconvert
-	  WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in '%APPDATA%\Python\Python38\Scripts' which is not on PATH.
+	  WARNING: The scripts jupyter-dejavu.exe and jupyter-nbconvert.exe are installed in '%APPDATA%\Python\Python313\Scripts' which is not on PATH.
 	  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
 	Successfully installed mistune-2.0.4 nbconvert-7.2.7
 
-(fuzzyalgo-py38) > dir %APPDATA%\Python\Python38\Scripts
+(fuzzyalgo-py313) > dir %APPDATA%\Python\Python313\Scripts
 
-	Directory of %APPDATA%\Python\Python38\Scripts
+	Directory of %APPDATA%\Python\Python313\Scripts
 	23/05/2023  20:09           108.421 jupyter-dejavu.exe
 	23/05/2023  20:09           108.407 jupyter-nbconvert.exe
 				   2 File(s)        216.828 bytes
 
-(fuzzyalgo-py38) > copy %APPDATA%\Python\Python38\Scripts\Python\Python38\Scripts\jupyter-*.exe C:\apps\miniforge3\envs\fuzzyalgo-py38\Scripts
+(fuzzyalgo-py313) > copy %APPDATA%\Python\Python313\Scripts\Python\Python313\Scripts\jupyter-*.exe C:\apps\miniforge3\envs\fuzzyalgo-py313\Scripts
 ```
 
 
