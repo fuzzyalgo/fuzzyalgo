@@ -382,7 +382,6 @@ def _construct_ohlc_collections(dates, datesc, opens, highs, lows, closes, marke
         openSegments.append ( ((dt,  open),  (dt2, open )) )
         closeSegments.append( ((dt2, close), (dtc, close)) )
 
-
     if mktcolors['up'] == mktcolors['down']:
         colors = mktcolors['up']
     else:
@@ -452,24 +451,35 @@ def _construct_candlestick_collections(dates, datesc, opens, highs, lows, closes
     #              (date - delta, close),
     #              (date + delta, close),
     #              (date + delta, open))
-    
-    barVerts = [((datec , open),
-                 (datec , close),
-                 (date, close),
-                 (date, open))
-                for date, datec, open, close in zip(dates, datesc, opens, closes)]
 
-    rangeSegLow   = [((date, low), (date, min(open,close)))
-                     for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes)]
+    barVerts  = []
+    rangeSegLow   = []
+    rangeSegHigh  = []
+    rangeSegLowC   = []
+    rangeSegHighC  = []
     
-    rangeSegHigh  = [((date, high), (date, max(open,close)))
-                     for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes)]
+    for date, datec, open, close in zip(dates, datesc, opens, closes):
+        dt2 = (date+datec)/2
+        barVerts.append( ((datec , open),
+                    (datec , close),
+                    (date, close),
+                    (date, open)) )
 
-    rangeSegLowC   = [((datec, low), (datec, min(open,close)))
-                     for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes)]
+    #for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes):
+    #    dt2 = (date+datec)/2
+    #    rangeSegLow.append( ((dt2, low), min(open,close))) )
     
-    rangeSegHighC  = [((datec, high), (datec, max(open,close)))
-                     for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes)]
+    #for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes):
+    #    dt2 = (date+datec)/2
+    #    rangeSegHigh.append( ((dt2, high), max(open,close))) )
+
+    for date, datec, low, open, close in zip(dates, datesc, lows, opens, closes):
+        dt2 = (date+datec)/2
+        rangeSegLowC.append( ((dt2, low), (dt2, min(open,close))) )
+    
+    for date, datec, high, open, close in zip(dates, datesc, highs, opens, closes):
+        dt2 = (date+datec)/2
+        rangeSegHighC.append( ((dt2, high), (dt2, max(open,close))) )
 
                       
     rangeSegments = rangeSegLow + rangeSegHigh + rangeSegLowC + rangeSegHighC
@@ -497,8 +507,8 @@ def _construct_candlestick_collections(dates, datesc, opens, highs, lows, closes
 
     barCollection = PolyCollection(barVerts,
                                    facecolors=colors,
-                                   edgecolors=edgecolor,
-                                   linewidths=lw
+                                   edgecolors='black',#edgecolor,
+                                   linewidths=0.5
                                    )
 
     return [rangeCollection, barCollection]

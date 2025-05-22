@@ -413,9 +413,10 @@ def plot( data, **kwargs ):
         minx = xdates[0]  - (0.45 * avg_dist_between_points)
         maxx = xdates[-1] + (0.45 * avg_dist_between_points)
     
-    if len(xdates) == 1:  # kludge special case
-        minx = minx - 0.75
-        maxx = maxx + 0.75
+    #if len(xdates) == 1:  # kludge special case
+    #    print('hi there')
+    #    minx = minx - 0.75
+    #    maxx = maxx + 0.75
     if ptype not in VALID_PMOVE_TYPES:
         _lows  = lows
         _highs = highs

@@ -24,7 +24,7 @@ import time
 # global(g) config/parameters variables
 #
 gTimezoneUTC = timezone.utc
-gTdOffset= timedelta(hours=2)   # TODO recognise me - summer time 3h and winter time 2h
+gTdOffset= timedelta(hours=3)   # TODO recognise me - summer time 3h and winter time 2h
 
 # normal operation
 #gTicksPerPeriod = 36#36000  #  10hours * 36000secs/hours -> 36000 ticks per period
@@ -32,11 +32,13 @@ gTdOffset= timedelta(hours=2)   # TODO recognise me - summer time 3h and winter 
 gDtTo   = datetime.now(gTimezoneUTC) + gTdOffset
 
 # investigate a certain time
-gTicksPerPeriod = 1000*2  #  
+gTicksPerPeriod = 50*2  #  
 gTimeDelta = timedelta( minutes=240 )
 #gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
 #gDtTo   = datetime(2025, 1, 24, 16, 45, 1, 0, tzinfo=gTimezoneUTC)
-gIndexV = 1000
+#gDtTo   = datetime(2025, 3, 10, 13, 4, 4, 0, tzinfo=gTimezoneUTC)
+#gDtTo   = datetime(2025, 3, 10, 13, 5, 0, 0, tzinfo=gTimezoneUTC)
+gIndexV = 500
 
 #
 # global(g) variables
@@ -391,7 +393,17 @@ print( gSym, "TDMSC  HL: ", tdmsc_hl, " high: ", gNpa['tdmsc'][idxmax], "@", tdm
 gNpa = np.flip(gNpa)
 
 
-gNpaPrice0 = gNpa['price'][0]
+gH.mt5_position_sltp_follow2( gSym )
+
+op, dfbs = gH.mt5_cnt_orders_and_positions( gSym )
+print( dfbs )
+
+if dfbs.cnt.POS_BUY > 0:
+    gNpaPrice0 = dfbs.price.POS_BUY
+elif dfbs.cnt.POS_SELL > 0:
+    gNpaPrice0 = dfbs.price.POS_SELL
+else:    
+    gNpaPrice0 = gNpa['price'][0]
     
 gNPAoffset = gNpaPrice0 * np.ones(len(gNpa))
 gNpaRealTrack = (gNpa['price'] - gNPAoffset)/0.00001
@@ -579,31 +591,68 @@ indexv = gIndexV
 
 import talib
 
-# cci = talib.CCI( gNpaRealTrack,gNpaRealTrack,gNpaRealTrack,15 ) 
-# plt.plot(t[-indexv:], cci[-indexv:], label='CCI', color='y', linewidth=1)
+#cci = talib.CCI( gNpaRealTrack,gNpaRealTrack,gNpaRealTrack,15 ) 
+#cci = talib.MA( cci,15 ) 
+#plt.plot(t[-indexv:], cci[-indexv:], label='CCI', color='y', linewidth=3)
 
-rsi = talib.RSI( gNpaRealTrack,150 ) 
-plt.plot(t[-indexv:], rsi[-indexv:]-50, label='RSI', color='b', linewidth=1)
+#rsi = talib.RSI( gNpaRealTrack,150 ) 
+#rsi = talib.MA( rsi,15 ) 
+#plt.plot(t[-indexv:], rsi[-indexv:]-50, label='RSI', color='b', linewidth=1)
 
-sto = talib.STOCH( gNpaRealTrack, gNpaRealTrack, gNpaRealTrack, 150, 90, 0, 30, 0)
-#print( sto[0][-indexv:] )
-plt.plot(t[-indexv:], sto[0][-indexv:]-50, label='STO1', color='y', linewidth=1)
-plt.plot(t[-indexv:], sto[1][-indexv:]-50, label='STO2', color='g', linewidth=1)
+
+#sto = talib.STOCH( gNpaRealTrack, gNpaRealTrack, gNpaRealTrack, 150, 90, 0, 30, 0)
+##print( sto[0][-indexv:] )
+#plt.plot(t[-indexv:], sto[0][-indexv:]-50, label='STO1', color='y', linewidth=1)
+#plt.plot(t[-indexv:], sto[1][-indexv:]-50, label='STO2', color='g', linewidth=1)
         
 upper, mid, lower = talib.BBANDS(np.squeeze(gNpaRealTrack), 
  	                              nbdevup=1, nbdevdn=1, timeperiod=100)
-# for cnt in range(0,33,1):
-#  	                  mid[cnt] = 0
-plt.plot(t[-indexv:], upper[-indexv:], label="Upper band", linewidth=0.3)
-plt.plot(t[-indexv:], mid[-indexv:],   label='Middle band',linewidth=0.3)
-plt.plot(t[-indexv:], lower[-indexv:], label='Lower band', linewidth=0.3)
+## for cnt in range(0,33,1):
+##  	                  mid[cnt] = 0
+#plt.plot(t[-indexv:], upper[-indexv:], label="Upper band", linewidth=0.3)
+#plt.plot(t[-indexv:], mid[-indexv:],   label='Middle band',linewidth=0.3)
+#plt.plot(t[-indexv:], lower[-indexv:], label='Lower band', linewidth=0.3)
 
 
-plt.plot(t[-indexv:], gNpaRealTrack[-indexv:], label='price', color='r', linewidth=1)
-plt.plot(t[-indexv:], gNpaPricePrediction[-indexv:], label='prediction', color='b', linewidth=0.5)
+gNpaRealTrackMA = talib.MA( gNpaRealTrack,30 ) 
+plt.plot(t[-indexv:], gNpaRealTrackMA[-indexv:], label='price', color='r', linewidth=1)
+
+#gNpaRealTrackMA = talib.MA( gNpaRealTrack,50 ) 
+#plt.plot(t[-indexv:], gNpaRealTrackMA[-indexv:], label='priceMA15', color='r', linewidth=0.1)
+
+#gNpaPricePrediction = talib.MA( gNpaPricePrediction,15 ) 
+plt.plot(t[-indexv:], gNpaPricePrediction[-indexv:], label='prediction', color='b', linewidth=2.5)
+
+# https://stackoverflow.com/questions/24988448/how-to-draw-vertical-lines-on-a-given-plot
+lenp = len(gNpaPricePrediction)
+for idx in range(lenp):
+    if 0 < idx:
+        price = gNpaRealTrack[idx]
+        pred = gNpaPricePrediction[idx]
+        if gNpaPricePrediction[idx] > gNpaPricePrediction[idx-1]:
+            #plt.vlines(x=idx,ymin=pred,ymax=price, color='b', linewidth=0.5)
+            plt.vlines(x=idx,ymin=(price-1),ymax=(price+1), color='b', linewidth=1)
+            plt.hlines(y=price,xmin=(idx-5),xmax=(idx+5), color='b', linewidth=1)
+            #plt.axvline(x=idx, color='b', linewidth=0.5)
+        elif gNpaPricePrediction[idx] < gNpaPricePrediction[idx-1]:
+            #plt.vlines(x=idx,ymin=pred,ymax=price, color='r', linewidth=0.5)
+            plt.vlines(x=idx,ymin=(price-1),ymax=(price+1), color='r', linewidth=1)
+            plt.hlines(y=price,xmin=(idx-5),xmax=(idx+5), color='r', linewidth=1)
+            #plt.axvline(x=idx, color='r', linewidth=0.5)
+
+        else:
+            #plt.vlines(x=idx,ymin=pred,ymax=price, color='r', linewidth=0.5)
+            plt.vlines(x=idx,ymin=(price-1),ymax=(price+1), color='y', linewidth=1)
+            plt.hlines(y=price,xmin=(idx-5),xmax=(idx+5), color='y', linewidth=1)
+
+
 
 z = np.zeros(len(gNpa))
-plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=1)
+plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=3)
+z = z + 20 
+plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=3)
+z = z - 40 
+plt.plot(t[-indexv:], z[-indexv:], label='zero', linewidth=3)
 
 
 # plt.plot(t, gNpa['price'], label='price', color='r', linewidth=0.1)
@@ -615,7 +664,6 @@ plt.ylabel( "Y", fontsize=gFontSize)
 plt.legend()
 plt.grid(True)
 plt.show()
-
 
 
 

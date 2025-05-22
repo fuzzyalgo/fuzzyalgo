@@ -22,6 +22,10 @@ ssh -T git@github.com
 cd \<your-source-path>
 # clone the directory
 git clone git@github.com:fuzzyalgo/fuzzyalgo.git
+# clone the data to train on
+git clone git@github.com:fuzzyalgo/fuzzyalgo-data-rfx-2025-04.git
+git clone git@github.com:fuzzyalgo/fuzzyalgo-data-rfx-2025-05.git
+...
 
 ```
 
@@ -44,14 +48,14 @@ Start Windows Command Prompt:
 
 ```
 
-### setup fuzzyalgo as linux conda env fuzzyalgo-py384
+### setup fuzzyalgo as linux conda env fuzzyalgo-py313
 
 
 
 ```bash
 $ cd \<your-source-path>\fuzzyalgo
-$ conda create -n fuzzyalgo-py312  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.12
-$ conda activate fuzzyalgo-py312
+$ conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
+$ conda activate fuzzyalgo-py313
 # https://github.com/TA-Lib/ta-lib-python
 $ conda install -c conda-forge ta-lib
 $ conda install -c conda-forge libta-lib
@@ -69,7 +73,7 @@ $ python
 $ cd ..
 $ rm -Rf ta-lib-0.6.4
 $ cd ..
-$ pip install filterpy scikit-fuzzy networkx pynput 
+$ pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
 # do that later in wine python installation
 # $ pip install MetaTrader5
 $ python setup.py
@@ -83,24 +87,30 @@ $ conda deactivate
 
 ```PowerShell
 > cd \<your-source-path>\fuzzyalgo
-> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
-> conda activate fuzzyalgo-py38
+> conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
+> conda activate fuzzyalgo-py313
 > pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
-> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
+> pip install psutil  
 > python setup.py
 > conda deactivate
+
+# download ta-lib wheels for windows:
+# https://github.com/cgohlke/talib-build?tab=readme-ov-file
+# https://github.com/cgohlke/talib-build/releases
 ```
 
 ```bash
 (base) C:\Windows\system32>cd \<your-source-path>\fuzzyalgo
 (base) \<your-source-path>\fuzzyalgo>
-(base) \<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
+(base) \<your-source-path>\fuzzyalgo> conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
+(base) \<your-source-path>\fuzzyalgo> conda activate fuzzyalgo-py313
 (fuzzyalgo-py38) \<your-source-path>\fuzzyalgo>
 (fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
-(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+(fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
 (fuzzyalgo-py38) \<your-source-path>\fuzzyalgo> python setup.py
-	Run: win-64bit in conda env:  fuzzyalgo-py38
-	dir_py_lib:  \<your-miniforge3-path>\miniforge3\envs\fuzzyalgo-py38\Lib
+	Run: win-64bit in conda env:  fuzzyalgo-py313
+	dir_py_lib:  \<your-miniforge3-path>\miniforge3\envs\fuzzyalgo-py313\Lib
 	dir_cwd:     \<your-source-path>\fuzzyalgo
 	dir_script:  \<your-source-path>\fuzzyalgo
 	name_user:   <your-username>
@@ -161,7 +171,7 @@ $ conda deactivate
 }
 ```
 
-### run fuzzyalgo conda env fuzzyalgo-py38
+### run fuzzyalgo conda env fuzzyalgo-py313
 
 #### run from 'Miniforge Prompt'
 
@@ -169,7 +179,7 @@ $ conda deactivate
 
 ##### spyder
 ```bash
-> conda activate fuzzyalgo-py38
+> conda activate fuzzyalgo-py313
 > cd \<your-source-path>\fuzzyalgo
 > spyder 
 > conda deactivate
@@ -177,7 +187,7 @@ $ conda deactivate
 
 ##### jupyter notebook
 ```bash
-> conda activate fuzzyalgo-py38
+> conda activate fuzzyalgo-py313
 > cd \<your-source-path>\fuzzyalgo
 > jupyter notebook
 > conda deactivate
@@ -185,30 +195,30 @@ $ conda deactivate
 
 ##### python
 ```bash
-> conda activate fuzzyalgo-py38
+> conda activate fuzzyalgo-py313
 > cd \<your-source-path>\fuzzyalgo
 > python <your-python>.py
 > conda deactivate
 ```
 
-## re-install conda env fuzzyalgo-py38
+## re-install conda env fuzzyalgo-py313
 
 ```bash
 # if activated, then deactivate first
-> conda activate fuzzyalgo-py38
+> conda activate fuzzyalgo-py313
 > cd \<your-source-path>\fuzzyalgo
 > jupyter notebook
 > conda deactivate
 # remove the env
-> conda env remove -n fuzzyalgo-py38
+> conda env remove -n fuzzyalgo-py313
 # re-install the env
 > cd \<your-source-path>\fuzzyalgo
-> conda create -n fuzzyalgo-py38  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.8
-> conda activate fuzzyalgo-py38
+> conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
+> conda activate fuzzyalgo-py313
 > python --version
-	Python 3.8.15
+	Python 3.13.2
 > pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
-> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
 > python setup.py
 > conda deactivate
 ```
@@ -247,7 +257,7 @@ conda install -c conda-forge nb_conda_kernels
 ```bash
 
 win
-> pip install .\install\TA_Lib-0.4.24-cp38-cp38-win_amd64.whl
+> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
 > pip install MetaTrader5
 
 linux

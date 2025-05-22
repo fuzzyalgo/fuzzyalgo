@@ -172,7 +172,7 @@ class Algotrader():
         cf_fn = path_mt5 + "\\config\\cf_symbols_" + path_mt5_user + ".json"
         self.set_cf_symbols(cf_fn)
         self.cf_symbols_default = 'EURUSD'
-        self.cf_symbols_all =    ['AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD','CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD','EURCHF','EURGBP','EURJPY','EURNZD','EURUSD','GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD','GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD','USDCAD','USDCHF','USDJPY']
+        #self.cf_symbols_all =    ['AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD','CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD','EURCHF','EURGBP','EURJPY','EURNZD','EURUSD','GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD','GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD','USDCAD','USDCHF','USDJPY']
 
         # initialise PID params config cf_pid_params
         self.gUsePid = False
@@ -205,8 +205,8 @@ class Algotrader():
         self.gCrazyFigPattern = False
         if False == self.gGlobalFig and True == self.gCrazyFigPattern:
             raise ValueError( "ERROR: self.gGlobalFig[False] does not work with self.gCrazyFigPattern[True]: ")
-        self.gShowFig = False
-        self.gSaveFig = False
+        self.gShowFig = True
+        self.gSaveFig = True
         self.gVerbose = 0
         self.gTightLayout = True
         self.gShowNonTrading = True
@@ -243,11 +243,11 @@ class Algotrader():
                 ['T144','T233','T377','T610','T987','T1597']\
                ]
 
-        self.perarr=[\
-                ['T1'],\
-                ['T2'],\
-                ['T3']\
-                ]
+        # self.perarr=[\
+        #         ['T1'],\
+        #         ['T2'],\
+        #         ['T3']\
+        #         ]
 
         # self.perarr=[\
         #         # ['T3'],\
@@ -256,9 +256,9 @@ class Algotrader():
         #         ]
         
         # winter time
-        self.tdOffset= timedelta(hours=2)
+        #self.tdOffset= timedelta(hours=2)
         # summer time
-        #self.tdOffset= timedelta(hours=3)
+        self.tdOffset= timedelta(hours=3)
         # =============================================================================
     	# one hour ahead of 'Europe/Berlin' and timezone of RFX trade server
     	# timezone=pytz.timezone('Europe/Helsinki')
@@ -1319,8 +1319,9 @@ class Algotrader():
 
         if 0 <vol:
             df    = df.iloc[0:((vol*count))]
-            if len(df) != count*vol:
-                raise ValueError(_sprintf("copy_rates_from: len(df) != count*vol - %d != %d ", len(df), count*vol) )
+            if 'T3600' != per:
+                if len(df) != count*vol:
+                    raise ValueError(_sprintf("copy_rates_from: len(df) != count*vol - %d != %d ", len(df), count*vol) )
                 
     
         if 0 < secs :
@@ -1482,7 +1483,7 @@ class Algotrader():
                     # TODO FIXME this shall not happen in first place, where is the data?
                     dfstartend = df.iloc[start]
                 else:                    
-                    dfstartend = df.iloc[start:end]
+                    dfstartend = df.iloc[start:(end+1)]
                 if 1 < self.gVerbose: print( _sprintf(" cnt[%d] vol[%d] start[%d] : end[%s]",cnt, vol, start,end))
                 # TODO TICKS kaputt
                 # https://stackoverflow.com/questions/944700/how-can-i-check-for-nan-values
@@ -1536,6 +1537,18 @@ class Algotrader():
                         # 0 '2020-12-11 17:00:00'
                         # 1 '2020-12-11 16:59:58'
                         # 2 '2020-12-11 16:59:58'
+                        '''
+                        # TODO
+                        #  improve partial key indexing performance
+                        #  Indexing for entries in a series or dataframe with a multi-index has dramatically worse performance when using partial keys.  
+                        # https://github.com/pandas-dev/pandas/issues/38650
+                        # https://github.com/pandas-dev/pandas/issues/45681
+                        %timeit gH.gDF['TICKS']['EURUSD'].loc['2025-04-30 17:29'].iloc[-1]['index']
+                            1.38 ms ± 22.6 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                        
+                        %timeit gH.gDF['TICKS']['EURUSD'].loc['2025-04-30 17:29:32'].iloc[-1]['index']
+                            1.37 ms ± 12.4 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+                        '''
                         startidx = df.loc[strstart].iloc[lenstrstart-1]['index']
                         startidx = lendf - startidx - 1
                         break
@@ -1763,11 +1776,18 @@ class Algotrader():
             if 0 < secs :
                 volume    = len(dfstartend)
             
-            closeask  = dfstart.ask
-            highask   = dfstartend.ask.max()
-            lowask    = dfstartend.ask.min()
-            openask   = dfend.ask
-    
+            # closeask  = dfstart.ask
+            # highask   = dfstartend.ask.max()
+            # lowask    = dfstartend.ask.min()
+            # openask   = dfend.ask
+            closeprice= dfstartend.iloc[0].price
+            highprice = dfstartend.price.max()
+            lowprice  = dfstartend.price.min()
+            openprice = dfstartend.iloc[-1].price
+            #if per == 'T5':
+            #    print(openprice,highprice,lowprice, closeprice)
+            #    print(dfstartend)
+            
             closebid  = dfstart.bid
             highbid   = dfstartend.bid.max()
             lowbid    = dfstartend.bid.min()
@@ -1789,10 +1809,14 @@ class Algotrader():
             npa[ari]['time_msc'] = time_msc
             npa[ari]['volume']   = volume
             
-            npa[ari]['open']     = openask
-            npa[ari]['high']     = highask
-            npa[ari]['low']      = lowask
-            npa[ari]['close']    = closeask
+            # npa[ari]['open']     = openask
+            # npa[ari]['high']     = highask
+            # npa[ari]['low']      = lowask
+            # npa[ari]['close']    = closeask
+            npa[ari]['open']     = openprice
+            npa[ari]['high']     = highprice
+            npa[ari]['low']      = lowprice
+            npa[ari]['close']    = closeprice
     
             npa[ari]['openbid']  = openbid
             npa[ari]['highbid']  = highbid
@@ -1809,10 +1833,14 @@ class Algotrader():
             npa[ari]['lowtdmsc']   = lowtdmsc
             npa[ari]['closetdmsc'] = closetdmsc
 
-            npa[ari]['pdopen']     = openask
-            npa[ari]['pdhigh']     = highask
-            npa[ari]['pdlow']      = lowask
-            npa[ari]['pdclose']    = closeask
+            # npa[ari]['pdopen']     = openask
+            # npa[ari]['pdhigh']     = highask
+            # npa[ari]['pdlow']      = lowask
+            # npa[ari]['pdclose']    = closeask
+            npa[ari]['pdopen']     = openprice
+            npa[ari]['pdhigh']     = highprice
+            npa[ari]['pdlow']      = lowprice
+            npa[ari]['pdclose']    = closeprice
             
             #print ( per + " " + str(cnt)  + " " + str(count) )
             cnt   = cnt + 1
@@ -2031,7 +2059,8 @@ class Algotrader():
         
         return df
     
-    # END def copy_rates_from(sym,per,dt_from,count):
+    # def copy_rates_from(sym,per,dt_from,count):
+    # =============================================================================
 
     # =============================================================================
     # def _calculate_atr(atr_length, highs, lows, closes):
@@ -2608,38 +2637,16 @@ class Algotrader():
             raise ValueError("mt5_init({}}) failed at set_gc0, exit") 
         
         for sym in self.cf_symbols[self.gACCOUNT]: 
-        
-            sym_info = self.mt5.symbol_info (sym) 
-            if None is sym_info: 
-                raise ValueError(sym + " mt5_init({}}) failed at set_gc0, exit") 
-              
-            # if the sym is unavailable in MarketWatch, add it 
-            if not sym_info.visible: 
-                print(sym, "is not visible, trying to switch on") 
-                if not self.mt5.symbol_select(sym,True): 
-                    raise ValueError(sym + "symbol_select({}}) failed at set_gc0, exit") 
-
-            # calculate the price            
-            #point    = self.mt5.symbol_info (sym).point
-            digits   = self.mt5.symbol_info (sym).digits
-            #symbol_info_dict = self.mt5.symbol_info(sym)._asdict()
-            #for prop in symbol_info_dict:
-            #    print("  {}={}".format(prop, symbol_info_dict[prop]))
-            ask      = self.mt5.symbol_info_tick(sym).ask
-            bid      = self.mt5.symbol_info_tick(sym).bid
-            if 0.0 < ask and 0.0 < bid :
-                price    = round( (bid + (ask - bid ) / 2), digits )
-                self.g_c0[sym] = price
-                print( sym, price, "set new base line - start point - gc0 price")
+            self.set_gc0_price(sym)
                 
     # END: def set_gc0(self):
     # =============================================================================
 
     # =============================================================================
-    # def set_gc0_price(self, sym, price):
+    # def set_gc0_price(self, sym):
     #     
     # =============================================================================
-    def set_gc0_price(self, sym, price):
+    def set_gc0_price(self, sym):
     
         # check if connection to MetaTrader 5 successful
         if not self.mt5_init():
@@ -2666,10 +2673,10 @@ class Algotrader():
         if 0.0 < ask and 0.0 < bid :
             price    = round( (bid + (ask - bid ) / 2), digits )
             self.g_c0[sym] = price
-            if 0 < self.verbose:
-                print( sym, price, "set new base line - start point - gc0 price")
+            #if 0 < self.verbose:
+            print( sym, price, "set new base line - start point - gc0 price")
                 
-    # END: def set_gc0_price(self, sym, price):
+    # END: def set_gc0_price(self, sym):
     # =============================================================================
 
 
@@ -2709,6 +2716,7 @@ class Algotrader():
         
     # END def get_ticks_and_rates(self, sym): 
     # =============================================================================
+
 
 
     # =============================================================================
@@ -2829,11 +2837,11 @@ class Algotrader():
                           ('t1', '<i8'),  ('t0', '<i8'),  ('dt_to', '<i8'),\
                           ('c1', '<f8'), ('c0', '<f8'),('ps1', '<f8'), ('ps0', '<f8'),\
                           ('DELTA', '<i8'), ('PS', '<i8'), ('OC', '<i8'), ('HL', '<i8'), ('TD', '<i8'), ('VOLS', '<i8'),\
-                          ('TT', '<i8'), ('HL/TD', '<f8'), ('HL/VOLS', '<f8') ])
+                          ('TT', '<i8'), ('HL/TD', '<f8'), ('HL/VOLS', '<f8'), ('VOLS/TD', '<f8'), ('OC/HL', '<f8'), ('SPREAD', '<i8'), ('SUMCOL', '<f8') ])
                           
         npa = np.zeros(lenper, dtype=dtype)
         dfana = pd.DataFrame(npa, index=list(self.cf_periods[self.gACCOUNT].keys()))
-        dfana['SUMCOL'] = 0
+        dfana['SUMCOL'] = 0.0
         dfana.loc['SUMROW']  = 0
         # =============================================================================
         # print( dfana )
@@ -2868,18 +2876,43 @@ class Algotrader():
             # print( c1 )
             # print( c0 )
 
-            ps1 = df.iloc[0].ps
-            ps0 = df.iloc[lendf-1].ps
-            #print( int( round( ps0 - ps1 )), ps1,ps0 )
             
             DELTA = int(0.0)
             if None != self.g_c0[sym]:
                 DELTA = int( (c0 - self.g_c0[sym]) / points ) 
-            PS = int( round( ps0 - ps1 ))
-            OC = int( (c0 -c1)/points ) 
-            HL = int((df.high.max() - df.low.min())/points) # int(df.iloc[lendf-2].Pclose)
-            TD = int((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[0].time_msc)/1000) # int(df.iloc[lendf-1].Pclose)
+
+            # count=10
+            ps1 = df.iloc[0].ps
+            ps0 = df.iloc[lendf-1].ps
+            #print( int( round( ps0 - ps1 )), ps1,ps0 )
+            #PS = int( round( ps0 - ps1 ))
+            # count = -1 last element
+            # TODO clean up source here ps vs pd
+            ps1 = df.iloc[-2].pd
+            ps0 = df.iloc[-1].pd
+            PS = PS = int( round( ps0 - ps1 ))
+            
+            #print(df[['close','pd'])
+            
+            # count=10
+            #OC = int( (c0 -c1)/points ) 
+            # count = -1 last element
+            OC = int( (df.iloc[-1].close - df.iloc[-2].close)/points ) 
+            
+            # count=10
+            #HL = int((df.high.max() - df.low.min())/points) # int(df.iloc[lendf-2].Pclose)
+            # count = -1 last element
+            HL = int((df.iloc[-1].high.max() - df.iloc[-1].low.min())/points)
+            
+            # count=10
+            #TD = int((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[0].time_msc)/1000) # int(df.iloc[lendf-1].Pclose)
+            # count = -1 last element
+            TD = (round((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[-2].time_msc)/1000)) 
+            
+            # count=10
             VOLS = df.volume.sum()
+            # count = -1 last element
+            VOLS = df.iloc[lendf-1].volume
             
             # print( OC )
             # print( HL )
@@ -2895,6 +2928,18 @@ class Algotrader():
             # print( TT )
             HL_VOLS = round((HL/VOLS), 1)
             # print( HL_VOLS )
+
+            if 0 == TD:
+                VOLS_TD = round((VOLS/0.1),1)
+            else:
+                VOLS_TD = round((VOLS/TD),1)
+
+            if 0 == HL:
+                OC_HL = 0
+            else:
+                OC_HL = round((abs(OC)/HL),1)
+                
+            SPREAD = int(round(df.iloc[-1].highspread))
             
             dfana.loc[per,'sec']        = self.cf_periods[self.gACCOUNT][per]['seconds']
             dfana.loc[per,'vol']        = self.cf_periods[self.gACCOUNT][per]['volume']
@@ -2909,10 +2954,16 @@ class Algotrader():
             dfana.loc[per,'ps1']        = ps1
             dfana.loc[per,'ps0']        = ps0
             dfana.loc[per,'VOLS']       = VOLS
-            dfana.loc[per,'HL/TD']      = HL_TD
             dfana.loc[per,'TT']         = TT
+            dfana.loc[per,'HL/TD']      = HL_TD
             dfana.loc[per,'HL/VOLS']    = HL_VOLS
-            dfana.loc[per,'SUMCOL']     = dfana.loc[per,'HL/TD'] + dfana.loc[per,'HL/VOLS']
+            dfana.loc[per,'VOLS/TD']    = VOLS_TD
+            dfana.loc[per,'OC/HL']      = OC_HL
+            dfana.loc[per,'SPREAD']     = SPREAD
+            dfana.loc[per,'SUMCOL']     = round(dfana.loc[per,'OC/HL'] + dfana.loc[per,'VOLS/TD'],1)
+            
+            #print(dfana[['VOLS/TD','OC/HL','HL/TD']])
+            
             
             # TODO implement topen and tclose
             # now  t0 -> tclose, which is gDF[DTindex] -> e.g. GBPJPY 20210111_172422 END
@@ -2929,29 +2980,32 @@ class Algotrader():
         # now  t0 -> tclose, which is gDF[DTindex] -> e.g. GBPJPY 20210111_172422 END
         #  and t1 -> topen from MT5 system
         dfana['dt_to'] = int(dt_to.timestamp()*1000) # convert to milli secs
-        dfana.loc['SUMROW','sec']   = int(dfana['sec'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','vol']   = int(dfana['vol'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','cnt']   = int(dfana['cnt'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','t0']    = int(dfana['t0'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','t1']    = int(dfana['t1'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','c1']    = dfana['c1'].iloc[0:lenper].sum()/lenper
-        dfana.loc['SUMROW','c0']    = dfana['c0'].iloc[0:lenper].sum()/lenper
-        dfana.loc['SUMROW','ps1']   = dfana['ps1'].iloc[0:lenper].sum()/lenper
-        dfana.loc['SUMROW','ps0']   = dfana['ps0'].iloc[0:lenper].sum()/lenper
-        dfana.loc['SUMROW','DELTA'] = int(dfana['DELTA'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','PS']    = int(dfana['PS'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','OC']    = int(dfana['OC'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','HL']    = int(dfana['HL'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','TD']    = int(dfana['TD'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','VOLS']  = int(dfana['VOLS'].iloc[0:lenper].sum()/lenper)
-        dfana.loc['SUMROW','TT']= int(round(dfana['TT'].iloc[0:lenper].sum()/lenper,1))
-        dfana.loc['SUMROW','HL/TD'] = round(dfana['HL/TD'].iloc[0:lenper].sum()/lenper,1)
-        dfana.loc['SUMROW','HL/VOLS']= round(dfana['HL/VOLS'].iloc[0:lenper].sum()/lenper,1)
+        dfana.loc['SUMROW','sec']       = int(dfana['sec'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','vol']       = int(dfana['vol'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','cnt']       = int(dfana['cnt'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','t0']        = int(dfana['t0'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','t1']        = int(dfana['t1'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','c1']        = dfana['c1'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','c0']        = dfana['c0'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','ps1']       = dfana['ps1'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','ps0']       = dfana['ps0'].iloc[0:lenper].sum()/lenper
+        dfana.loc['SUMROW','DELTA']     = int(dfana['DELTA'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','PS']        = int(dfana['PS'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','OC']        = int(dfana['OC'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','HL']        = int(dfana['HL'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','TD']        = int(dfana['TD'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','VOLS']      = int(dfana['VOLS'].iloc[0:lenper].sum()/lenper)
+        dfana.loc['SUMROW','TT']        = int(round(dfana['TT'].iloc[0:lenper].sum()/lenper,1))
+        dfana.loc['SUMROW','HL/TD']     = round(dfana['HL/TD'].iloc[0:lenper].sum()/lenper,1)
+        dfana.loc['SUMROW','HL/VOLS']   = round(dfana['HL/VOLS'].iloc[0:lenper].sum()/lenper,1)
+        dfana.loc['SUMROW','VOLS/TD']   = round(dfana['VOLS/TD'].iloc[0:lenper].sum()/lenper,1)
+        dfana.loc['SUMROW','OC/HL']     = round(dfana['OC/HL'].iloc[0:lenper].sum()/lenper,1)
+        dfana.loc['SUMROW','SPREAD']    = int(round(dfana['SPREAD'].iloc[0:lenper].sum()/lenper))
             
         sumrow = dfana['SUMCOL'].iloc[0:lenper].sum()/lenper
-        sumcol = dfana.loc['SUMROW','HL/TD'] + dfana.loc['SUMROW','HL/VOLS'] 
-        dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
-        dfana.loc['SUMROW','SUMCOL']  = round(sumcol,1)
+        sumcol = dfana.loc['SUMROW','VOLS/TD'] + dfana.loc['SUMROW','OC/HL'] 
+        dfana.loc['SUMROW','SUMCOL']    = round(sumrow,1)
+        dfana.loc['SUMROW','SUMCOL']    = round(sumcol,1)
         # TODO fixme one day - precision calculation error
         #if round(sumrow,1) == round(sumcol,1):
         #    dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
@@ -2994,7 +3048,7 @@ class Algotrader():
     # =============================================================================
     def print_analyse_df(self,dfana):
     
-        print( dfana[['DELTA','PS','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']] )
+        print( dfana[['DELTA','PS','OC','HL','TD','TT','SPREAD','OC/HL','VOLS/TD','HL/TD','SUMCOL']] )
     
     # END def print_analyse_df(self,dfana):
     # =============================================================================
@@ -3044,7 +3098,7 @@ class Algotrader():
     
         # RATES
         for per in self.cf_periods[self.gACCOUNT]:
-            # print(per)
+            # print('analyse_df2', per)
     
             #print(sym + str(dt_to.strftime("_%Y%m%d_%H%M%S_SYM_")) + per)
             df = self.get_df_rates( dt_to, per, sym )
@@ -3407,12 +3461,15 @@ class Algotrader():
     # =============================================================================
     def append_df(self, key, sym, df):
 
+        
+        # https://stackoverflow.com/questions/75543788/pandas-concat-doesnt-work-dataframe-object-has-no-attribute-concat-pandas
+        
         # if all symbols have to be written into one single table
         if None == sym:
             if key not in self.gDF: 
                 self.gDF[key] = df
             else:
-                self.gDF[key] = self.gDF[key].append( df )
+                self.gDF[key] = pd.concat([self.gDF[key], df])
     
         # if sym get their own table
         else:
@@ -3420,7 +3477,8 @@ class Algotrader():
             if sym not in self.gDF[key]: 
                 self.gDF[key][sym] = df
             else:
-                self.gDF[key][sym] = self.gDF[key][sym].append( df )
+                
+                self.gDF[key][sym] = pd.concat([self.gDF[key][sym], df ])
             
     
     # END def append_df(self, key, sym, df):
@@ -3527,6 +3585,9 @@ class Algotrader():
         for sym in self.cf_symbols[self.gACCOUNT]: 
             #print(str(lenper) + ' ' + sym)
             width, height, nrows, ncols = _calc_subplot_rows_x_cols( lenper ) 
+            ## TODO hack
+            #nrows = 1
+            #ncols = 1
             fig_sym = _mpf_figure_open(self.gShowFig,self.gTightLayout,width,height)
             self.g_fig_all_periods_per_sym[sym] = {}
             self.g_fig_all_periods_per_sym[sym]['fig_sym'] = fig_sym
@@ -3539,6 +3600,8 @@ class Algotrader():
                 ax0 = fig_sym.add_subplot(nrows,ncols,cnt_sym)
                 self.g_fig_all_periods_per_sym[sym][per] = ax0
                 cnt_sym = cnt_sym+1
+                ## TODO hack
+                #break
                 
 
     # END def open_fig_all_periods_per_sym():
@@ -3548,7 +3611,7 @@ class Algotrader():
     # def save_fig_all_periods_per_sym():
     #     
     # =============================================================================
-    def save_fig_all_periods_per_sym( self, figure, sym):
+    def save_fig_all_periods_per_sym( self, figure, sym, file_extension = '.png'):
         
         #_mpf_figure_show(self.gShowFig,self.gGlobalFig)
 
@@ -3557,7 +3620,7 @@ class Algotrader():
         
             home_dir = ".\\" + self.gACCOUNT + "\\SYM\\" + sym
             os.makedirs(home_dir, exist_ok=True)
-            filename_sym =  home_dir +  "\\" + str(dt_to.strftime("%Y%m%d_%H%M%S.png"))
+            filename_sym =  home_dir +  "\\" + str(dt_to.strftime("%Y%m%d_%H%M%S")) + file_extension
             _mpf_figure_save(figure, filename_sym)
 
     # END def save_fig_all_periods_per_sym():
@@ -3593,6 +3656,10 @@ class Algotrader():
                 # print(per)
                 ax0 = self.g_fig_all_periods_per_sym[sym][per]
                 ax0.clear()
+                ## TODO hack
+                #break
+                
+                
 
     # END def clear_ax_fig_all_periods_per_sym():
     # =============================================================================
@@ -3601,180 +3668,549 @@ class Algotrader():
 
 
     # =============================================================================
-    # def print_fig_all_periods_per_sym():
+    # def print_fig_all_periods_per_sym( self, sym ):
     #     
     # =============================================================================
-    def print_fig_all_periods_per_sym( self ):
+    def print_fig_all_periods_per_sym( self, sym ):
     
         dt_to    = self.gDt['dt_to']
     
         if self.gGlobalFig and not self.gCrazyFigPattern: self.clear_ax_fig_all_periods_per_sym()
         if not self.gGlobalFig: self.open_fig_all_periods_per_sym()
 
-        for sym in self.cf_symbols[self.gACCOUNT]: 
+        # print(sym)
+        # op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+        # print( dfbs )
 
-            # print(sym)
-            # op, dfbs = self.mt5_cnt_orders_and_positions( sym )
-            # print( dfbs )
+        fig_sym = self.g_fig_all_periods_per_sym[sym]['fig_sym']
 
-            fig_sym = self.g_fig_all_periods_per_sym[sym]['fig_sym']
+        if True == self.gUsePid:
+            dfana = self.get_df_rates( dt_to, 'ANA', sym )
+
+        # RATES
+        for per in self.cf_periods[self.gACCOUNT]:
+            # print(per)
     
-            if True == self.gUsePid:
-                dfana = self.get_df_rates( dt_to, 'ANA', sym )
-    
-            # RATES
-            for per in self.cf_periods[self.gACCOUNT]:
-                # print(per)
-        
-                df = self.get_df_rates( dt_to, per, sym )
-                lendf    = len(df)
-                if 0 >= lendf :
-                    #print("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(lendf) )
-                    continue
+            df = self.get_df_rates( dt_to, per, sym )
+            lendf    = len(df)
+            if 0 >= lendf :
+                #print("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(lendf) )
+                continue
+            
+            ax0 = self.g_fig_all_periods_per_sym[sym][per]
+            filename =  per + '_' + sym + '.png'
+
+
+            # TODO NORMalise
+            if None != self.g_c0[sym]:
+
+                c0 = df.iloc[lendf-1].close
+                Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+                #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
+                Pc0B  = None # Pc0 + 20
+                Pc0B1 = None # Pc0 + 10
+                Pc0S  = None # Pc0 - 10
+                Pc0S1 = None # Pc0 - 20
                 
-                ax0 = self.g_fig_all_periods_per_sym[sym][per]
-                filename =  per + '_' + sym + '.png'
+                op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+                #print( dfbs )
+                
+                if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
+                    Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
+                    Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
+
+                if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
+                    Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
+
+                if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
+                    Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
+                    Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
+
+                if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
+                    Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
 
 
-                # TODO NORMalise
-                if None != self.g_c0[sym]:
+                if None != Pc0:                    
+                    df['Pc0'] = Pc0
+                    key1 = 'Pc0'
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                
+                if None != Pc0B: 
+                    df['Pc0B'] = Pc0B
+                    key1 = 'Pc0B'
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
 
-                    c0 = df.iloc[lendf-1].close
-                    Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
-                    #print( Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
-                    Pc0B  = None # Pc0 + 20
-                    Pc0B1 = None # Pc0 + 10
-                    Pc0S  = None # Pc0 - 10
-                    Pc0S1 = None # Pc0 - 20
-                    
-                    op, dfbs = self.mt5_cnt_orders_and_positions( sym )
-                    #print( dfbs )
-                    
-                    if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
-                        Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
-                        Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
+                if None != Pc0B1: 
+                    df['Pc0B1'] = Pc0B1
+                    key1 = 'Pc0B1'
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
 
-                    if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
-                        Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
+                if None != Pc0S: 
+                    df['Pc0S'] = Pc0S
+                    key1 = 'Pc0S'
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
 
-                    if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
-                        Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
-                        Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
-
-                    if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
-                        Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
-
-
-                    if None != Pc0:                    
-                        df['Pc0'] = Pc0
-                        key1 = 'Pc0'
-                        _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
-                    
-                    if None != Pc0B: 
-                        df['Pc0B'] = Pc0B
-                        key1 = 'Pc0B'
-                        _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-    
-                    if None != Pc0B1: 
-                        df['Pc0B1'] = Pc0B1
-                        key1 = 'Pc0B1'
-                        _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-    
-                    if None != Pc0S: 
-                        df['Pc0S'] = Pc0S
-                        key1 = 'Pc0S'
-                        _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-    
-                    if None != Pc0S1: 
-                        df['Pc0S1'] = Pc0S1
-                        key1 = 'Pc0S1'
-                        _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-                    
-                    #print( per, self.g_c0[sym], Pc0)
+                if None != Pc0S1: 
+                    df['Pc0S1'] = Pc0S1
+                    key1 = 'Pc0S1'
+                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                
+                #print( per, self.g_c0[sym], Pc0)
 					
-                    #_mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    #_mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    
-                    #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    
-                    # key1 = 'pd'
-                    # #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-
-                    key1 = 'ps'
-                    #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-                    _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
-
-
-                if True == self.gUseScalp:
-                    # display last 10 rows
-                    _start = -1* (self.KDtCount - self.gScalpOffset)
-                    _mpf_plot(df.iloc[_start:],type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                    _mpf_plot(df.iloc[_start:],type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
-
+                _mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 
-                if True == self.gUsePid:
-                    
-                    # dtype = np.dtype([
-                    #     ('sec', '<u8'), ('vol', '<u8'), ('cnt', '<u8'), ('t1', '<i8'), ('t0', '<i8'),\
-                    #     ('pop', '<f8'), ('ppop', '<i8'), ('podir', '<i8'), ('opp', '<f8'), ('popp', '<f8'), ('opdir', '<i8'),\
-                    #     ('c1', '<f8'), ('c0', '<f8'), ('pc1', '<i8'), ('pc0', '<i8'),\
-                    #     ('pcmax', '<i8'), ('pcm', '<f8'),\
-                    #     ('pc0popD', '<i8'), ('pc0oppD', '<i8'),\
-                    #     ('pid1', '<i8'), ('pid0', '<i8'), ('pidmax', '<i8'), ('pidm', '<f8'),\
-                    #     ('pid0popD', '<i8'), ('pid0oppD', '<i8'),\
-                    #     ('piddelta', '<i8'), ('piddir', '<i8'), ('pcdir', '<i8'), ('pdir', '<i8')\
-                    # ])
-       
-                    ppop = dfana.loc[per,'ppop']
-                    popp = dfana.loc[per,'popp']
-                    _mpf_plot(df,type='wf', hlines=[ppop,popp], ax=ax0, axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                    _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                        
-                    key0 = 'PID4MAXMIN2'
-                    key1 = 'PID4MAXMIN2_1'
-                    _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
-                    _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
-        
-                    # =============================================================================
-                    #         
-                    #             # for key in self.cf_pid_params[self.gACCOUNT]:
-                    #             #     key0 = key + '_MAX_MIN_ALL_2'
-                    #             #     key1 = key + '_MAX_MIN_ALL_2_1'
-                    #             #     _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-                    # 
-                    #             key0 = 'PID1_MAX_MIN_ALL_2'
-                    #             key1 = 'PID1_MAX_MIN_ALL_2_1'
-                    #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-                    # 
-                    #             key0 = 'PID2_MAX_MIN_ALL_2'
-                    #             key1 = 'PID2_MAX_MIN_ALL_2_1'
-                    #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-                    # 
-                    #             key0 = 'PID3_MAX_MIN_ALL_2'
-                    #             key1 = 'PID3_MAX_MIN_ALL_2_1'
-                    #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
-                    # 
-                    #             # key0 = 'PID4_MAX_MIN_ALL_2'
-                    #             # key1 = 'PID4_MAX_MIN_ALL_2_1'
-                    #             # _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=2),show_nontrading=self.gShowNonTrading)
-                    #             
-                    #             key0 = 'PID4MAX'
-                    #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
-                    #  
-                    #             key0 = 'PID4MIN'
-                    #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
-                    # 
-                    # =============================================================================
+                #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 
-            self.save_fig_all_periods_per_sym(fig_sym, sym)
-            _mpf_figure_show()
+                # key1 = 'pd'
+                # #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+                key1 = 'ps'
+                #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+
+            if True == self.gUseScalp:
+                # display last 10 rows
+                _start = -1* (self.KDtCount - self.gScalpOffset)
+                _mpf_plot(df.iloc[_start:],type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df.iloc[_start:],type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
+
+            
+            if True == self.gUsePid:
+                
+                # dtype = np.dtype([
+                #     ('sec', '<u8'), ('vol', '<u8'), ('cnt', '<u8'), ('t1', '<i8'), ('t0', '<i8'),\
+                #     ('pop', '<f8'), ('ppop', '<i8'), ('podir', '<i8'), ('opp', '<f8'), ('popp', '<f8'), ('opdir', '<i8'),\
+                #     ('c1', '<f8'), ('c0', '<f8'), ('pc1', '<i8'), ('pc0', '<i8'),\
+                #     ('pcmax', '<i8'), ('pcm', '<f8'),\
+                #     ('pc0popD', '<i8'), ('pc0oppD', '<i8'),\
+                #     ('pid1', '<i8'), ('pid0', '<i8'), ('pidmax', '<i8'), ('pidm', '<f8'),\
+                #     ('pid0popD', '<i8'), ('pid0oppD', '<i8'),\
+                #     ('piddelta', '<i8'), ('piddir', '<i8'), ('pcdir', '<i8'), ('pdir', '<i8')\
+                # ])
+   
+                ppop = dfana.loc[per,'ppop']
+                popp = dfana.loc[per,'popp']
+                _mpf_plot(df,type='wf', hlines=[ppop,popp], ax=ax0, axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                    
+                key0 = 'PID4MAXMIN2'
+                key1 = 'PID4MAXMIN2_1'
+                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
+    
+                # =============================================================================
+                #         
+                #             # for key in self.cf_pid_params[self.gACCOUNT]:
+                #             #     key0 = key + '_MAX_MIN_ALL_2'
+                #             #     key1 = key + '_MAX_MIN_ALL_2_1'
+                #             #     _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID1_MAX_MIN_ALL_2'
+                #             key1 = 'PID1_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID2_MAX_MIN_ALL_2'
+                #             key1 = 'PID2_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID3_MAX_MIN_ALL_2'
+                #             key1 = 'PID3_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             # key0 = 'PID4_MAX_MIN_ALL_2'
+                #             # key1 = 'PID4_MAX_MIN_ALL_2_1'
+                #             # _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=2),show_nontrading=self.gShowNonTrading)
+                #             
+                #             key0 = 'PID4MAX'
+                #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
+                #  
+                #             key0 = 'PID4MIN'
+                #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
+                # 
+                # =============================================================================
+            
+        self.save_fig_all_periods_per_sym(fig_sym, sym, file_extension = '_01.png')
+        _mpf_figure_show()
     
         if not self.gGlobalFig: self.close_fig_all_periods_per_sym()
             
-    # END def print_fig_all_periods_per_sym():
+    # END def print_fig_all_periods_per_sym( self, sym ):
+    # =============================================================================
+
+
+
+    # =============================================================================
+    # def single_period_plot( self, start_idx, end_idx, linewidth=1 ):
+    #     
+    # =============================================================================
+    def single_period_plot( self, ax0, filename, dt_to, per, sym, start_idx, end_idx, linewidth=1 ):
+
+        # df = gH.gDF['RATES']['2025-04-28 13:04:37.865628+00:00']['S900']['EURUSD']
+        # Out[37]: 
+        #                        DT                           DTC  ...  Pclose  Pc0
+        # 0 2025-04-28 10:34:38.890 2025-04-28 10:49:37.384999936  ...   -12.0    0
+        # 1 2025-04-28 10:49:37.385 2025-04-28 11:04:37.350000128  ...   -49.0    0
+        # 2 2025-04-28 11:04:37.350 2025-04-28 11:19:37.240000000  ...   -94.0    0
+        # 3 2025-04-28 11:19:37.240 2025-04-28 11:34:38.049999872  ...  -115.0    0
+        # 4 2025-04-28 11:34:38.050 2025-04-28 11:49:37.452000000  ...   -44.0    0
+        # 5 2025-04-28 11:49:37.452 2025-04-28 12:04:37.358000128  ...   -24.0    0
+        # 6 2025-04-28 12:04:37.358 2025-04-28 12:19:39.680000000  ...   -88.0    0
+        # 7 2025-04-28 12:19:39.680 2025-04-28 12:34:42.559000064  ...   -15.0    0
+        # 8 2025-04-28 12:34:42.559 2025-04-28 12:49:37.859000064  ...    47.0    0
+        # 9 2025-04-28 12:49:37.859 2025-04-28 13:04:37.865628000  ...    -2.0    0
+        #                        
+        # df[-2:]
+        # Out[54]: 
+        #                        DT                           DTC  ...  Pclose  Pc0
+        # 8 2025-04-28 12:34:42.559 2025-04-28 12:49:37.859000064  ...    47.0    0
+        # 9 2025-04-28 12:49:37.859 2025-04-28 13:04:37.865628000  ...    -2.0    0
+
+        df = self.get_df_rates( dt_to, per, sym )
+        if 0 < len(df) :
+            df = df[start_idx:end_idx]
+            #print( 'XYZ',df )
+            _mpf_plot(df,type='candle',  
+                        ax=ax0,
+                        axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  
+                        #style="sas",  
+                        style="yahoo",  
+                        #update_width_config=dict(ohlc_linewidth=linewidth,ohlc_ticksize=0.1),
+                        update_width_config=dict(candle_linewidth=linewidth),
+                        wf_params=dict(brick_size='atr',atr_length='total'),
+                        pnf_params=dict(box_size='atr',atr_length='total'),
+                        renko_params=dict(brick_size='atr',atr_length='total'),
+                        show_nontrading=self.gShowNonTrading,
+                        datetime_format=self.gDateFormat)
+
+        return df
+
+    # END def single_period_plot( self, start_idx, end_idx ):
+    # =============================================================================
+
+    # =============================================================================
+    # def print_fig_all_periods_per_sym_NEW(( self, sym):
+    #     
+    # =============================================================================
+    def print_fig_all_periods_per_sym_NEW( self, sym ):
+    
+        _start = time.time()
+
+        dt_to    = self.gDt['dt_to']
+    
+        if self.gGlobalFig and not self.gCrazyFigPattern: 
+            self.clear_ax_fig_all_periods_per_sym()
+        if not self.gGlobalFig: 
+            self.open_fig_all_periods_per_sym()
+
+
+        # print(sym)
+        # op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+        # print( dfbs )
+
+        fig_sym = self.g_fig_all_periods_per_sym[sym]['fig_sym']
+
+        if True == self.gUsePid:
+            dfana = self.get_df_rates( dt_to, 'ANA', sym )
+
+        # RATES
+        for per in self.cf_periods[self.gACCOUNT]:
+            # print(per)
+    
+            df = self.get_df_rates( dt_to, per, sym )
+            lendf    = len(df)
+            if 0 >= lendf :
+                #print("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(lendf) )
+                continue
+            
+            ax0 = self.g_fig_all_periods_per_sym[sym][per]
+            filename =  per + '_' + sym + '.png'
+
+
+            # TODO NORMalise
+            if None != self.g_c0[sym]:
+
+                op, dfbs = self.mt5_cnt_orders_and_positions( sym )
+                #print( dfbs )
+                
+                if dfbs.cnt.POS_BUY > 0:
+                    c0 = dfbs.price.POS_BUY
+                    Pc0 =  int((c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+                    linecolor = 'b'
+                elif dfbs.cnt.POS_SELL > 0:
+                    c0 = dfbs.price.POS_SELL
+                    Pc0 =  int((c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+                    linecolor = 'r'
+                else:    
+                    c0 = df.iloc[lendf-1].close
+                    Pc0 =  int(df.iloc[lendf-1].Pclose - (c0-self.g_c0[sym]) / self.cf_symbols[self.gACCOUNT][sym]['points'])
+                    linecolor = 'g'
+
+                #print( df.iloc[lendf-1].Pclose, Pc0, df.iloc[0].close, c0, self.g_c0[sym] )
+                Pc0B  = None # Pc0 + 20
+                Pc0B1 = None # Pc0 + 10
+                Pc0S  = None # Pc0 - 10
+                Pc0S1 = None # Pc0 - 20
+                
+                
+                if 0 < dfbs.loc['POS_BUY', 'cnt'] and 0 == dfbs.loc['PEND_BUY', 'cnt']:
+                    Pc0B  = +1 * dfbs.loc['POS_BUY', 'delta']
+                    Pc0B1 = +2 * dfbs.loc['POS_BUY', 'delta']
+
+                if 0 == dfbs.loc['POS_BUY', 'cnt'] and 0 < dfbs.loc['PEND_BUY', 'cnt']:
+                    Pc0B  = +1 * dfbs.loc['PEND_BUY', 'delta']
+
+                if 0 < dfbs.loc['POS_SELL', 'cnt'] and 0 == dfbs.loc['PEND_SELL', 'cnt']:
+                    Pc0S  = +1 * dfbs.loc['POS_SELL', 'delta']
+                    Pc0S1 = +2 * dfbs.loc['POS_SELL', 'delta']
+
+                if 0 == dfbs.loc['POS_SELL', 'cnt'] and 0 < dfbs.loc['PEND_SELL', 'cnt']:
+                    Pc0S  = +1 * dfbs.loc['PEND_SELL', 'delta']
+
+
+                if None != Pc0:                    
+                    df['Pc0'] = Pc0
+                    df['Pc0C'] = df.iloc[lendf-1].Pclose
+                    key1 = 'Pc0'
+                    key2 = 'Pc0C'
+                    _mpf_plot(df[-2:],type='candle',ax=ax0,axtitle=filename,columns=[key1,key1,key2,key2,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, linecolor=linecolor)
+                
+                if None != Pc0B: 
+                    df['Pc0B'] = Pc0B
+                    key1 = 'Pc0B'
+                    #_mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+
+                if None != Pc0B1: 
+                    df['Pc0B1'] = Pc0B1
+                    key1 = 'Pc0B1'
+                    #_mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+
+                if None != Pc0S: 
+                    df['Pc0S'] = Pc0S
+                    key1 = 'Pc0S'
+                    #_mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+
+                if None != Pc0S1: 
+                    df['Pc0S1'] = Pc0S1
+                    key1 = 'Pc0S1'
+                    #_mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="default",update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                
+                #print( per, self.g_c0[sym], Pc0)
+                
+                ##_mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='line',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'], style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                
+                #_mpf_plot(df,type='wf',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+                #_mpf_plot(df,type='ohlc',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+
+
+                if 'S3600' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S3600', sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S900',  sym, -4, -1,  linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -3, -1,  linewidth=2 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, None,linewidth=1 )  
+
+                elif 'S900' == per:
+
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'S900',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -3, -1,   linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=2 )  
+                    df4 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, None, linewidth=1 )  
+                    #print( df1, df2, df3, df4)
+
+                elif 'S300' == per:
+
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, -1,   linewidth=2 )  
+                    df4 = self.single_period_plot( ax0, filename, dt_to, 'S5',    sym, -3, None, linewidth=1 )  
+                    #print( df1, df2, df3, df4)
+
+                elif 'S60' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S60', sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S15', sym, -4, -1,  linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S5',  sym, -3, -1,  linewidth=2 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S1',  sym, -5, None,linewidth=1 )  
+
+
+                elif 'T3600' == per:
+
+                    # T3600
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T3600', sym, -2, -1,  linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T900',  sym, -4, -1,  linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -3, -1,  linewidth=2 )  
+                    df4 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, None,linewidth=1 )  
+                    #print( '\nT3600\n', df1[['DT','DTC','pd']], '\n\nT900\n', df2[['DT','DTC','pd']], '\n\nT300\n', df3[['DT','DTC','pd']], '\n\nT60\n', df4[['DT','DTC','pd']])
+
+                elif 'T900' == per:
+
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T900',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -3, -1,   linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=2 )  
+                    df4 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, None, linewidth=1 )  
+                    #print( df1, df2, df3, df4)
+
+                elif 'T300' == per:
+
+                    # T300
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, -1,   linewidth=2 )  
+                    df4 = self.single_period_plot( ax0, filename, dt_to, 'T5',    sym, -3, None, linewidth=1 )  
+                    #print( df1, df2, df3, df4)
+
+                elif 'T60' == per:
+
+                    # T60
+                    self.single_period_plot( ax0, filename, dt_to, 'T60', sym, -2, -1,   linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T15', sym, -4, -1,   linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T5',  sym, -3, None, linewidth=1 )  
+    
+
+                elif 'S30' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S30', sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S15', sym, -2, -1,  linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S5',  sym, -3, -1,  linewidth=2 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S1',  sym, -5, None,linewidth=1 )  
+
+                elif 'S15' == per:
+
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'S15',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'S5',   sym, -3, -1,   linewidth=4 )  
+                    df3 = self.single_period_plot( ax0, filename, dt_to, 'S1',   sym, -5, None, linewidth=1 )  
+                    #print( df1, df2, df3)
+
+                elif 'S5' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S5',  sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S1',  sym, -5, None,linewidth=1 )  
+
+                elif 'S1' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S1',   sym, -5, None,linewidth=1 )  
+
+                elif 'T30' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'T30',  sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T15',  sym, -2, -1,  linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T5',   sym, -3, -1,  linewidth=2 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T1',   sym, -5, None,linewidth=1 )  
+
+                elif 'T15' == per:
+
+                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T15',  sym, -2, -1,   linewidth=8 )  
+                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T5',    sym, -3, None, linewidth=1 )  
+                    #print( df1, df2)
+
+                elif 'T5' == per:
+
+                    self.single_period_plot( ax0, filename, dt_to, 'T5',  sym, -2, -1,  linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T5',  sym, -1, None,linewidth=1 )  
+
+                elif 'T1' == per:
+                    self.single_period_plot( ax0, filename, dt_to, 'T1',   sym, -5, None,linewidth=1 )  
+
+                else:
+
+                    _mpf_plot(df,type='candle',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],  style="sas",  update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+                    
+                
+                # key1 = 'pd'
+                # #_mpf_plot(df,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+                dfps = df[-5:]
+                key1 = 'ps'
+                #_mpf_plot(dfps,type='renko',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                ###_mpf_plot(dfps,type='line',ax=ax0,axtitle=filename,columns=[key1,key1,key1,key1,'tick_volume'],style="sas", update_width_config=dict(ohlc_linewidth=10), wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
+
+            if True == self.gUseScalp:
+                # display last 10 rows
+                _start = -1* (self.KDtCount - self.gScalpOffset)
+                _mpf_plot(df.iloc[_start:],type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df.iloc[_start:],type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
+
+            
+            if True == self.gUsePid:
+                
+                # dtype = np.dtype([
+                #     ('sec', '<u8'), ('vol', '<u8'), ('cnt', '<u8'), ('t1', '<i8'), ('t0', '<i8'),\
+                #     ('pop', '<f8'), ('ppop', '<i8'), ('podir', '<i8'), ('opp', '<f8'), ('popp', '<f8'), ('opdir', '<i8'),\
+                #     ('c1', '<f8'), ('c0', '<f8'), ('pc1', '<i8'), ('pc0', '<i8'),\
+                #     ('pcmax', '<i8'), ('pcm', '<f8'),\
+                #     ('pc0popD', '<i8'), ('pc0oppD', '<i8'),\
+                #     ('pid1', '<i8'), ('pid0', '<i8'), ('pidmax', '<i8'), ('pidm', '<f8'),\
+                #     ('pid0popD', '<i8'), ('pid0oppD', '<i8'),\
+                #     ('piddelta', '<i8'), ('piddir', '<i8'), ('pcdir', '<i8'), ('pdir', '<i8')\
+                # ])
+   
+                ppop = dfana.loc[per,'ppop']
+                popp = dfana.loc[per,'popp']
+                _mpf_plot(df,type='wf', hlines=[ppop,popp], ax=ax0, axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                    
+                key0 = 'PID4MAXMIN2'
+                key1 = 'PID4MAXMIN2_1'
+                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
+                _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1,ohlc_ticksize=0.4))
+    
+                # =============================================================================
+                #         
+                #             # for key in self.cf_pid_params[self.gACCOUNT]:
+                #             #     key0 = key + '_MAX_MIN_ALL_2'
+                #             #     key1 = key + '_MAX_MIN_ALL_2_1'
+                #             #     _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID1_MAX_MIN_ALL_2'
+                #             key1 = 'PID1_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID2_MAX_MIN_ALL_2'
+                #             key1 = 'PID2_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             key0 = 'PID3_MAX_MIN_ALL_2'
+                #             key1 = 'PID3_MAX_MIN_ALL_2_1'
+                #             _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],update_width_config=dict(ohlc_linewidth=1),show_nontrading=self.gShowNonTrading)
+                # 
+                #             # key0 = 'PID4_MAX_MIN_ALL_2'
+                #             # key1 = 'PID4_MAX_MIN_ALL_2_1'
+                #             # _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=2),show_nontrading=self.gShowNonTrading)
+                #             
+                #             key0 = 'PID4MAX'
+                #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
+                #  
+                #             key0 = 'PID4MIN'
+                #             _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
+                # 
+                # =============================================================================
+            
+        self.save_fig_all_periods_per_sym(fig_sym, sym, file_extension = '_02.png')
+
+        _startShow = time.time()
+        _mpf_figure_show()
+    
+        if not self.gGlobalFig: self.close_fig_all_periods_per_sym()
+
+        _deltamsShow = int((time.time()-_startShow)*1000)
+        _deltams = int((time.time()-_start)*1000)
+
+        print( " deltams(ALL): ", _deltams, " deltams(SHOW): ", _deltamsShow)        
+
+            
+    # END def print_fig_all_periods_per_sym_NEW( self, sym):
     # =============================================================================
 
     # =============================================================================
@@ -4697,12 +5133,14 @@ class Algotrader():
             so = startoffset*point
             of = cnt*offsetpar*point
             priceSLO = round( (price+so+of), digits )
+            expiration = int((datetime.now(timezone.utc) + self.tdOffset ).timestamp()) +300
             self.mt5_pending_order_raw( sym, 
                                         volumea, 
                                         priceSLO, 
                                         self.mt5.ORDER_TYPE_SELL_LIMIT, 
                                         "SLO", 
-                                        465)
+                                        465,
+                                        expiration=expiration)
     
         
         ret = False
@@ -4756,12 +5194,14 @@ class Algotrader():
             so = startoffset*point
             of = cnt*offsetpar*point
             priceBLO = round( (price-so-of), digits )
+            expiration = int((datetime.now(timezone.utc) + self.tdOffset ).timestamp()) +300
             self.mt5_pending_order_raw( sym, 
                                         volumea, 
                                         priceBLO, 
                                         self.mt5.ORDER_TYPE_BUY_LIMIT, 
                                         "BLO", 
-                                        132)
+                                        132,
+                                        expiration=expiration)
     
         
         ret = False
@@ -5289,7 +5729,7 @@ class Algotrader():
         #key_list = list(['POS_BUY_TP','POS_BUY_SL','POS_BUY','PEND_BUY','c0','PEND_SELL','POS_SELL','POS_SELL_SL','POS_SELL_TP'] )
         key_list = list( ['POS_BUY','PEND_BUY','c0','PEND_SELL','POS_SELL'] )
         key_list_len = len( key_list )
-        dtype = np.dtype([('cnt', '<i8'), ('profit', '<i8'), ('sl', '<i8'), ('tp', '<i8'), ('delta', '<i8'), ('price', '<i8'),\
+        dtype = np.dtype([('cnt', '<i8'), ('profit', '<i8'), ('sl', '<i8'), ('tp', '<i8'), ('delta', '<i8'), ('price', '<f8'),\
                           ('time', '<i8'),('ticket', '<i8') ])
                           
         npa = np.zeros(key_list_len, dtype=dtype)
@@ -5328,7 +5768,7 @@ class Algotrader():
         bid      = self.mt5.symbol_info_tick(sym).bid
         if 0.0 < ask and 0.0 < bid :
             cnt = 1
-            price    = round( (bid + (ask - bid ) / 2), digits )
+            price    = int(round( (bid + (ask - bid ) / 2), digits ))
             delta    = int(( price - gc0 ) / points )
             time     = int(self.mt5.symbol_info_tick(sym).time_msc)
         df.loc['c0', 'cnt']    = cnt
@@ -7601,7 +8041,8 @@ class Algotrader():
         endticks = time.time()
         
         if self.gShowFig or self.gSaveFig:
-            self.print_fig_all_periods_per_sym()
+            #self.print_fig_all_periods_per_sym()
+            self.print_fig_all_periods_per_sym_NEW()
             # self.print_fig_all_periods_and_all_syms()
             # self.print_past_entries_per_sym()
         else:

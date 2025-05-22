@@ -1,5 +1,6 @@
 **/__pycache__
 src/logs/*
+test/RF5*
 .spyproject
 .ipynb_checkpoints
 MetaTrader5_TMPL/config_*/cf_*.json
