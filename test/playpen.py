@@ -107,7 +107,7 @@ for cnt in range( rangenumber ):
         # dfana[['DELTA','PS','OC','HL','TD','VOLS','TT','HL/TD','HL/VOLS','SUMCOL']]
         _deltamsAna = int((time.time()-_startAna)*1000)
         
-        #gH.mt5_position_sltp_follow2( sym )
+        gH.mt5_position_sltp_follow2( sym )
         
         _startPlot = time.time()
         gH.print_fig_all_periods_per_sym_NEW( sym )

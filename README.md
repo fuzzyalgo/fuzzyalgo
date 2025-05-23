@@ -279,3 +279,47 @@ linux links
    https://medium.com/@asc686f61/use-mt5-in-linux-with-docker-and-python-f8a9859d65b1
       https://github.com/ASC689561/fx-tinny/
 ```
+
+
+### getting started documentation tools
+
+# plantuml with local renderer on windows
+```
+
+https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml
+- start CMD as admin and run the two commands:
+
+@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
+
+choco install plantuml
+
+    ...
+
+    Added C:\ProgramData\chocolatey\bin\dot.exe shim pointed to 'c:\program files\graphviz\bin\dot.exe'.
+    graphviz may be able to be automatically uninstalled.
+    The install of graphviz was successful.
+        
+    AdoptOpenJDKjre v16.0.1.901 [Approved]
+    AdoptOpenJDKjre package files install completed. Performing other installation steps.
+    The install of AdoptOpenJDKjre was successful.
+    Deployed to 'C:\ProgramData\chocolatey\lib\adoptopenjdkjre'
+    Downloading package from source 'https://community.chocolatey.org/api/v2/'
+    Progress: Downloading plantuml 1.2025.2... 100%
+
+    plantuml v1.2025.2 [Approved]
+    plantuml package files install completed. Performing other installation steps.
+    Java path: C:\Program Files\Eclipse Adoptium\jre-21.0.6.7-hotspot\bin
+    Java args: -Dfile.encoding=UTF-8 -jar "C:\ProgramData\chocolatey\lib\plantuml\tools\plantuml.jar"
+    Plantuml registered as plantuml
+    Added C:\ProgramData\chocolatey\bin\plantuml.exe shim pointed to 'c:\program files\eclipse adoptium\jre-21.0.6.7-hotspot\bin\javaw.exe'.
+    Added C:\ProgramData\chocolatey\bin\plantumlc.exe shim pointed to 'c:\program files\eclipse adoptium\jre-21.0.6.7-hotspot\bin\java.exe'.
+    Creating desktop shortcuts
+    The install of plantuml was successful.
+    Software install location not explicitly set, it could be in package or
+    default install location of installer.
+    ...
+
+
+```
+
+
