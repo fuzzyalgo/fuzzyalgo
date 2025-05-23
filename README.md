@@ -317,9 +317,86 @@ choco install plantuml
     The install of plantuml was successful.
     Software install location not explicitly set, it could be in package or
     default install location of installer.
+
+    $ "C:\Program Files\Eclipse Adoptium\jre-21.0.6.7-hotspot\bin\java" -DPLANTUML_LIMIT_SIZE=4096 -Dfile.encoding=UTF-8 -jar "C:\ProgramData\chocolatey\lib\plantuml\tools\plantuml.jar" ./home_network.puml
+    
     ...
 
 
 ```
+
+```plantuml
+@startuml
+Alice -> Bob : hello
+note right
+<code>
+main() {
+  printf("Hello world");
+}
+</code>
+end note
+@enduml
+```
+
+```plantuml
+@startuml
+allowmixing
+
+agent Agent
+stack {
+  json "JSON_file.json" as J {
+    "fruit":"Apple",
+    "size":"Large",
+    "color": ["Red", "Green"]
+  }
+}
+database Database
+
+Agent -> J
+J -> Database
+@enduml
+```
+
+```plantuml
+@startjson
+{
+
+"Creole":
+  {
+  "wave": "~~wave~~",
+  "bold": "**bold**",
+  "italics": "//italics//",
+  "stricken-out": "--stricken-out--",
+  "underlined": "__underlined__",
+  "not-underlined": "~__not underlined__",
+  "wave-underlined": "~~wave-underlined~~"
+  },
+"HTML Creole":
+  {
+  "bold": "<b>bold",
+  "italics": "<i>italics",
+  "monospaced": "<font:monospaced>monospaced",
+  "stroked": "<s>stroked",
+  "underlined": "<u>underlined",
+  "waved": "<w>waved",
+  "green-stroked": "<s:green>stroked",
+  "red-underlined": "<u:red>underlined",
+  "blue-waved": "<w:#0000FF>waved",
+  "Blue": "<color:blue>Blue",
+  "Orange": "<back:orange>Orange background",
+  "big": "<size:20>big"
+  },
+"Graphic":
+  {
+  "OpenIconic": "account-login <&account-login>", 
+  "Unicode": "This is <U+221E> long",
+  "Emoji": "<:calendar:> Calendar",
+  "Image": "<img:https://plantuml.com/logo3.png>"
+  }
+
+}
+@endjson
+```
+
 
 
