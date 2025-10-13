@@ -37,7 +37,6 @@ gTimeDelta = timedelta( minutes=240 )
 gDtTo   = datetime(2025, 1, 3, 17, 0, 1, 0, tzinfo=gTimezoneUTC)
 
 
-
 #
 # global(g) variables
 #

@@ -1144,6 +1144,55 @@ class Algotrader():
                     raise( ValueError( strerror))
     
         #self.gNpa = npa
+
+        # TODO FIXME make this optional
+        # save and load example for structured numpy array
+        if None!= self.verbose and 1 < self.verbose:
+
+            self.gNpa2 = npa
+        
+            # 1. Reference your structured array
+            arr = npa
+            
+            # 2. Build the comma-separated header from field names
+            header = ','.join(arr.dtype.names)
+            
+            # 3. Programmatically build the fmt list based on each field’s dtype
+            fmt = []
+            for name in arr.dtype.names:
+                dt = arr.dtype.fields[name][0]
+                if dt.kind in ('i', 'u'):        # integer (signed or unsigned)
+                    fmt.append('%5d')
+                elif dt.kind == 'f':             # floating-point
+                    fmt.append('%.05f')           # adjust precision as needed
+                else:
+                    fmt.append('%s')             # fallback for other types
+            
+            # 4. Write to CSV without comment character before the header
+            np.savetxt(
+                'gNpa2.csv.gz',
+                arr,
+                delimiter=',',
+                header=header,
+                fmt=fmt,
+                comments=''
+            )
+            
+            # 5. Read the CSV back into the same structured dtype
+            recovered = np.genfromtxt(
+                'gNpa2.csv.gz',
+                delimiter=',',
+                names=True,
+                dtype=arr.dtype
+            )
+            
+            # 6. Verification
+            assert recovered.dtype == npa.dtype
+            assert recovered.shape == npa.shape
+            npa = recovered
+            
+            print("Save and load successful. dtype and shape match.") 
+        # if None!= self.verbose and 1 < self.verbose
         
         #
         # sanity checks
@@ -2960,7 +3009,7 @@ class Algotrader():
             dfana.loc[per,'VOLS/TD']    = VOLS_TD
             dfana.loc[per,'OC/HL']      = OC_HL
             dfana.loc[per,'SPREAD']     = SPREAD
-            dfana.loc[per,'SUMCOL']     = round(dfana.loc[per,'OC/HL'] + dfana.loc[per,'VOLS/TD'],1)
+            dfana.loc[per,'SUMCOL']     = round(dfana.loc[per,'OC/HL'] + dfana.loc[per,'VOLS/TD'] + dfana.loc[per,'HL/TD'],1)
             
             #print(dfana[['VOLS/TD','OC/HL','HL/TD']])
             
@@ -3003,14 +3052,11 @@ class Algotrader():
         dfana.loc['SUMROW','SPREAD']    = int(round(dfana['SPREAD'].iloc[0:lenper].sum()/lenper))
             
         sumrow = dfana['SUMCOL'].iloc[0:lenper].sum()/lenper
-        sumcol = dfana.loc['SUMROW','VOLS/TD'] + dfana.loc['SUMROW','OC/HL'] 
-        dfana.loc['SUMROW','SUMCOL']    = round(sumrow,1)
-        dfana.loc['SUMROW','SUMCOL']    = round(sumcol,1)
-        # TODO fixme one day - precision calculation error
-        #if round(sumrow,1) == round(sumcol,1):
-        #    dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
-        #else:
-        #    raise ValueError( sprintf("ERROR: sumrow[%d] != sumcol[%d]: ", sumrow, sumcol) )
+        sumcol = dfana.loc['SUMROW','VOLS/TD'] + dfana.loc['SUMROW','OC/HL'] + dfana.loc['SUMROW','HL/TD'] 
+        if round(sumrow,1) == round(sumcol,1):
+            dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
+        else:
+            raise ValueError( _sprintf("ERROR: sumrow[%f] != sumcol[%f]: ", sumrow, sumcol) )
     
         self.gNpa = dfana
         # gDF[str(dt_to)]['ANA'] = dfana
