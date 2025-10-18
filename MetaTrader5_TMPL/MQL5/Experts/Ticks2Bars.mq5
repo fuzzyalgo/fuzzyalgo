@@ -43,8 +43,9 @@ enum BAR_RENDER_MODE
 
 
 // I N P U T S
+input int  Debug = 0;
 input uint TimeDelta = 60;
-input int Limit = 32000;
+input int  Limit = 32000;
 input bool Reset = true;
 input bool LoopBack = false;
 input bool EmulateTicks = true;
@@ -780,6 +781,8 @@ int _OnInit(void)
             Print("Buffer filled in for ", symbolName);
         }
 
+        // TODO make me optional maybe, the opening of the chart
+        /*
         if(justCreated)
         {
             long id = ChartOpen(symbolName, PERIOD_M1);
@@ -800,6 +803,7 @@ int _OnInit(void)
             }
             justCreated = false;
         }
+        */
 
         firstRun = false;
         lastTime = (datetime)((long)TimeCurrent() / 60 * 60);
@@ -857,9 +861,9 @@ int _OnInit(void)
     sMa[2].periodKey = "T15";
     sMa[3].periodKey = "T60";
     sMa[4].periodKey = "S60";
-    sMa[5].periodKey = "S120";
-    sMa[6].periodKey = "S180";
-    sMa[7].periodKey = "S240";
+    sMa[5].periodKey = "S300";
+    sMa[6].periodKey = "S900";
+    sMa[7].periodKey = "S3600";
     sMa[8].periodKey = "SUM_AVG";
 
 
@@ -976,17 +980,17 @@ void _OnTimer()
     int hl60   = 0;
     ExtractHighLowFromMqlTickArray( array, oc60, hl60 );
 
-    int size300  = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 120 ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int size300  = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 300 ) * 1000, (TimeCurrent() - 0) * 1000 );
     int oc300  = 0;
     int hl300  = 0;
     ExtractHighLowFromMqlTickArray( array, oc300, hl300 );
 
-    int size900  = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 180 ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int size900  = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 900 ) * 1000, (TimeCurrent() - 0) * 1000 );
     int oc900   = 0;
     int hl900   = 0;
     ExtractHighLowFromMqlTickArray( array, oc900, hl900 );
 
-    int size3600 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 240 ) * 1000, (TimeCurrent() - 0) * 1000 );
+    int size3600 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 3600 ) * 1000, (TimeCurrent() - 0) * 1000 );
     int oc3600   = 0;
     int hl3600   = 0;
     ExtractHighLowFromMqlTickArray( array, oc3600, hl3600 );
@@ -994,16 +998,16 @@ void _OnTimer()
 
     string _t_str = StringFormat( " tc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
                                   size1, size2, size5, size15, size60, size300, size900, size3600 );
-    //Print( _t_str );
+    if( 0 < Debug ) Print( _t_str );
 
 
     string _oc_str = StringFormat( " oc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
                                    oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600 );
-    //Print( _oc_str );
+    if( 0 < Debug ) Print( _oc_str );
 
     string _hl_str = StringFormat( " hl: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
                                    hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600 );
-    //Print( _hl_str );
+    if( 0 < Debug ) Print( _hl_str );
 
     double tick_avg = (((double)size1 / 1) +     ((double)size2 / 2) +
                        (double)(size5 / 5) +     ((double)size15 / 15) +
@@ -1019,8 +1023,8 @@ void _OnTimer()
                                tick_avg,
                                tick_avg_low,
                                tick_avg_high,
-                               size1, size2, size5, size15, size60, size300, size900, size3600 );
-    //Print( str );
+                                   size1, size2, size5, size15, size60, size300, size900, size3600 );
+    if( 0 < Debug ) Print( str );
 
     double oc_avg = (((double)oc1) +     ((double)oc2) +
                      (double)(oc5) +     ((double)oc15) +
@@ -1037,7 +1041,7 @@ void _OnTimer()
                         (int)oc_avg_low,
                         (int)oc_avg_high,
                         oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600 );
-    //Print( str );
+    if( 0 < Debug ) Print( str );
 
     double hl_avg = (((double)hl1) +     ((double)hl2) +
                      (double)(hl5) +     ((double)hl15) +
@@ -1054,7 +1058,7 @@ void _OnTimer()
                         (int)hl_avg_low,
                         (int)hl_avg_high,
                         hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600 );
-    //Print( str );
+    if( 0 < Debug ) Print( str );
 
 
     double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -1067,12 +1071,12 @@ void _OnTimer()
     double acc_mrg_so_call = AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL);
     double acc_mrg_so_so = AccountInfoDouble(ACCOUNT_MARGIN_SO_SO);
 
-    str += StringFormat( "   ACCOUNT: %s / %s / %s - MARGIN free: %s ",
+    str = StringFormat( "   ACCOUNT: %s / %s / %s - MARGIN free: %s ",
                          DoubleToString(acc_equ, 2),
                          DoubleToString(acc_bal, 2),
                          DoubleToString(acc_pro, 2),
                          DoubleToString(acc_mrg_free, 2) );
-    //Print( str );
+    if( 0 < Debug ) Print( str );
 
 
     //--- get data on the last tick
@@ -1093,14 +1097,14 @@ void _OnTimer()
             last_spread = (t.ask - t.bid) / _Point;
             last_price = (t.ask + t.bid) / 2;
             //--- display the last tick time up to milliseconds
-            str += StringFormat("    -  Last tick [ %s / %s / %s ] was at %s.%03d with spread [ %4d ]",
+            str = StringFormat("    -  Last tick [ %s / %s / %s ] was at %s.%03d with spread [ %4d ]",
                                 DoubleToString(t.ask, _Digits),
                                 DoubleToString(last_price, _Digits),
                                 DoubleToString(t.bid, _Digits),
                                 TimeToString(t.time, TIME_SECONDS),
                                 t.time_msc % 1000,
                                 (int)last_spread );
-            //Print( str );
+            if( 0 < Debug ) Print( str );
         }
     }
 
@@ -1162,7 +1166,7 @@ void _OnTimer()
     } // if(PositionSelect(_Symbol))
 
 
-    //Print( str );
+    if( 0 < Debug ) Print( str );
 
     //
     // calc all the iMa handles
