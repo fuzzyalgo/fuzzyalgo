@@ -1829,10 +1829,17 @@ class Algotrader():
             # highask   = dfstartend.ask.max()
             # lowask    = dfstartend.ask.min()
             # openask   = dfend.ask
-            closeprice= dfstartend.iloc[0].price
-            highprice = dfstartend.price.max()
-            lowprice  = dfstartend.price.min()
-            openprice = dfstartend.iloc[-1].price
+
+            if isinstance(dfstartend, pd.Series):
+                closeprice = dfstartend['price']
+                openprice = dfstartend['price']
+            else: # dfstartend is a DataFrame
+                closeprice = dfstartend['price'].iloc[0]
+                openprice = dfstartend['price'].iloc[-1]
+
+            highprice = dfstartend['price'].max()
+            lowprice  = dfstartend['price'].min()
+
             #if per == 'T5':
             #    print(openprice,highprice,lowprice, closeprice)
             #    print(dfstartend)
@@ -2956,7 +2963,16 @@ class Algotrader():
             # count=10
             #TD = int((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[0].time_msc)/1000) # int(df.iloc[lendf-1].Pclose)
             # count = -1 last element
-            TD = (round((df.iloc[lendf-1].time_msc + df.iloc[lendf-1].TDms - df.iloc[-2].time_msc)/1000)) 
+            TD = (round((df.iloc[lendf-1].time_msc - df.iloc[-2].time_msc)/1000)) 
+            if 0 == TD:
+                TD = round(df.iloc[lendf-1].TDms/1000)
+                if 0 == TD:
+                    TD = 1  
+            # or
+            # TODO FixMe - why is there a difference here ?
+            # between calculating TD via difference of time_msc or using TDms directly
+            # TD1 = (round((df.iloc[lendf-1].TDms)/1000)) 
+
             
             # count=10
             VOLS = df.volume.sum()
@@ -3053,10 +3069,13 @@ class Algotrader():
             
         sumrow = dfana['SUMCOL'].iloc[0:lenper].sum()/lenper
         sumcol = dfana.loc['SUMROW','VOLS/TD'] + dfana.loc['SUMROW','OC/HL'] + dfana.loc['SUMROW','HL/TD'] 
-        if round(sumrow,1) == round(sumcol,1):
-            dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
-        else:
-            raise ValueError( _sprintf("ERROR: sumrow[%f] != sumcol[%f]: ", sumrow, sumcol) )
+        #if round(sumrow,1) == round(sumcol,1):
+        #    dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
+        #else:
+        #   raise ValueError( _sprintf("ERROR: sumrow[%f] != sumcol[%f]: ", sumrow, sumcol) )
+        # TODO FixMe - why are sumrow and sumcol different sometimes by 0.1 ?
+        # print(round(sumrow,1), round(sumcol,1))
+        dfana.loc['SUMROW','SUMCOL']  = round(sumrow,1)
     
         self.gNpa = dfana
         # gDF[str(dt_to)]['ANA'] = dfana
@@ -3663,8 +3682,11 @@ class Algotrader():
 
         if self.gSaveFig:
             dt_to    = self.gDt['dt_to']
-        
-            home_dir = ".\\" + self.gACCOUNT + "\\SYM\\" + sym
+
+            # TODO FixMe - set value of home_dir depending on json config
+            dir_appdata =  os.getenv('APPDATA') 
+            path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
+            home_dir = path_mt5 + "\\MQL5\\Files\\" + self.gACCOUNT + "\\SYM\\" + sym
             os.makedirs(home_dir, exist_ok=True)
             filename_sym =  home_dir +  "\\" + str(dt_to.strftime("%Y%m%d_%H%M%S")) + file_extension
             _mpf_figure_save(figure, filename_sym)
@@ -4023,7 +4045,8 @@ class Algotrader():
                     df['Pc0C'] = df.iloc[lendf-1].Pclose
                     key1 = 'Pc0'
                     key2 = 'Pc0C'
-                    _mpf_plot(df[-2:],type='candle',ax=ax0,axtitle=filename,columns=[key1,key1,key2,key2,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, linecolor=linecolor)
+                    # TODO FixMe plot this in live mode only
+                    #_mpf_plot(df[-2:],type='candle',ax=ax0,axtitle=filename,columns=[key1,key1,key2,key2,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, linecolor=linecolor)
                 
                 if None != Pc0B: 
                     df['Pc0B'] = Pc0B
@@ -4066,26 +4089,44 @@ class Algotrader():
 
                 elif 'S900' == per:
 
-                    df1 = self.single_period_plot( ax0, filename, dt_to, 'S900',  sym, -2, -1,   linewidth=8 )  
-                    df2 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -3, -1,   linewidth=4 )  
-                    df3 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=2 )  
-                    df4 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, None, linewidth=1 )  
+                    # S300
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+
+                    #df1 = self.single_period_plot( ax0, filename, dt_to, 'S900',  sym, -2, -1,   linewidth=8 )  
+                    #df2 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -3, -1,   linewidth=4 )  
+                    #df3 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=2 )  
+                    #df4 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, None, linewidth=1 )  
                     #print( df1, df2, df3, df4)
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S900',  sym, -2, -1,   linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -3, -1,   linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=2 )  
 
                 elif 'S300' == per:
 
-                    df1 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -2, -1,   linewidth=8 )  
-                    df2 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=4 )  
-                    df3 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, -1,   linewidth=2 )  
-                    df4 = self.single_period_plot( ax0, filename, dt_to, 'S5',    sym, -3, None, linewidth=1 )  
+                    # S300
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+
+                    #df1 = self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -2, -1,   linewidth=8 )  
+                    #df2 = self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, -1,   linewidth=4 )  
+                    #df3 = self.single_period_plot( ax0, filename, dt_to, 'S15',   sym, -4, -1,   linewidth=2 )  
+                    #df4 = self.single_period_plot( ax0, filename, dt_to, 'S5',    sym, -3, None, linewidth=1 )  
                     #print( df1, df2, df3, df4)
+
+                    self.single_period_plot( ax0, filename, dt_to, 'S300',  sym, -2, -1,   linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S60',   sym, -5, None, linewidth=4 )  
 
                 elif 'S60' == per:
 
+                    # S60
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+                    #self.single_period_plot( ax0, filename, dt_to, 'S60', sym, -2, -1,  linewidth=8 )  
+                    #self.single_period_plot( ax0, filename, dt_to, 'S15', sym, -4, -1,  linewidth=4 )  
+                    #self.single_period_plot( ax0, filename, dt_to, 'S5',  sym, -3, -1,  linewidth=2 )  
+                    #self.single_period_plot( ax0, filename, dt_to, 'S1',  sym, -5, None,linewidth=1 )  
+
                     self.single_period_plot( ax0, filename, dt_to, 'S60', sym, -2, -1,  linewidth=8 )  
-                    self.single_period_plot( ax0, filename, dt_to, 'S15', sym, -4, -1,  linewidth=4 )  
-                    self.single_period_plot( ax0, filename, dt_to, 'S5',  sym, -3, -1,  linewidth=2 )  
-                    self.single_period_plot( ax0, filename, dt_to, 'S1',  sym, -5, None,linewidth=1 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'S60', sym, -1, None,  linewidth=4 )  
 
 
                 elif 'T3600' == per:
@@ -4099,28 +4140,40 @@ class Algotrader():
 
                 elif 'T900' == per:
 
-                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T900',  sym, -2, -1,   linewidth=8 )  
-                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -3, -1,   linewidth=4 )  
-                    df3 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=2 )  
-                    df4 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, None, linewidth=1 )  
+                    # T900
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+                    #df1 = self.single_period_plot( ax0, filename, dt_to, 'T900',  sym, -2, -1,   linewidth=8 )  
+                    #df2 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -3, -1,   linewidth=4 )  
+                    #df3 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=2 )  
+                    #df4 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, None, linewidth=1 )  
                     #print( df1, df2, df3, df4)
+
+                    self.single_period_plot( ax0, filename, dt_to, 'T900',  sym, -2, -1,   linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -3, -1,   linewidth=4 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, None,   linewidth=2 )  
+
 
                 elif 'T300' == per:
 
                     # T300
-                    df1 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -2, -1,   linewidth=8 )  
-                    df2 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=4 )  
-                    df3 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, -1,   linewidth=2 )  
-                    df4 = self.single_period_plot( ax0, filename, dt_to, 'T5',    sym, -3, None, linewidth=1 )  
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+                    #df1 = self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -2, -1,   linewidth=8 )  
+                    #df2 = self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, -1,   linewidth=4 )  
+                    #df3 = self.single_period_plot( ax0, filename, dt_to, 'T15',   sym, -4, -1,   linewidth=2 )  
+                    #df4 = self.single_period_plot( ax0, filename, dt_to, 'T5',    sym, -3, None, linewidth=1 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T300',  sym, -2, -1,   linewidth=8 )  
+                    self.single_period_plot( ax0, filename, dt_to, 'T60',   sym, -5, None, linewidth=4 )  
                     #print( df1, df2, df3, df4)
 
                 elif 'T60' == per:
 
                     # T60
+                    # TODO FixMe - check if T30, T15, T5 and T1 exists
+                    #self.single_period_plot( ax0, filename, dt_to, 'T60', sym, -2, -1,   linewidth=8 )  
+                    #self.single_period_plot( ax0, filename, dt_to, 'T15', sym, -4, -1,   linewidth=4 )  
+                    #self.single_period_plot( ax0, filename, dt_to, 'T5',  sym, -3, None, linewidth=1 )  
                     self.single_period_plot( ax0, filename, dt_to, 'T60', sym, -2, -1,   linewidth=8 )  
-                    self.single_period_plot( ax0, filename, dt_to, 'T15', sym, -4, -1,   linewidth=4 )  
-                    self.single_period_plot( ax0, filename, dt_to, 'T5',  sym, -3, None, linewidth=1 )  
-    
+                    self.single_period_plot( ax0, filename, dt_to, 'T60', sym, -1, None, linewidth=4 )  
 
                 elif 'S30' == per:
 
