@@ -3113,7 +3113,7 @@ class Algotrader():
     # =============================================================================
     def print_analyse_df(self,dfana):
     
-        print( dfana[['DELTA','PS','OC','HL','TD','TT','SPREAD','OC/HL','VOLS/TD','HL/TD','SUMCOL']] )
+        print( dfana[['DELTA','PS','OC','HL','VOLS','TD','TT','SPREAD','OC/HL','VOLS/TD','HL/TD','SUMCOL']] )
     
     # END def print_analyse_df(self,dfana):
     # =============================================================================
