@@ -45,8 +45,17 @@ Start Windows Command Prompt:
 
     Please update conda by running
         $ conda update -n base -c conda-forge conda
-
 ```
+
+### Migrate to jupyter notebook 7
+
+```bash
+
+https://jupyter-notebook.readthedocs.io/en/latest/migrate_to_notebook7.html
+
+> %UserProfile%\Miniforge3\Scripts\conda update --all -c conda-forgeY
+```
+
 
 ### setup fuzzyalgo as linux conda env fuzzyalgo-py313
 
@@ -87,10 +96,34 @@ $ conda deactivate
 
 ```PowerShell
 > cd \<your-source-path>\fuzzyalgo
+> conda activate fuzzyalgo-py313
+> conda list --explicit > fuzzyalgo-py313-spec.txt
+> conda deactivate
+> conda env remove -n fuzzyalgo-py313
+
 > conda create -n fuzzyalgo-py313  nb_conda spyder numpy scipy pandas matplotlib sympy cython  python=3.13
 > conda activate fuzzyalgo-py313
 > pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
 > pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
+> pip install psutil  
+> python setup.py
+> conda deactivate
+
+> cd \<your-source-path>\fuzzyalgo
+> conda activate fuzzyalgo-py39
+> conda list --explicit > fuzzyalgo-py39-spec.txt
+> conda deactivate
+> conda env remove -n fuzzyalgo-py39
+
+> conda create -n fuzzyalgo-py39 spyder numpy scipy pandas matplotlib sympy cython pytorch tensorflow cudatoolkit opencv open3d notebook>=7.0.0 jupyterlab>=4.0.0 python=3.9 -c conda-forge  --solver=libmamba
+> conda create -n fuzzyalgo-py39 spyder numpy scipy pandas matplotlib sympy cython notebook>=7.0.0 jupyterlab>=4.0.0 python=3.9 -c conda-forge
+> conda activate fuzzyalgo-py39
+#> conda install pytorch tensorflow cudatoolkit opencv open3d -c conda-forge
+> conda install pytorch cudatoolkit opencv -c conda-forge
+> conda install tensorflow -c conda-forge
+> pip install open3d
+> pip install filterpy scikit-fuzzy networkx pynput MetaTrader5
+> pip install .\install\ta_lib-0.6.8-cp39-cp39-win_amd64.whl
 > pip install psutil  
 > python setup.py
 > conda deactivate

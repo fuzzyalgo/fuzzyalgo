@@ -22,9 +22,19 @@
 // I N C L U D E S
 
 // T Y P E D E F S
+enum ENUM_PERIOD_TYPE {
+    ENUM_PERIOD_TYPE_NONE,
+    ENUM_PERIOD_TYPE_SECONDS_S,
+    ENUM_PERIOD_TYPE_TICKS_T,
+    ENUM_PERIOD_TYPE_AVERAGE_S,
+    ENUM_PERIOD_TYPE_AVERAGE_T,
+    ENUM_PERIOD_TYPE_AVERAGE_SUM,
+    ENUM_PERIOD_TYPE_MAX
+};
 
 // I N P U T S
-input int Debug = 0;
+input int Debug = 0; // enable debug output
+input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 
 // G L O B A L S
 
@@ -35,6 +45,8 @@ struct sDataVars
 {
 
     string periodKey;
+    int periodNum;
+    ENUM_PERIOD_TYPE periodType;
 
     int DELTA;
     int PS;
@@ -50,13 +62,55 @@ struct sDataVars
     int SUMCOL;
 
     datetime t0;
+    datetime t1;
     double c0;
+    double c1;
 
     string str_txt;
 
 }; // struct sDataVars
 
-sDataVars sData[9];
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void InitDataVarsStruct(sDataVars &sd)
+{
+
+    sd.periodKey = "";
+    sd.periodNum = 0;
+    sd.periodType = ENUM_PERIOD_TYPE_NONE;
+    
+    sd.DELTA = 0;
+    sd.PS = 0;
+    sd.OC = 0;
+    sd.HL = 0;
+    sd.VOLS = 0;
+    sd.TD = 0;
+    sd.TT = 0;
+    sd.SPREAD = 0;
+    sd.OC_HL = 0;
+    sd.VOLS_TD = 0;
+    sd.HL_TD = 0;
+    sd.SUMCOL = 0;
+    
+    sd.c0 = 0.0;
+    sd.t0 = 0;
+    sd.c1 = 0.0;
+    sd.t1 = 0;
+    
+    sd.str_txt = "";
+
+    //+------------------------------------------------------------------+
+    //|                                                                  |
+    //+------------------------------------------------------------------+
+} // void InitDataVarsStruct(sDataVars &sd)
+//+------------------------------------------------------------------+
+
+
+//sDataVars sData[9];
+sDataVars sData[];
+int sDataSize;
+
 
 string symbolName;
 string symbolNameAppendix = "_ticks";
@@ -64,7 +118,7 @@ uint tickCount;
 
 MqlRates rates[];
 
-uint gCopyTicksFlags = COPY_TICKS_INFO; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
+uint gCopyTicksFlags = COPY_TICKS_ALL; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
 
 // E V E N T   H A N D L E R S IMPLEMENTATION
 
@@ -165,148 +219,96 @@ void ExtractHighLowFromMqlTickArray(const MqlTick &mqltickarray[], int &OC, int 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-bool GetSymbolNameAndPeriodFromKey(const string &periodKey, const string &symbol, string &_symbolName, ENUM_TIMEFRAMES &period)
+bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &sd)
 {
 
-    bool ret = false;
-
-    if ("T1" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_M1;
-        return true;
-    }
-
-    if ("T5" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_M5;
-        return true;
-    }
-
-    if ("T15" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_M15;
-        return true;
-    }
-
-    if ("T30" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_M30;
-        return true;
-    }
+    InitDataVarsStruct(sd);
 
     if ("T60" == periodKey)
     {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H1;
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 60;
+        sd.periodKey = periodKey;
         return true;
     }
 
-    if ("T120" == periodKey)
+    if ("T300" == periodKey)
     {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H2;
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 300;
+        sd.periodKey = periodKey;
         return true;
     }
 
-    if ("T180" == periodKey)
+    if ("T900" == periodKey)
     {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H3;
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 900;
+        sd.periodKey = periodKey;
         return true;
     }
 
-    if ("T240" == periodKey)
+    if ("T3600" == periodKey)
     {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H4;
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 3600;
+        sd.periodKey = periodKey;
         return true;
     }
 
-    if ("T360" == periodKey)
+    if ("T_AVG" == periodKey)
     {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H6;
+        sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_T;
+        sd.periodNum = 0;
+        sd.periodKey = periodKey;
         return true;
     }
-
-    if ("T480" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H8;
-        return true;
-    }
-
-    if ("T720" == periodKey)
-    {
-        _symbolName = symbol + symbolNameAppendix;
-        period = PERIOD_H12;
-        return true;
-    }
-
+    
     if ("S60" == periodKey)
     {
-        _symbolName = symbol;
-        period = PERIOD_M1;
-        return true;
-    }
-
-    if ("S120" == periodKey)
-    {
-        _symbolName = symbol;
-        period = PERIOD_M2;
-        return true;
-    }
-
-    if ("S180" == periodKey)
-    {
-        _symbolName = symbol;
-        period = PERIOD_M3;
-        return true;
-    }
-
-    if ("S240" == periodKey)
-    {
-        _symbolName = symbol;
-        period = PERIOD_M4;
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 60;
+        sd.periodKey = periodKey;
         return true;
     }
 
     if ("S300" == periodKey)
     {
-        _symbolName = symbol;
-        period = PERIOD_M5;
-        return true;
-    }
-
-    if ("S600" == periodKey)
-    {
-        _symbolName = symbol;
-        period = PERIOD_M10;
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 300;
+        sd.periodKey = periodKey;
         return true;
     }
 
     if ("S900" == periodKey)
     {
-        _symbolName = symbol;
-        period = PERIOD_M15;
-        return true;
-    }
-
-    if ("S1200" == periodKey)
-    {
-        _symbolName = symbol;
-        period = PERIOD_M20;
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 900;
+        sd.periodKey = periodKey;
         return true;
     }
 
     if ("S3600" == periodKey)
     {
-        _symbolName = symbol;
-        period = PERIOD_H1;
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 3600;
+        sd.periodKey = periodKey;
+        return true;
+    }
+
+    if ("S_AVG" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_S;
+        sd.periodNum = 0;
+        sd.periodKey = periodKey;
+        return true;
+    }
+    
+    if ("SUM_AVG" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_SUM;
+        sd.periodNum = 0;
+        sd.periodKey = periodKey;
         return true;
     }
 
@@ -315,37 +317,9 @@ bool GetSymbolNameAndPeriodFromKey(const string &periodKey, const string &symbol
     //+------------------------------------------------------------------+
     //|                                                                  |
     //+------------------------------------------------------------------+
-} // bool GetSymbolNameAndPeriodFromKey( const string& periodKey, const string& symbol, string _symbolName, ENUM_TIMEFRAMES period )
+} // bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &sd)
 //+------------------------------------------------------------------+
 
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void InitMaVarsStruct(sDataVars &ma)
-{
-
-    ma.periodKey = "";
-    ma.DELTA = 0;
-    ma.PS = 0;
-    ma.OC = 0;
-    ma.HL = 0;
-    ma.VOLS = 0;
-    ma.TD = 0;
-    ma.TT = 0;
-    ma.SPREAD = 0;
-    ma.OC_HL = 0;
-    ma.VOLS_TD = 0;
-    ma.HL_TD = 0;
-    ma.SUMCOL = 0;
-    ma.c0 = 0.0;
-    ma.t0 = 0;
-    ma.str_txt = "";
-
-    //+------------------------------------------------------------------+
-    //|                                                                  |
-    //+------------------------------------------------------------------+
-} // void InitMaVarsStruct( sDataVars &ma )
-//+------------------------------------------------------------------+
 
 // E V E N T   H A N D L E R S IMPLEMENTATION
 
@@ -394,79 +368,35 @@ int _OnInit(void)
     }
 
     //
-    // init all ma structs with default values
+    // init all sData structs with default values and set periodKey
     //
-    sDataVars md;
-    InitMaVarsStruct(md);
-    int sMaSize = ArraySize(sData);
-    for (int cnt = 0; sMaSize > cnt; cnt++)
+    
+    string s_sep=":";              // A separator as a character
+    ushort u_sep;                  // The code of the separator character
+    string str_period_split[];     // An array to get strings
+    u_sep=StringGetCharacter(s_sep,0);//--- Get the separator code
+    int num_sep=StringSplit(PERIODS,u_sep,str_period_split); //--- Split the string to substrings
+    if ( 1 > num_sep )
     {
-        sData[cnt] = md;
+        Print(" PERIODS stringsplit failed ", PERIODS);
+        return (INIT_FAILED);
     }
-    /*
-    sData[0].periodKey = "T1";
-    sData[1].periodKey = "T5";
-    sData[2].periodKey = "T15";
-    sData[3].periodKey = "T60";
-    sData[4].periodKey = "S60";
-    sData[5].periodKey = "S300";
-    sData[6].periodKey = "S900";
-    sData[7].periodKey = "S3600";
-    sData[8].periodKey = "SUM_AVG";
-    */
-    /*
-    sData[0].periodKey = "S60";
-    sData[1].periodKey = "S120";
-    sData[2].periodKey = "S180";
-    sData[3].periodKey = "S240";
-    sData[4].periodKey = "S300";
-    sData[5].periodKey = "S600";
-    sData[6].periodKey = "S900";
-    sData[7].periodKey = "S1200";
-    sData[8].periodKey = "SUM_AVG";
-    */
-    /*
-    sData[0].periodKey = "S60";
-    sData[1].periodKey = "T1";
-    sData[2].periodKey = "T5";
-    sData[3].periodKey = "T15";
-    sData[4].periodKey = "T60";
-    sData[5].periodKey = "T120";
-    sData[6].periodKey = "T480";
-    sData[7].periodKey = "T720";
-    sData[8].periodKey = "SUM_AVG";
-    */
-
-    sData[0].periodKey = "T1";
-    sData[1].periodKey = "T5";
-    sData[2].periodKey = "T15";
-    sData[3].periodKey = "T60";
-    sData[4].periodKey = "S60";
-    sData[5].periodKey = "S300";
-    sData[6].periodKey = "S900";
-    sData[7].periodKey = "S3600";
-    sData[8].periodKey = "SUM_AVG";
-
-    //
-    // open all the iMa handles
-    //
-    for (int cnt = 0; sMaSize > cnt; cnt++)
+    
+    ArrayFree( sData );
+    ArrayResize( sData, num_sep );
+    sDataSize = ArraySize(sData);    
+    
+    for( int cnt = 0; cnt < num_sep; cnt++ )
     {
-
-        if ("SUM_AVG" == sData[cnt].periodKey)
-            continue;
-
-        string _symbolName = "";
-        ENUM_TIMEFRAMES period = 0;
-        if (false == GetSymbolNameAndPeriodFromKey(sData[cnt].periodKey, _Symbol, _symbolName, period))
+        if( false == GetPeriodFromKeyAndInitDataVarsStruct(str_period_split[cnt], sData[cnt] ) )
         {
-            Print(" GetSymbolNameAndPeriodFromKey failed ", _symbolName, " ", sData[cnt].periodKey);
+            Print(" GetPeriodFromKeyAndInitDataVarsStruct failed ", str_period_split[cnt] );
             return (INIT_FAILED);
         }
+        
+    } // for( int cnt = 0; cnt < num_sep; cnt++ )
 
-    } // for( int cnt = 0; sMaSize>cnt; cnt++ )
-
-    // ArrayPrint( sData );
+    //ArrayPrint( sData );
 
     EventSetTimer(1);
 
@@ -483,160 +413,13 @@ int _OnInit(void)
 //+------------------------------------------------------------------+
 void _OnTimer()
 {
-
-    ulong position_ID = 0;
-    long pos_open_time = 0;
-    long create_time_delta = 0;
-
+   
+    string str;
+    datetime tc = TimeCurrent();
+    
+    //--- get data on the last tick
     double last_price = 0;
     double last_spread = 0;
-    ulong pos_open_time_delta = 0;
-    long pos_open_price_delta = 0;
-    double pos_open_price = 0;
-    double pos_open_price_last = 0;
-    double pos_open_profit = 0;
-    double pos_open_vol = 0;
-    ENUM_POSITION_TYPE pos_open_type = 0;
-
-    int size = 0;
-    MqlTick array[];
-    int size1 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 1) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc1 = 0;
-    int hl1 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc1, hl1);
-
-    int size2 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 2) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc2 = 0;
-    int hl2 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc2, hl2);
-
-    int size5 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 5) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc5 = 0;
-    int hl5 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc5, hl5);
-
-    int size15 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 15) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc15 = 0;
-    int hl15 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc15, hl15);
-
-    int size60 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 60) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc60 = 0;
-    int hl60 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc60, hl60);
-
-    int size300 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 300) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc300 = 0;
-    int hl300 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc300, hl300);
-
-    int size900 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 900) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc900 = 0;
-    int hl900 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc900, hl900);
-
-    int size3600 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (TimeCurrent() - 3600) * 1000, (TimeCurrent() - 0) * 1000);
-    int oc3600 = 0;
-    int hl3600 = 0;
-    ExtractHighLowFromMqlTickArray(array, oc3600, hl3600);
-
-    string _t_str = StringFormat(" tc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
-                                 size1, size2, size5, size15, size60, size300, size900, size3600);
-    if (0 < Debug)
-        Print(_t_str);
-
-    string _oc_str = StringFormat(" oc: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
-                                  oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600);
-    if (0 < Debug)
-        Print(_oc_str);
-
-    string _hl_str = StringFormat(" hl: %s %4d %4d %4d %4d %4d %4d %6d %6d", TimeToString(TimeCurrent(), TIME_SECONDS),
-                                  hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600);
-    if (0 < Debug)
-        Print(_hl_str);
-
-    double tick_avg = (((double)size1 / 1) + ((double)size2 / 2) +
-                       (double)(size5 / 5) + ((double)size15 / 15) +
-                       ((double)size60 / 60) + ((double)size300 / 300) +
-                       ((double)size900 / 900) + ((double)size3600 / 3600)) /
-                      8;
-    double tick_avg_low = (((double)size1 / 1) + ((double)size2 / 2) +
-                           (double)(size5 / 5) + ((double)size15 / 15)) /
-                          4;
-    double tick_avg_high = (((double)size60 / 60) + ((double)size300 / 300) +
-                            ((double)size900 / 900) + ((double)size3600 / 3600)) /
-                           4;
-    string str = StringFormat(" t: %s %s  avg:  %0.1f/ %0.1f/ %0.1f  %4d/1 %4d/2 %4d/5 %4d/15 %6d/60 %6d/300 %6d/900 %6d/3600",
-                              TimeToString(TimeCurrent(), TIME_SECONDS),
-                              _Symbol,
-                              tick_avg,
-                              tick_avg_low,
-                              tick_avg_high,
-                              size1, size2, size5, size15, size60, size300, size900, size3600);
-    if (0 < Debug)
-        Print(str);
-
-    double oc_avg = (((double)oc1) + ((double)oc2) +
-                     (double)(oc5) + ((double)oc15) +
-                     ((double)oc60) + ((double)oc300) +
-                     ((double)oc900) + ((double)oc3600)) /
-                    8;
-    double oc_avg_low = (((double)oc1) + ((double)oc2) +
-                         (double)(oc5) + ((double)oc15)) /
-                        4;
-    double oc_avg_high = (((double)oc60) + ((double)oc300) +
-                          ((double)oc900) + ((double)oc3600)) /
-                         4;
-    str = StringFormat(" t: %s %s  avg: %4d/%4d/%4d  %4d %4d %4d %4d %6d %6d %6d %6d",
-                       TimeToString(TimeCurrent(), TIME_SECONDS),
-                       _Symbol,
-                       (int)oc_avg,
-                       (int)oc_avg_low,
-                       (int)oc_avg_high,
-                       oc1, oc2, oc5, oc15, oc60, oc300, oc900, oc3600);
-    if (0 < Debug)
-        Print(str);
-
-    double hl_avg = (((double)hl1) + ((double)hl2) +
-                     (double)(hl5) + ((double)hl15) +
-                     ((double)hl60) + ((double)hl300) +
-                     ((double)hl900) + ((double)hl3600)) /
-                    8;
-    double hl_avg_low = (((double)hl1) + ((double)hl2) +
-                         (double)(hl5) + ((double)hl15)) /
-                        4;
-    double hl_avg_high = (((double)hl60) + ((double)hl300) +
-                          ((double)hl900) + ((double)hl3600)) /
-                         4;
-    str = StringFormat(" t: %s %s  avg: %4d/%4d/%4d  %4d %4d %4d %4d %6d %6d %6d %6d",
-                       TimeToString(TimeCurrent(), TIME_SECONDS),
-                       _Symbol,
-                       (int)hl_avg,
-                       (int)hl_avg_low,
-                       (int)hl_avg_high,
-                       hl1, hl2, hl5, hl15, hl60, hl300, hl900, hl3600);
-    if (0 < Debug)
-        Print(str);
-
-    double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
-    double acc_cre = AccountInfoDouble(ACCOUNT_CREDIT);
-    double acc_pro = AccountInfoDouble(ACCOUNT_PROFIT);
-    double acc_equ = AccountInfoDouble(ACCOUNT_EQUITY);
-    double acc_mrg = AccountInfoDouble(ACCOUNT_MARGIN);
-    double acc_mrg_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-    double acc_mrg_lvl = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
-    double acc_mrg_so_call = AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL);
-    double acc_mrg_so_so = AccountInfoDouble(ACCOUNT_MARGIN_SO_SO);
-
-    str = StringFormat("   ACCOUNT: %s / %s / %s - MARGIN free: %s ",
-                       DoubleToString(acc_equ, 2),
-                       DoubleToString(acc_bal, 2),
-                       DoubleToString(acc_pro, 2),
-                       DoubleToString(acc_mrg_free, 2));
-    if (0 < Debug)
-        Print(str);
-
-    //--- get data on the last tick
     MqlTick t;
     if (!SymbolInfoTick(Symbol(), t))
     {
@@ -664,7 +447,66 @@ void _OnTimer()
             if (0 < Debug)
                 Print(str);
         }
-    }
+    } // if (!SymbolInfoTick(Symbol(), t))
+
+
+    for( int cnt = 0; cnt < sDataSize; cnt++ )
+    {
+
+        if (ENUM_PERIOD_TYPE_AVERAGE_SUM == sData[cnt].periodType)
+            continue;
+        if (ENUM_PERIOD_TYPE_AVERAGE_S   == sData[cnt].periodType)
+            continue;
+        if (ENUM_PERIOD_TYPE_AVERAGE_T   == sData[cnt].periodType)
+            continue;
+        
+        MqlTick array[];
+        int size1 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (tc - sData[cnt].periodNum) * 1000, (tc - 0) * 1000);
+        int oc1 = 0;
+        int hl1 = 0;
+        ExtractHighLowFromMqlTickArray(array, oc1, hl1);
+        sData[cnt].HL = hl1;
+        sData[cnt].OC = oc1;
+        sData[cnt].VOLS = size1;
+        sData[cnt].SPREAD = (int)last_spread;
+        sData[cnt].c0 = last_price;
+        sData[cnt].t0 = tc;
+    
+        
+    } // for( int cnt = 0; cnt < sDataSize; cnt++ )
+    
+    //ArrayPrint( sData );
+
+
+    ulong position_ID = 0;
+    long pos_open_time = 0;
+    long create_time_delta = 0;
+
+    ulong pos_open_time_delta = 0;
+    long pos_open_price_delta = 0;
+    double pos_open_price = 0;
+    double pos_open_price_last = 0;
+    double pos_open_profit = 0;
+    double pos_open_vol = 0;
+    ENUM_POSITION_TYPE pos_open_type = 0;
+
+    double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
+    double acc_cre = AccountInfoDouble(ACCOUNT_CREDIT);
+    double acc_pro = AccountInfoDouble(ACCOUNT_PROFIT);
+    double acc_equ = AccountInfoDouble(ACCOUNT_EQUITY);
+    double acc_mrg = AccountInfoDouble(ACCOUNT_MARGIN);
+    double acc_mrg_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    double acc_mrg_lvl = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+    double acc_mrg_so_call = AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL);
+    double acc_mrg_so_so = AccountInfoDouble(ACCOUNT_MARGIN_SO_SO);
+
+    str = StringFormat("   ACCOUNT: %s / %s / %s - MARGIN free: %s ",
+                       DoubleToString(acc_equ, 2),
+                       DoubleToString(acc_bal, 2),
+                       DoubleToString(acc_pro, 2),
+                       DoubleToString(acc_mrg_free, 2));
+    if (0 < Debug)
+        Print(str);
 
     str = StringFormat(" t: %s  no open position", TimeToString(TimeCurrent(), TIME_SECONDS));
 
@@ -729,9 +571,9 @@ void _OnTimer()
     string delta_ms_since_last_tick_str = "n/a";
     if (0 < tickCount)
         delta_ms_since_last_tick_str = IntegerToString(GetTickCount() - tickCount);
-    int sDataSize = ArraySize(sData);
     string tickv_str = StringFormat("c0: %s s: %2d d: %4s",
-                                    DoubleToString(sData[sDataSize - 1].c0, Digits()),
+                                    // TODO FixMe - here the T60 c0 shall go
+                                    DoubleToString(sData[0].c0, Digits()),
                                     (int)last_spread,
                                     delta_ms_since_last_tick_str);
     tickCount = 0;
@@ -745,9 +587,13 @@ void _OnTimer()
     double tick_threshold = 1.0;
     if ("GBPJPY" == _Symbol || "NZDUSD" == _Symbol)
         tick_threshold = 2.0;
+    double tick_avg = 1;
+    double tick_avg_low = 2;
+    double tick_avg_high = 3;
 
     tickv_str = StringFormat(" %4d/min :  %0.1f/ %0.1f/ %0.1f ",
-                             size60,
+                             // TODO FixMe - here the T60 VOLS shall go
+                             sData[0].VOLS,
                              tick_avg,
                              tick_avg_low,
                              tick_avg_high);
@@ -766,9 +612,13 @@ void _OnTimer()
     //
     _comment_txt_line_start++;
     double hl_threshold = 10;
+    double hl_avg = 4;
+    double hl_avg_low = 5;
+    double hl_avg_high = 6;
 
     string hl_str = StringFormat(" %4d  HL : %4d/%4d/%4d",
-                                 hl60,
+                                 // TODO FixMe - here the T60 HL shall go
+                                 sData[0].HL,
                                  (int)hl_avg,
                                  (int)hl_avg_low,
                                  (int)hl_avg_high);
@@ -787,9 +637,13 @@ void _OnTimer()
     //
     _comment_txt_line_start++;
     double oc_threshold = 10;
+    double oc_avg = 7;
+    double oc_avg_low = 8;
+    double oc_avg_high = 9;
 
     string oc_str = StringFormat(" %4d  OC : %4d/%4d/%4d",
-                                 oc60,
+                                 // TODO FixMe - here the T60 OC shall go
+                                 sData[0].OC,
                                  (int)oc_avg,
                                  (int)oc_avg_low,
                                  (int)oc_avg_high);

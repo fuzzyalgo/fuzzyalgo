@@ -87,9 +87,9 @@ timeoffsetInS = 0
 
 for cnt in range( rangenumber ):
 
-    gDtTo   = datetime(2025, 3, 7, 15, 29, 0, 0, tzinfo=timezone.utc)
-    gH.g_c0['EURUSD'] = 1.08543
-    #gDtTo = datetime.now(timezone.utc) + gH.tdOffset
+    #gDtTo   = datetime(2025, 3, 7, 15, 29, 0, 0, tzinfo=timezone.utc)
+    #gH.g_c0['EURUSD'] = 1.08543
+    ##gDtTo = datetime.now(timezone.utc) + gH.tdOffset
     tdoffset = timedelta(seconds=(cnt*timeoffsetInS))
     dt = gDtTo + tdoffset
     gH.get_date_range(dt)
