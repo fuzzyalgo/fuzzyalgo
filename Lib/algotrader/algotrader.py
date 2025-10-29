@@ -44,7 +44,7 @@ from filterpy.common import Q_discrete_white_noise
 # print_fig_all_periods_per_sym
 # clear_ax_fig_all_periods_per_sym
 # close_fig_all_periods_per_sym
-# save_fig_all_periods_per_sym
+# save_fig_all
 # open_fig_all_periods_per_sym
 #
 from algotrader._mpf   import _calc_subplot_rows_x_cols
@@ -256,9 +256,9 @@ class Algotrader():
         #         ]
         
         # winter time
-        #self.tdOffset= timedelta(hours=2)
+        self.tdOffset= timedelta(hours=2)
         # summer time
-        self.tdOffset= timedelta(hours=3)
+        #self.tdOffset= timedelta(hours=3)
         # =============================================================================
     	# one hour ahead of 'Europe/Berlin' and timezone of RFX trade server
     	# timezone=pytz.timezone('Europe/Helsinki')
@@ -3673,10 +3673,10 @@ class Algotrader():
     # =============================================================================
 
     # =============================================================================
-    # def save_fig_all_periods_per_sym():
+    # def save_fig_all( self, figure, sym=None, per=None, file_extension = '.png'):
     #     
     # =============================================================================
-    def save_fig_all_periods_per_sym( self, figure, sym, file_extension = '.png'):
+    def save_fig_all( self, figure, sym=None, per=None, file_extension = '.png'):
         
         #_mpf_figure_show(self.gShowFig,self.gGlobalFig)
 
@@ -3686,12 +3686,21 @@ class Algotrader():
             # TODO FixMe - set value of home_dir depending on json config
             dir_appdata =  os.getenv('APPDATA') 
             path_mt5 = dir_appdata +  "\\MetaTrader5_" + self.gACCOUNT
-            home_dir = path_mt5 + "\\MQL5\\Files\\" + self.gACCOUNT + "\\SYM\\" + sym
+            sym_per_dir = ''
+            if (None != sym) and (None != per):
+                sym_per_dir = "\\" + sym + "\\" + per
+            elif (None != sym) and (None == per):
+                sym_per_dir = "\\SYM\\" + sym
+            elif (None == sym) and (None != per):
+                sym_per_dir = "\\PER\\" + per
+            else:
+                sym_per_dir = "\\ALL"
+            home_dir = path_mt5 + "\\MQL5\\Files\\" + self.gACCOUNT + sym_per_dir
             os.makedirs(home_dir, exist_ok=True)
             filename_sym =  home_dir +  "\\" + str(dt_to.strftime("%Y%m%d_%H%M%S")) + file_extension
             _mpf_figure_save(figure, filename_sym)
 
-    # END def save_fig_all_periods_per_sym():
+    # END def save_fig_all( self, figure, sym=None, per=None, file_extension = '.png'):
     # =============================================================================
 
     # =============================================================================
@@ -3902,7 +3911,7 @@ class Algotrader():
                 # 
                 # =============================================================================
             
-        self.save_fig_all_periods_per_sym(fig_sym, sym, file_extension = '_01.png')
+        self.save_fig_all(fig_sym, sym=sym, file_extension = '_01.png')
         _mpf_figure_show()
     
         if not self.gGlobalFig: self.close_fig_all_periods_per_sym()
@@ -4296,7 +4305,7 @@ class Algotrader():
                 # 
                 # =============================================================================
             
-        self.save_fig_all_periods_per_sym(fig_sym, sym, file_extension = '_02.png')
+        self.save_fig_all(fig_sym, sym=sym, file_extension = '_02.png')
 
         _startShow = time.time()
         _mpf_figure_show()
@@ -4326,6 +4335,7 @@ class Algotrader():
     
                 lkeys=list(self.gDF['RATES'].keys())
                 len_d = len( self.gDF['RATES'] )
+                #print(len_d, " keys: ", lkeys)
                 start = len_d - 28
                 if 0 > start:
                     start = 0
@@ -4340,9 +4350,6 @@ class Algotrader():
                     dt_from = df.iloc[lendf].DT + timedelta(seconds=(df.iloc[lendf].TDs))   
                 else:
                     dt_from = df.iloc[lendf].DT
-                home_dir = ".\\" + self.gACCOUNT + "\\" + per + "\\" + sym
-                os.makedirs(home_dir, exist_ok=True)
-                filename_sym =  home_dir +  "\\" + str(dt_from.strftime("%Y%m%d_%H%M%S.png"))
                 
                 cnt_sym = 1
                 
@@ -4373,8 +4380,9 @@ class Algotrader():
                     cnt_sym = cnt_sym + 1
                     filename =  str(dt_from_cnt.strftime("%H%M%S")) + '_' + per + '_' + sym
             
-                    _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
-                    _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading)
+                    _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+                    _mpf_plot(df,type='wf',  ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="yahoo",update_width_config=dict(ohlc_linewidth=1),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
                     key0 = 'PID4MAXMIN2'
                     key1 = 'PID4MAXMIN2_1'
                     #_mpf_plot(df,type='ohlc',hlines=[myhline],ax=ax0,axtitle=filename,columns=[key1,key1,key0,key0,'tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading)
@@ -4384,11 +4392,11 @@ class Algotrader():
                     # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
                     # key0 = 'PID1_MAX_MIN_P4_2'
                     # _mpf_plot(df,type='line',ax=ax0,axtitle=filename,columns=[key0,key0,key0,key0,'tick_volume'])
-                    _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Popen','Pclose','Pclose','tick_volume'],style="starsandstripes",update_width_config=dict(ohlc_linewidth=3,ohlc_ticksize=0.4))
-                    
+                    _mpf_plot(df,type='ohlc',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="starsandstripes",update_width_config=dict(ohlc_linewidth=3,ohlc_ticksize=0.4),wf_params=dict(brick_size='atr',atr_length='total'),pnf_params=dict(box_size='atr',atr_length='total'),renko_params=dict(brick_size='atr',atr_length='total'),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
+
                     cnt = cnt+1
                 
-                _mpf_figure_save (fig_sym,filename_sym)
+                self.save_fig_all(fig_sym, sym=sym, file_extension = '_03.png')
                 _mpf_figure_show ()
                 _mpf_figure_close(fig_sym)
     
@@ -4408,11 +4416,6 @@ class Algotrader():
         for per in self.cf_periods[self.gACCOUNT]:
             
             fig_sym = _mpf_figure_open(self.gShowFig,self.gTightLayout,32,20)
-            
-            home_dir = ".\\" + self.gACCOUNT + "\\PER\\" + per
-            os.makedirs(home_dir, exist_ok=True)
-            filename_sym =  home_dir +  "\\" + str(dt_to.strftime("%Y%m%d_%H%M%S.png"))
-            
             cnt_sym = 1
         
             # SYMBOLS
@@ -4421,7 +4424,7 @@ class Algotrader():
                     
                 print(sym + str(dt_to.strftime("_%Y%m%d_%H%M%S_PER_")) + per)
                 df = self.gDF['RATES'][str(dt_to)][per][sym]
-                df1 = self.gDF['RATES'][str(dt_to)]['T1'][sym]
+                #df1 = self.gDF['RATES'][str(dt_to)]['T1'][sym]
                 lendf    = len(df)
                 if 0 >= lendf :
                     raise ValueError("print_fig_all_periods_per_sym: df does not exists " + sym + " "  + per + " " + str(dt_to) + " " + str(len) )
@@ -4473,7 +4476,7 @@ class Algotrader():
                 #_mpf_plot(df1,type='line',ax=ax0,axtitle=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],style="sas",update_width_config=dict(ohlc_linewidth=3),show_nontrading=self.gShowNonTrading, datetime_format=self.gDateFormat)
                 #print( df )
                 
-            _mpf_figure_save (fig_sym,filename_sym)
+            self.save_fig_all(fig_sym, per=per, file_extension = '_04.png')
             _mpf_figure_show ()
             _mpf_figure_close(fig_sym)
                 
@@ -4563,6 +4566,8 @@ class Algotrader():
                     # _mpf_plot(df10,type='candle',ax=ax0,volume=ax4,title=filename,columns=['Popen','Phigh','Plow','Pclose','tick_volume'],savefig=filename,addplot=ap0)
     
                 
+                self.save_fig_all(fig_sym, file_extension = '_05.png')
+                _mpf_figure_show ()
                 _mpf_figure_close(fig_sym, filename_sym)
 
     # END def print_fig_all_periods_and_one_sym_and_all_times():
@@ -8140,10 +8145,11 @@ class Algotrader():
         endticks = time.time()
         
         if self.gShowFig or self.gSaveFig:
-            #self.print_fig_all_periods_per_sym()
-            self.print_fig_all_periods_per_sym_NEW()
-            # self.print_fig_all_periods_and_all_syms()
-            # self.print_past_entries_per_sym()
+
+            #self.print_fig_all_periods_per_sym(sym)
+            self.print_fig_all_periods_per_sym_NEW(sym)
+            #self.print_fig_all_periods_and_all_syms()
+            #self.print_past_entries_per_sym()
         else:
             if 1 < self.gVerbose: print( '... noop ...' )    
         
