@@ -59,13 +59,13 @@ struct sDataVars
     int TD;
     int TT;
     int SPREAD;
-    int OC_HL;
-    int VOLS_TD;
-    int HL_TD;
-    int SUMCOL;
+    double OC_HL;
+    double VOLS_TD;
+    double HL_TD;
+    double SUMCOL;
 
-    datetime t0;
-    datetime t1;
+    long t0;
+    long t1;
     double c0;
     double c1;
 
@@ -115,7 +115,6 @@ int sDataSize;
 
 string symbolName;
 string symbolNameAppendix = "_ticks";
-MqlRates rates[];
 
 // E V E N T   H A N D L E R S IMPLEMENTATION
 
@@ -168,14 +167,16 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void ExtractHighLowFromMqlTickArray(const MqlTick &mqltickarray[], int &OC, int &HL)
+void ExtractHighLowFromMqlTickArray(const MqlTick &mqltickarray[], int &OC, int &HL, int &SPREAD)
 {
+    int spread = 0;
     double high = 0;
     double low = 1000000000;
     int size = ArraySize(mqltickarray);
 
     HL = 0;
     OC = 0;
+    SPREAD = 0;
 
     if (0 < size)
     {
@@ -202,10 +203,15 @@ void ExtractHighLowFromMqlTickArray(const MqlTick &mqltickarray[], int &OC, int 
             high = t.ask;
         if (low > t.bid)
             low = t.bid;
+        int s = (int)((t.ask - t.bid) / _Point);
+        if ( spread < s )
+            spread = s;
+    
 
     } // for( cnt = 0; cnt < size; cnt++ )
 
     HL = (int)((high - low) / _Point);
+    SPREAD = spread;
 
     //+------------------------------------------------------------------+
     //|                                                                  |
@@ -503,13 +509,6 @@ void _OnTimer()
     for (int cnt = 0; cnt < sDataSize; cnt++)
     {
 
-        if (ENUM_PERIOD_TYPE_AVERAGE_SUM == sData[cnt].periodType)
-            continue;
-        if (ENUM_PERIOD_TYPE_AVERAGE_S == sData[cnt].periodType)
-            continue;
-        if (ENUM_PERIOD_TYPE_AVERAGE_T == sData[cnt].periodType)
-            continue;
-
         if (ENUM_PERIOD_TYPE_SECONDS_S == sData[cnt].periodType)
         {
 
@@ -519,15 +518,23 @@ void _OnTimer()
             {
                 int oc1 = 0;
                 int hl1 = 0;
-                ExtractHighLowFromMqlTickArray(array, oc1, hl1);
+                int spread1 = 0;
+                ExtractHighLowFromMqlTickArray(array, oc1, hl1, spread1);
                 sData[cnt].HL = hl1;
                 sData[cnt].OC = oc1;
                 sData[cnt].VOLS = size1;
                 // sData[cnt].TD = (int)(array[size1-1].time_msc-array[0].time_msc)/1000;
                 sData[cnt].TD = (int)sData[cnt].periodNum;
-                sData[cnt].SPREAD = (int)last_spread;
+                sData[cnt].TT = (int)( (sData[cnt].TD*1000)/sData[cnt].VOLS );
+                sData[cnt].SPREAD = spread1;
+                sData[cnt].OC_HL = MathAbs((double)((double)sData[cnt].OC/(double)sData[cnt].HL));
+                sData[cnt].VOLS_TD = (double)((double)sData[cnt].VOLS/(double)sData[cnt].TD);
+                sData[cnt].HL_TD = (double)((double)sData[cnt].HL/(double)sData[cnt].TD);
+                sData[cnt].SUMCOL = sData[cnt].OC_HL + sData[cnt].VOLS_TD + sData[cnt].HL_TD;
                 sData[cnt].c0 = last_price;
-                sData[cnt].t0 = tc;
+                sData[cnt].t0 = array[size1-1].time_msc;
+                sData[cnt].c1 = (array[0].ask + array[0].bid) / 2;
+                sData[cnt].t1 = array[0].time_msc;
 
                 if (0 < Debug)
                 {
@@ -577,14 +584,22 @@ void _OnTimer()
 
                     int oc1 = 0;
                     int hl1 = 0;
-                    ExtractHighLowFromMqlTickArray(dst_array, oc1, hl1);
+                    int spread1 = 0;
+                    ExtractHighLowFromMqlTickArray(dst_array, oc1, hl1, spread1);
                     sData[cnt].HL = hl1;
                     sData[cnt].OC = oc1;
                     sData[cnt].VOLS = dst_size;
                     sData[cnt].TD = (int)(dst_array[dst_size - 1].time_msc - dst_array[0].time_msc) / 1000;
-                    sData[cnt].SPREAD = (int)last_spread;
+                    sData[cnt].TT = (int)( (sData[cnt].TD*1000)/sData[cnt].VOLS );
+                    sData[cnt].SPREAD = spread1;
+                    sData[cnt].OC_HL = MathAbs((double)((double)sData[cnt].OC/(double)sData[cnt].HL));
+                    sData[cnt].VOLS_TD = (double)((double)sData[cnt].VOLS/(double)sData[cnt].TD);
+                    sData[cnt].HL_TD = (double)((double)sData[cnt].HL/(double)sData[cnt].TD);
+                    sData[cnt].SUMCOL = sData[cnt].OC_HL + sData[cnt].VOLS_TD + sData[cnt].HL_TD;
                     sData[cnt].c0 = last_price;
-                    sData[cnt].t0 = tc;
+                    sData[cnt].t0 = dst_array[dst_size-1].time_msc;
+                    sData[cnt].c1 = (dst_array[0].ask + dst_array[0].bid) / 2;
+                    sData[cnt].t1 = dst_array[0].time_msc;
 
                     if (0 < Debug)
                     {
@@ -627,6 +642,108 @@ void _OnTimer()
         } // if (ENUM_PERIOD_TYPE_TICKS_T == sData[cnt].periodType)
 
     } // for( int cnt = 0; cnt < sDataSize; cnt++ )
+    
+    // calc average statistics
+    int cnt_s = 0;
+    int cnt_t = 0;
+    int oc_s_avg = 0;
+    int oc_t_avg = 0;
+    int hl_s_avg = 0;
+    int hl_t_avg = 0;
+    int vols_s_avg = 0;
+    int vols_t_avg = 0;
+    int td_s_avg = 0;
+    int td_t_avg = 0;
+    int tt_s_avg = 0;
+    int tt_t_avg = 0;
+    int spread_s_avg = 0;
+    int spread_t_avg = 0;
+    double oc_hl_s_avg = 0;
+    double oc_hl_t_avg = 0;
+    double vols_td_s_avg = 0;
+    double vols_td_t_avg = 0;
+    double hl_td_s_avg = 0;
+    double hl_td_t_avg = 0;
+    double sumcol_s_avg = 0;
+    double sumcol_t_avg = 0;
+    
+    for (int cnt = 0; cnt < sDataSize; cnt++)
+    {
+    
+        if (ENUM_PERIOD_TYPE_SECONDS_S == sData[cnt].periodType)
+        {
+            cnt_s++;
+            oc_s_avg += sData[cnt].OC;
+            hl_s_avg += sData[cnt].HL;
+            vols_s_avg += sData[cnt].VOLS;
+            td_s_avg += sData[cnt].TD;
+            tt_s_avg += sData[cnt].TT;
+            spread_s_avg += sData[cnt].SPREAD;
+            oc_hl_s_avg += sData[cnt].OC_HL;
+            vols_td_s_avg += sData[cnt].VOLS_TD;
+            hl_td_s_avg += sData[cnt].HL_TD;
+            sumcol_s_avg += sData[cnt].SUMCOL;
+        }    
+    
+        if (ENUM_PERIOD_TYPE_TICKS_T == sData[cnt].periodType)
+        {
+            cnt_t++;
+            oc_t_avg += sData[cnt].OC;
+            hl_t_avg += sData[cnt].HL;
+            vols_t_avg += sData[cnt].VOLS;
+            td_t_avg += sData[cnt].TD;
+            tt_t_avg += sData[cnt].TT;
+            spread_t_avg += sData[cnt].SPREAD;
+            oc_hl_t_avg += sData[cnt].OC_HL;
+            vols_td_t_avg += sData[cnt].VOLS_TD;
+            hl_td_t_avg += sData[cnt].HL_TD;
+            sumcol_t_avg += sData[cnt].SUMCOL;
+        }
+
+        if (ENUM_PERIOD_TYPE_AVERAGE_S == sData[cnt].periodType)
+        {
+            sData[cnt].OC = (int)oc_s_avg/cnt_s;
+            sData[cnt].HL = (int)hl_s_avg/cnt_s;
+            sData[cnt].VOLS = (int)vols_s_avg/cnt_s;
+            sData[cnt].TD = (int)td_s_avg/cnt_s;
+            sData[cnt].TT = (int)tt_s_avg/cnt_s;
+            sData[cnt].SPREAD = (int)spread_s_avg/cnt_s;
+            sData[cnt].OC_HL = (double)oc_hl_s_avg/cnt_s;
+            sData[cnt].VOLS_TD = (double)vols_td_s_avg/cnt_s;
+            sData[cnt].HL_TD = (double)hl_td_s_avg/cnt_s;
+            sData[cnt].SUMCOL = (double)sumcol_s_avg/cnt_s;
+        }
+        
+        if (ENUM_PERIOD_TYPE_AVERAGE_T == sData[cnt].periodType)
+        {
+            sData[cnt].OC = (int)oc_t_avg/cnt_t;
+            sData[cnt].HL = (int)hl_t_avg/cnt_t;
+            sData[cnt].VOLS = (int)vols_t_avg/cnt_t;
+            sData[cnt].TD = (int)td_t_avg/cnt_t;
+            sData[cnt].TT = (int)tt_t_avg/cnt_t;
+            sData[cnt].SPREAD = (int)spread_t_avg/cnt_t;
+            sData[cnt].OC_HL = (double)oc_hl_t_avg/cnt_t;
+            sData[cnt].VOLS_TD = (double)vols_td_t_avg/cnt_t;
+            sData[cnt].HL_TD = (double)hl_td_t_avg/cnt_t;
+            sData[cnt].SUMCOL = (double)sumcol_t_avg/cnt_t;
+        }
+
+        if (ENUM_PERIOD_TYPE_AVERAGE_SUM == sData[cnt].periodType)
+        {
+            sData[cnt].OC = ((int)oc_s_avg/cnt_s + (int)oc_t_avg/cnt_t)/2;
+            sData[cnt].HL = ((int)hl_s_avg/cnt_s + (int)hl_t_avg/cnt_t)/2;
+            sData[cnt].VOLS = ((int)vols_s_avg/cnt_s + (int)vols_t_avg/cnt_t)/2;
+            sData[cnt].TD = ((int)td_s_avg/cnt_s + (int)td_t_avg/cnt_t)/2;
+            sData[cnt].TT = ((int)tt_s_avg/cnt_s + (int)tt_t_avg/cnt_t)/2;
+            sData[cnt].SPREAD = ((int)spread_s_avg/cnt_s + (int)spread_t_avg/cnt_t)/2;
+            sData[cnt].OC_HL = ((double)oc_hl_s_avg/cnt_s + (double)oc_hl_t_avg/cnt_t)/2;
+            sData[cnt].VOLS_TD = ((double)vols_td_s_avg/cnt_s + (double)vols_td_t_avg/cnt_t)/2;
+            sData[cnt].HL_TD = ((double)hl_td_s_avg/cnt_s + (double)hl_td_t_avg/cnt_t)/2;
+            sData[cnt].SUMCOL = ((double)sumcol_s_avg/cnt_s + (double)sumcol_t_avg/cnt_t)/2;
+        }
+
+    } // for( int cnt = 0; cnt < sDataSize; cnt++ )
+    
 
     // ArrayPrint( sData );
 
@@ -727,24 +844,35 @@ void _OnTimer()
                                     delta_ms_since_last_tick_str);
 
     comment.SetText(_comment_txt_line_start, tickv_str, COLOR_TEXT);
+    _comment_txt_line_start++;
 
     //
     // comment output MA
     //
-    _comment_txt_line_start++;
 
+    // first set the header
+    string _header_str = "              OC/  HL/VOLS/  TD/  TT/   S/";
+    comment.SetText(_comment_txt_line_start, _header_str, COLOR_TEXT);
+    _comment_txt_line_start++;
+    
     int _sum_avg_threshold = 0;
     string _ma_str = "";
 
     for (int cnt = 0; sDataSize > cnt; cnt++)
     {
 
-        _ma_str = StringFormat("  %7s : %4d/%4d/%4d/%4d",
+        _ma_str = StringFormat("  %7s : %4d/%4d/%4d/%4d/%4d/%4d/%4.1f/%4.1f/%4.1f/%4.1f",
                                sData[cnt].periodKey,
                                sData[cnt].OC,
                                sData[cnt].HL,
                                sData[cnt].VOLS,
-                               sData[cnt].TD);
+                               sData[cnt].TD,
+                               sData[cnt].TT,
+                               sData[cnt].SPREAD,
+                               sData[cnt].OC_HL,
+                               sData[cnt].VOLS_TD,
+                               sData[cnt].HL_TD,
+                               sData[cnt].SUMCOL);
         _sum_avg_threshold = 10 + (int)last_spread;
         int _lineno = _comment_txt_line_start + cnt;
         if (+1 * _sum_avg_threshold < sData[cnt].SUMCOL)
