@@ -9,7 +9,8 @@
 #property description "Ticks\n"
 
 #include <comment.mqh>
-#include <myobjects.mqh>
+//#include <myobjects.mqh>
+#include <WinAPI\sysinfoapi.mqh>
 
 #define COLOR_BLACK clrBlack
 #define COLOR_BORDER clrRed
@@ -114,8 +115,6 @@ int sDataSize;
 
 string symbolName;
 string symbolNameAppendix = "_ticks";
-uint tickCount;
-
 MqlRates rates[];
 
 uint gCopyTicksFlags = COPY_TICKS_ALL; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
@@ -328,7 +327,6 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
 //+------------------------------------------------------------------+
 int _OnInit(void)
 {
-    tickCount = 0;
 
     datetime t0 = iTime(_Symbol, PERIOD_H1, 0);
     MqlDateTime dt0;
@@ -398,7 +396,8 @@ int _OnInit(void)
 
     //ArrayPrint( sData );
 
-    EventSetTimer(1);
+    //EventSetTimer(1);
+    EventSetMillisecondTimer(1000);
 
     return INIT_SUCCEEDED;
 
@@ -408,6 +407,31 @@ int _OnInit(void)
 } // int _OnInit(void)
 //+------------------------------------------------------------------+
 
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+// #include <WinAPI\sysinfoapi.mqh>
+// https://www.mql5.com/en/forum/462879/page2
+datetime GetSystemTimeMsc(void)
+{
+    SYSTEMTIME st;
+    GetSystemTime(st);
+    
+    MqlDateTime dt;
+    dt.year=st.wYear;
+    dt.mon=st.wMonth;
+    dt.day=st.wDay;
+    dt.hour=st.wHour;
+    dt.min=st.wMinute;
+    dt.sec=st.wSecond;
+//---
+    return(1000*(StructToTime(dt)+7200)+st.wMilliseconds);
+} // long GetSystemTimeMsc(void)
+//+------------------------------------------------------------------+
+  
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -416,6 +440,11 @@ void _OnTimer()
    
     string str;
     datetime tc = TimeCurrent();
+    datetime tl = TimeLocal();
+    datetime tsmsc = GetSystemTimeMsc();
+    
+    string delta_ms_since_last_tick_str = "n/a";
+    int  delta_ms_since_last_tick = 0;
     
     //--- get data on the last tick
     double last_price = 0;
@@ -436,17 +465,47 @@ void _OnTimer()
         {
             last_spread = (t.ask - t.bid) / _Point;
             last_price = (t.ask + t.bid) / 2;
-            //--- display the last tick time up to milliseconds
-            str = StringFormat("    -  Last tick [ %s / %s / %s ] was at %s.%03d with spread [ %4d ]",
-                               DoubleToString(t.ask, _Digits),
-                               DoubleToString(last_price, _Digits),
-                               DoubleToString(t.bid, _Digits),
-                               TimeToString(t.time, TIME_SECONDS),
-                               t.time_msc % 1000,
-                               (int)last_spread);
+
+            delta_ms_since_last_tick = (int)(tsmsc-t.time_msc);
+            if( 0 != delta_ms_since_last_tick )
+            {
+                delta_ms_since_last_tick_str = StringFormat("%3d.%03ds",
+                                   (int)((tsmsc-t.time_msc)/1000),
+                                   (int)((tsmsc-t.time_msc)%1000)
+                                   );
+            }
+            
             if (0 < Debug)
+            {
+                //--- display the last tick time up to milliseconds
+                str = StringFormat("    tt %s.%03d  tsmsc %s.%03d  tl %s  tc %s  delta: %s",
+                                   TimeToString(t.time, TIME_SECONDS),
+                                   t.time_msc % 1000,
+                                   TimeToString(tsmsc/1000, TIME_SECONDS),
+                                   tsmsc % 1000,
+                                   
+                                   TimeToString(tl, TIME_SECONDS),
+                                   TimeToString(tc, TIME_SECONDS),
+                                   
+                                   delta_ms_since_last_tick_str
+                                   );
+            
                 Print(str);
-        }
+
+                str = StringFormat("    -  Last tick [ %s / %s / %s ] was at %s.%03d with spread [ %4d ]",
+                                   DoubleToString(t.ask, _Digits),
+                                   DoubleToString(last_price, _Digits),
+                                   DoubleToString(t.bid, _Digits),
+                                   TimeToString(t.time, TIME_SECONDS),
+                                   //t.time_msc % 1000,
+                                   tl % 1000,
+                                   (int)last_spread);
+                Print(str);
+                
+            } // if (0 < Debug)
+
+        } // if (t.ask == 0 || t.bid == 0 || t.ask < t.bid)
+        
     } // if (!SymbolInfoTick(Symbol(), t))
 
 
@@ -459,18 +518,72 @@ void _OnTimer()
             continue;
         if (ENUM_PERIOD_TYPE_AVERAGE_T   == sData[cnt].periodType)
             continue;
+
+        if (ENUM_PERIOD_TYPE_SECONDS_S == sData[cnt].periodType)
+        {
+            MqlTick array[];
+            int size1 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (tc - sData[cnt].periodNum) * 1000, (tc - 0) * 1000);
+            if( 0 < size1 )
+            {
+                int oc1 = 0;
+                int hl1 = 0;
+                ExtractHighLowFromMqlTickArray(array, oc1, hl1);
+                sData[cnt].HL = hl1;
+                sData[cnt].OC = oc1;
+                sData[cnt].VOLS = size1;
+                sData[cnt].TD = (int)(tsmsc-array[0].time_msc)/1000; 
+                sData[cnt].SPREAD = (int)last_spread;
+                sData[cnt].c0 = last_price;
+                sData[cnt].t0 = tc;
+            } // if( 0 < size1 )
+        } // if (ENUM_PERIOD_TYPE_SECONDS_S == sData[cnt].periodType)
+
+        if (ENUM_PERIOD_TYPE_TICKS_T == sData[cnt].periodType)
+        {
+            MqlTick src_array[];
+            int src_size = 0;
+            
+            for( int inc_cnt = 1; inc_cnt < 15; inc_cnt++ )
+            {
+                src_size = CopyTicksRange(_Symbol, src_array, gCopyTicksFlags, (tc - inc_cnt*sData[cnt].periodNum) * 1000, (tc - 0) * 1000);
+            }
+            
+            if( src_size > sData[cnt].periodNum )
+            {
+            
+                MqlTick dst_array[];
+                ArrayCopy( dst_array, src_array,0,(src_size-sData[cnt].periodNum),sData[cnt].periodNum);
+                int dst_size = ArraySize(dst_array);
+                if( sData[cnt].periodNum == dst_size )
+                {
+                
+                    /*MqlTick arr1[2]; 
+                    arr1[0]=src_array[0]; 
+                    arr1[1]=src_array[src_size-1];           
+                    ArrayPrint( arr1 );
+                    MqlTick arr2[2]; 
+                    arr2[0]=dst_array[0]; 
+                    arr2[1]=dst_array[dst_size-1];
+                    ArrayPrint( arr2 );*/
+                    
+                    int oc1 = 0;
+                    int hl1 = 0;
+                    ExtractHighLowFromMqlTickArray(dst_array, oc1, hl1);
+                    sData[cnt].HL = hl1;
+                    sData[cnt].OC = oc1;
+                    sData[cnt].VOLS = dst_size;
+                    sData[cnt].TD = (int)(dst_array[dst_size-1].time_msc-dst_array[0].time_msc)/1000;
+                    sData[cnt].SPREAD = (int)last_spread;
+                    sData[cnt].c0 = last_price;
+                    sData[cnt].t0 = tc;
+                
+                } // if( sData[cnt].periodNum == dst_size )
+
+                
+            } // if( size1 > sData[cnt].periodNum )
+            
+        } // if (ENUM_PERIOD_TYPE_TICKS_T == sData[cnt].periodType)
         
-        MqlTick array[];
-        int size1 = CopyTicksRange(_Symbol, array, gCopyTicksFlags, (tc - sData[cnt].periodNum) * 1000, (tc - 0) * 1000);
-        int oc1 = 0;
-        int hl1 = 0;
-        ExtractHighLowFromMqlTickArray(array, oc1, hl1);
-        sData[cnt].HL = hl1;
-        sData[cnt].OC = oc1;
-        sData[cnt].VOLS = size1;
-        sData[cnt].SPREAD = (int)last_spread;
-        sData[cnt].c0 = last_price;
-        sData[cnt].t0 = tc;
     
         
     } // for( int cnt = 0; cnt < sDataSize; cnt++ )
@@ -568,17 +681,15 @@ void _OnTimer()
     //
     int _comment_txt_line_start = 0;
 
-    string delta_ms_since_last_tick_str = "n/a";
-    if (0 < tickCount)
-        delta_ms_since_last_tick_str = IntegerToString(GetTickCount() - tickCount);
     string tickv_str = StringFormat("c0: %s s: %2d d: %4s",
                                     // TODO FixMe - here the T60 c0 shall go
                                     DoubleToString(sData[0].c0, Digits()),
                                     (int)last_spread,
                                     delta_ms_since_last_tick_str);
-    tickCount = 0;
+                                    
     comment.SetText(_comment_txt_line_start, tickv_str, COLOR_TEXT);
 
+#ifdef _COMMENT_ME_OUT_
     //
     // comment output tick speed
     //
@@ -660,6 +771,7 @@ void _OnTimer()
     {
         comment.SetText(_comment_txt_line_start, oc_str, COLOR_TEXT);
     }
+#endif
 
     //
     // comment output MA
@@ -671,11 +783,24 @@ void _OnTimer()
 
     for (int cnt = 0; sDataSize > cnt; cnt++)
     {
-        _ma_str = StringFormat("  %7s : %4d/%4d/%4d",
+
+        int thirdval = 0;        
+        if (ENUM_PERIOD_TYPE_SECONDS_S == sData[cnt].periodType)
+        {
+            thirdval = sData[cnt].VOLS;//sData[cnt].SUMCOL;
+        }
+        if (ENUM_PERIOD_TYPE_TICKS_T == sData[cnt].periodType)
+        {
+            thirdval = sData[cnt].TD;//sData[cnt].SUMCOL;
+        }
+    
+        _ma_str = StringFormat("  %7s : %4d/%4d/%4d/%4d",
                                sData[cnt].periodKey,
                                sData[cnt].OC,
                                sData[cnt].HL,
-                               sData[cnt].SUMCOL);
+                               sData[cnt].VOLS,
+                               sData[cnt].TD
+                               );
         _sum_avg_threshold = 10 + (int)last_spread;
         int _lineno = _comment_txt_line_start + cnt;
         if (+1 * _sum_avg_threshold < sData[cnt].SUMCOL)
@@ -819,7 +944,6 @@ void _OnTimer()
     SetRightPrice(0, "PRICE_price", 0, timep, last_price, clrSpringGreen, "Georgia");
 #endif
 
-    // EventKillTimer();
 
     //+------------------------------------------------------------------+
     //|                                                                  |
@@ -832,8 +956,6 @@ void _OnTimer()
 //+------------------------------------------------------------------+
 void _OnTick(void)
 {
-
-    tickCount = GetTickCount();
 
 } // void _OnTick(void)
 //+------------------------------------------------------------------+
