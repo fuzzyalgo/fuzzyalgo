@@ -34,10 +34,12 @@ enum ENUM_PERIOD_TYPE
 };
 
 // I N P U T S
-input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS;                           // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
-input int Debug = 0;                                                                  // enable debug output
-input int EventTimerIntervalMsc = 1000;                                               // Event Timer Interval in milliseconds
+// input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+// input string PERIODS = "T15:T30:T60:T300:T_AVG:S15:S30:S60:S300:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
+input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
+input int Debug = 0;                                        // enable debug output
+input int EventTimerIntervalMsc = 1000;                     // Event Timer Interval in milliseconds
 
 // G L O B A L S
 
@@ -226,6 +228,22 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
 
     InitDataVarsStruct(sd);
 
+    if ("T15" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 15;
+        sd.periodKey = periodKey;
+        return true;
+    }
+
+    if ("T30" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
+        sd.periodNum = 30;
+        sd.periodKey = periodKey;
+        return true;
+    }
+
     if ("T60" == periodKey)
     {
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
@@ -262,6 +280,22 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
     {
         sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_T;
         sd.periodNum = 0;
+        sd.periodKey = periodKey;
+        return true;
+    }
+
+    if ("S15" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 15;
+        sd.periodKey = periodKey;
+        return true;
+    }
+
+    if ("S30" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
+        sd.periodNum = 30;
         sd.periodKey = periodKey;
         return true;
     }
@@ -900,13 +934,17 @@ void _OnTimer()
     }
     else
     {
-        string bs_str = StringFormat("%s(%0.2f) %6d over %6d s",
+        string bs_str = StringFormat("%s(%0.2f) %6d over %6d s  profit: %s / %s / %s",
                                      //_Symbol,
                                      sBS,
                                      pos_open_vol,
                                      pos_open_price_delta,
-                                     create_time_delta);
+                                     create_time_delta,
+                                     DoubleToString(pos_open_profit, 2),
+                                     DoubleToString(acc_pro, 2),
+                                     DoubleToString(pos_open_profit / acc_pro * 100, 0));
 
+        bs_str = bs_str + "%";
         if (10 < pos_open_price_delta)
         {
             if ("BUY " == sBS)
@@ -925,6 +963,49 @@ void _OnTimer()
             comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
         }
     } // if( "" == sBS || 0.0 == pos_open_vol )
+
+    /*
+    double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
+    double acc_cre = AccountInfoDouble(ACCOUNT_CREDIT);
+    double acc_pro = AccountInfoDouble(ACCOUNT_PROFIT);
+    double acc_equ = AccountInfoDouble(ACCOUNT_EQUITY);
+    double acc_mrg = AccountInfoDouble(ACCOUNT_MARGIN);
+    double acc_mrg_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+    double acc_mrg_lvl = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+    double acc_mrg_so_call = AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL);
+    double acc_mrg_so_so = AccountInfoDouble(ACCOUNT_MARGIN_SO_SO);
+    */
+
+    color col = COLOR_TEXT;
+    if ("BUY " == sBS)
+        col = COLOR_BLUE;
+    else if ("SELL" == sBS)
+        col = COLOR_RED;
+
+    _comment_txt_line_start++;
+    string ac_bal_str = StringFormat("%s( balance: %s equity: %s profit: %s )",
+                                     _Symbol,
+                                     DoubleToString(acc_bal, 2),
+                                     DoubleToString(acc_equ, 2),
+                                     DoubleToString(acc_pro, 2));
+    comment.SetText(_comment_txt_line_start, ac_bal_str, col);
+
+    _comment_txt_line_start++;
+    string ac_mrg_str = StringFormat("%s( margin: %s free: %s lvl: %s )",
+                                     _Symbol,
+                                     DoubleToString(acc_mrg, 2),
+                                     DoubleToString(acc_mrg_free, 2),
+                                     DoubleToString(acc_mrg_lvl, 2));
+    comment.SetText(_comment_txt_line_start, ac_mrg_str, col);
+
+    _comment_txt_line_start++;
+    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 1); // 0);
+    datetime dt_now = tsmsc / 1000 - 1;
+    int deal_cnt = m_LogHistoryDeals(dt_start_of_today, dt_now, _Symbol);
+    string ac_hist_str = StringFormat("%s( history: %d deal_cnts )",
+                                      _Symbol,
+                                      deal_cnt);
+    comment.SetText(_comment_txt_line_start, ac_hist_str, col);
 
     //
     // comment show
@@ -981,3 +1062,77 @@ void _OnDeinit(const int reason)
 //
 // helper functions
 //
+
+//+------------------------------------------------------------------+
+//|   m_LogHistoryDeals
+//+------------------------------------------------------------------+
+int m_LogHistoryDeals(const datetime &a_start, const datetime &a_end, string a_symbol = "ALL")
+{
+    //
+    // Get total deals in history
+    //
+
+    //
+    //  TODO not working in tester mode:
+    //  DEAL_TIME_MSC is always 0
+    //
+
+    int deal_cnt = 0;
+    if (true == HistorySelect(a_start, a_end))
+    {
+        int total = HistoryDealsTotal();
+
+        for (int j = 0; j < total; j++)
+        {
+            ulong d_ticket = HistoryDealGetTicket(j);
+            if (d_ticket > 0)
+            {
+
+                if (a_symbol != "ALL")
+                {
+                    if (a_symbol != HistoryDealGetString(d_ticket, DEAL_SYMBOL))
+                    {
+                        continue;
+                    }
+                }
+
+                deal_cnt++;
+                if (0 < Debug)
+                {
+
+                    string str = StringFormat("%s(%s-%s #%d %s %15s %15s %6.2f %d)",
+                                              HistoryDealGetString(d_ticket, DEAL_SYMBOL),
+                                              TimeToString(a_start, TIME_SECONDS),
+                                              TimeToString(a_end, TIME_SECONDS),
+                                              d_ticket,
+                                              TimeToString(HistoryDealGetInteger(d_ticket, DEAL_TIME), TIME_DATE | TIME_SECONDS),
+                                              EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket, DEAL_TYPE)),
+                                              EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket, DEAL_ENTRY)),
+                                              HistoryDealGetDouble(d_ticket, DEAL_PROFIT)
+                                              /*HistoryDealGetInteger(d_ticket,DEAL_TIME_MSC),
+                                              HistoryDealGetInteger(d_ticket,DEAL_TIME),
+                                              HistoryDealGetInteger(d_ticket,DEAL_ORDER),
+                                              EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket,DEAL_TYPE)),
+                                              EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket,DEAL_ENTRY)),
+                                              HistoryDealGetDouble(d_ticket,DEAL_VOLUME),
+                                              HistoryDealGetDouble(d_ticket,DEAL_PRICE),
+                                              HistoryDealGetDouble(d_ticket,DEAL_PROFIT),
+                                              HistoryDealGetString(d_ticket,DEAL_COMMENT),
+                                              HistoryDealGetDouble(d_ticket,DEAL_COMMISSION),
+                                              HistoryDealGetDouble(d_ticket,DEAL_SWAP),
+                                              HistoryDealGetInteger(d_ticket,DEAL_MAGIC),
+                                              HistoryDealGetInteger(d_ticket,DEAL_POSITION_ID)*/
+                    );
+                    Print(str);
+                } // if( true == a_log )
+            } // if (d_ticket>0)
+        } // for (int j=0; j<tot_deals; j++)
+    }
+    else
+    {
+        // printf("DEBUG ERROR HISTORY SELECT2 ( %s %s %s ) [%s]", SYMBOL,TimeToString(a_start), TimeToString(a_end), GetLastError());
+    } // if( true == HistorySelect(a_start, a_end) )
+    return (deal_cnt);
+
+} // int m_LogHistoryDeals(const string &a_symbol, const datetime &a_start, const datetime &a_end, bool a_log = true)
+//+------------------------------------------------------------------+
