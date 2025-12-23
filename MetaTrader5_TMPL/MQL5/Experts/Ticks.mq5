@@ -36,7 +36,8 @@ enum ENUM_PERIOD_TYPE
 // I N P U T S
 // input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 // input string PERIODS = "T15:T30:T60:T300:T_AVG:S15:S30:S60:S300:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
+//input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
+input string PERIODS = "T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
 input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
 input int Debug = 0;                                        // enable debug output
 input int EventTimerIntervalMsc = 1000;                     // Event Timer Interval in milliseconds
@@ -999,7 +1000,7 @@ void _OnTimer()
     comment.SetText(_comment_txt_line_start, ac_mrg_str, col);
 
     _comment_txt_line_start++;
-    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 1); // 0);
+    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0); // 0);
     datetime dt_now = tsmsc / 1000 - 1;
     int deal_cnt = m_LogHistoryDeals(dt_start_of_today, dt_now, _Symbol);
     string ac_hist_str = StringFormat("%s( history: %d deal_cnts )",
