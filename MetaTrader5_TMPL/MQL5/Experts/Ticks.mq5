@@ -19,6 +19,18 @@
 #define COLOR_RED clrOrangeRed
 #define COLOR_YELLOW clrYellow
 
+
+// @TODO 2025-12-24 andrehowe - implement no trading times
+// Schedule for trading on currency pairs
+// 24/12/2025 – trading stops at 8:00 PM server time
+// 25/12/2025 – no trading
+// 26/12/2025 – trading starts at 10:00 AM server time
+// 31/12/2025 – trading stops at 8:00 PM server time
+// 01/01/2026 – no trading
+// 02/01/2026 – trading starts at 10:00 AM server time
+
+
+
 // I N C L U D E S
 
 // T Y P E D E F S
@@ -116,8 +128,8 @@ void InitDataVarsStruct(sDataVars &sd)
 sDataVars sData[];
 int sDataSize;
 
-string symbolName;
-string symbolNameAppendix = "_ticks";
+string customSymbolName;
+string symbolNameAppendix;
 
 // E V E N T   H A N D L E R S IMPLEMENTATION
 
@@ -365,14 +377,85 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
 int _OnInit(void)
 {
 
-    datetime t0 = iTime(_Symbol, PERIOD_H1, 0);
+    datetime t0 = iTime(_Symbol, PERIOD_M1, 0);
     MqlDateTime dt0;
     TimeToStruct(t0, dt0);
-    symbolNameAppendix = StringFormat("_%02d%02d%02d",
+    symbolNameAppendix = StringFormat("%04d-%02d-%02d",
+                                      dt0.year,
                                       dt0.mon,
-                                      dt0.day,
-                                      dt0.hour);
-    symbolName = Symbol() + symbolNameAppendix;
+                                      dt0.day);
+    //customSymbolName = Symbol() + symbolNameAppendix;
+    customSymbolName = symbolNameAppendix + "_PRO_" + Symbol();
+    
+    bool justCreated = false;
+
+    if(SymbolInfoInteger(_Symbol, SYMBOL_CUSTOM))
+    {
+        Alert("" + _Symbol + " is a custom symbol. Only built-in symbol can be used as a host.");
+        return INIT_FAILED;
+    }
+
+    if(!SymbolSelect(customSymbolName, true))
+    {
+        ResetLastError();
+        SymbolInfoInteger(customSymbolName, SYMBOL_CUSTOM);
+        if(ERR_MARKET_UNKNOWN_SYMBOL == GetLastError())
+        {
+            Print( "create symbol: " + customSymbolName );
+            //CustomSymbolCreate( customSymbolName, _Symbol, _Symbol );
+            CustomSymbolCreate( customSymbolName );
+            justCreated = true;
+        }
+
+        if(!SymbolSelect(customSymbolName, true))
+        {
+            Alert("Can't select symbol:", customSymbolName, " err:", GetLastError());
+            return INIT_FAILED;
+        }
+    }
+
+
+    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+    {
+        Print("Waiting for connection...");
+        return(INIT_FAILED);
+    }
+    // NB! Since some MT5 build function SeriesInfoInteger(SERIES_SYNCHRONIZED) does not work properly anymore
+    // and returns false always, so replaced with SymbolIsSynchronized
+    // if(!SeriesInfoInteger(_Symbol, _Period, SERIES_SYNCHRONIZED))
+    if(!SymbolIsSynchronized(_Symbol))
+    {
+        Print("Unsynchronized, skipping ticks...");
+        return(INIT_FAILED);
+    }
+
+    // TODO make me optional maybe, the opening of the chart
+    //if(justCreated)
+    //  justCreated = false;
+
+    long id = ChartOpen(customSymbolName, PERIOD_M1);
+    if(id == 0)
+    {
+        Print("Can't open new chart for ", customSymbolName, ", code: ", GetLastError());
+        return(INIT_FAILED);
+    }
+    
+    string TicksTmplFN = "TicksTmpl.tpl";
+    ResetLastError();
+    // was the applying of the template successful
+    bool okTmplApply = ChartApplyTemplate(id, TicksTmplFN);
+    if( false == okTmplApply )
+    {
+        Print("ChartApplyTemplate() error ", GetLastError());
+        // string tmpl = TerminalInfoString(TERMINAL_DATA_PATH)+"\\Mql5\\Profiles\\Templates\\TicksTmpl.tpl";
+        // 2025.12.25 10:18:06.925	Ticks (EURUSD,M1)	C:\Users\G6\AppData\Roaming\MetaTrader5_RF5D03\Mql5\Profiles\Templates\TicksTmpl.tpl
+        // 2025.12.25 10:18:07.925	Ticks (EURUSD,M1)	ChartApplyTemplate() error 5019
+        // ERR_FILE_NOT_EXIST 5019 File does not exist
+        // chart template not found or error while applying chart template
+        ChartSetSymbolPeriod(id, customSymbolName, PERIOD_M1);
+        ChartSetInteger(id, CHART_MODE, CHART_CANDLES);
+    }
+            
 
     //--- panel position
     int y = 30;
@@ -471,6 +554,37 @@ datetime GetSystemTimeMsc(void)
 //+------------------------------------------------------------------+
 void _OnTimer()
 {
+
+    // update custom profit rate symbol
+    datetime dt0 = iTime(_Symbol, PERIOD_M1, 0);
+    double c0 = AccountInfoDouble(ACCOUNT_PROFIT);
+    MqlRates r[1];
+    int length = CopyRates(customSymbolName,PERIOD_M1, dt0, 1, r);
+    if( (1 == length) && (r[0].time == dt0) )
+    {
+        //r[0].time = dt0;
+        //r[0].open = iOpen(_Symbol, PERIOD_M1, 0);
+        if( c0 > r[0].high)
+            r[0].high = c0;
+        if( c0 < r[0].low)
+            r[0].low = c0;
+        r[0].close = c0;
+        r[0].tick_volume = r[0].tick_volume+1;
+    }
+    else
+    {
+        r[0].time = dt0;
+        r[0].open = c0;
+        r[0].high = c0;
+        r[0].low = c0;
+        r[0].close = c0;
+        r[0].real_volume = 0;
+        r[0].spread = 0;
+        r[0].tick_volume = 1;
+    }
+    
+    CustomRatesUpdate(customSymbolName, r);
+
 
     string str;
     datetime tc = TimeCurrent();
@@ -1013,10 +1127,11 @@ void _OnTimer()
     //
     comment.Show();
 
-    string c2_str = StringFormat("%s  %s%s",
+    string c2_str = StringFormat("%s %s  %s",
                                  TimeToString(TimeCurrent(), TIME_SECONDS),
-                                 _Symbol,
-                                 symbolNameAppendix);
+                                 symbolNameAppendix,
+                                 _Symbol
+                                 );
     comment2.SetText(0, c2_str, COLOR_TEXT);
     comment2.Show();
 
