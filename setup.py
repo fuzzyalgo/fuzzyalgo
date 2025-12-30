@@ -248,13 +248,13 @@ def setup():
                 mt5_cnf_dst_fn = path       + "\\config\\"  + mt5_cnf + "_" + name_user + "@" + name_host + ".json"
                 symlink( mt5_cnf_src_fn, mt5_cnf_dst_fn )
                 
-            mt5_org_MQL5s = ['Experts', 'Images', 'Include', 'Indicators', 'Libraries', 'Presets', 'Profiles', 'Scripts']
+            mt5_org_MQL5s = ['Experts', 'Files', 'Images', 'Include', 'Indicators', 'Libraries', 'Presets', 'Profiles', 'Scripts']
             for mt5_mql5 in mt5_org_MQL5s:
                 mt5_mql5_src_fn = dir_script + "\\MetaTrader5_TMPL\\MQL5\\" + mt5_mql5
                 mt5_mql5_dst_fn = path       + "\\MQL5\\"  + mt5_mql5
                 symlink( mt5_mql5_src_fn, mt5_mql5_dst_fn )
                 
-            mt5_org_MQL5s = ['Files', 'Logs', 'Services', 'Shared Project']
+            mt5_org_MQL5s = ['Logs', 'Services', 'Shared Project']
             for mt5_mql5 in mt5_org_MQL5s:
                 mt5_mql5_dst_fn = path       + "\\MQL5\\"  + mt5_mql5
                 os.makedirs( mt5_mql5_dst_fn )

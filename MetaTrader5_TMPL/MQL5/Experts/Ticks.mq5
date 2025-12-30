@@ -47,6 +47,7 @@ enum ENUM_PERIOD_TYPE
 // input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 // input string PERIODS = "T15:T30:T60:T300:T_AVG:S15:S30:S60:S300:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 // input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
+input string ACCOUNT = "RF5D03"; // forex account name s use
 input string PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS;                   // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
 input int Debug = 0;                                                          // enable debug output
@@ -445,7 +446,8 @@ int _OnInit(void)
                                       t0.mon,
                                       t0.day);
 
-    FolderOfTheDay = StringFormat("%04d\\%02d\\%02d",
+    FolderOfTheDay = StringFormat("%s\\%04d\\%02d\\%02d",
+                                  ACCOUNT,
                                   t0.year,
                                   t0.mon,
                                   t0.day);
