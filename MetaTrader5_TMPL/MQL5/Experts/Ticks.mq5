@@ -1368,13 +1368,24 @@ void _OnTimer()
     comment2.SetText(0, c2_str, COLOR_TEXT);
     comment2.Show();
 
-    ChartScreenShot(0, FnInScr1Path, 1600, 900, ALIGN_RIGHT);
-    if (true == CopyIntoAnaFolder)
+    if( 0 < id_chart )
     {
-        string fndst = FnAnaFolderTimeMS + "\\" + FnInScr1;
-        FileCopy(FnInScr1Path, 0, fndst, FILE_REWRITE);
+        ChartScreenShot(id_chart, FnInScr1Path, 1600, 900, ALIGN_RIGHT);
+        if (true == CopyIntoAnaFolder)
+        {
+            string fndst = FnAnaFolderTimeMS + "\\" + FnInScr1;
+            FileCopy(FnInScr1Path, 0, fndst, FILE_REWRITE);
+        }
     }
-
+    if( 0 < id_pro_chart )
+    {
+        ChartScreenShot(id_pro_chart, FnInScr2Path, 1600, 900, ALIGN_RIGHT);
+        if (true == CopyIntoAnaFolder)
+        {
+            string fndst = FnAnaFolderTimeMS + "\\" + FnInScr2;
+            FileCopy(FnInScr2Path, 0, fndst, FILE_REWRITE);
+        }
+    }
     //+------------------------------------------------------------------+
     //|                                                                  |
     //+------------------------------------------------------------------+
