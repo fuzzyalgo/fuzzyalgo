@@ -19,7 +19,6 @@
 #define COLOR_RED clrOrangeRed
 #define COLOR_YELLOW clrYellow
 
-
 // @TODO 2025-12-24 andrehowe - implement no trading times
 // Schedule for trading on currency pairs
 // 24/12/2025 – trading stops at 8:00 PM server time
@@ -29,14 +28,13 @@
 // 01/01/2026 – no trading
 // 02/01/2026 – trading starts at 10:00 AM server time
 
-
-
 // I N C L U D E S
 
 // T Y P E D E F S
 enum ENUM_PERIOD_TYPE
 {
     ENUM_PERIOD_TYPE_NONE,
+    ENUM_PERIOD_TYPE_PRO,
     ENUM_PERIOD_TYPE_SECONDS_S,
     ENUM_PERIOD_TYPE_TICKS_T,
     ENUM_PERIOD_TYPE_AVERAGE_S,
@@ -48,13 +46,27 @@ enum ENUM_PERIOD_TYPE
 // I N P U T S
 // input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 // input string PERIODS = "T15:T30:T60:T300:T_AVG:S15:S30:S60:S300:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-//input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
-input string PERIODS = "T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
-input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
-input int Debug = 0;                                        // enable debug output
-input int EventTimerIntervalMsc = 1000;                     // Event Timer Interval in milliseconds
+// input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
+input string PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+input ENUM_COPY_TICKS gCopyTicksFlags = COPY_TICKS_TIME_MS;                   // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
+input int Debug = 0;                                                          // enable debug output
+input int EventTimerIntervalMsc = 1000;                                       // Event Timer Interval in milliseconds
 
 // G L O B A L S
+string FolderOfTheDay;
+string FnInAll = "";
+string FnInCur = "";
+string FnInScr1 = "";
+string FnInScr2 = "";
+string FnInAllPath = "";
+string FnInCurPath = "";
+string FnInScr1Path = "";
+string FnInScr2Path = "";
+string FnAnaFolder = "";
+string FnAnaFolderTimeMS = "";
+bool CopyIntoAnaFolder = true;
+long id_pro_chart = 0;
+long id_chart = 0;
 
 CComment comment;
 CComment comment2;
@@ -62,6 +74,7 @@ CComment comment2;
 struct sDataVars
 {
 
+    string symbol;
     string periodKey;
     int periodNum;
     ENUM_PERIOD_TYPE periodType;
@@ -84,16 +97,30 @@ struct sDataVars
     double c0;
     double c1;
 
+    long daily_open_t0;
+    double daily_open_c0;
+    long id_pro_chart;
+
     string str_txt;
+
+    void print()
+    {
+        string str = StringFormat("sym: %s num: %4d key: %10s type: %s", symbol, periodNum, periodKey, EnumToString(periodType));
+        if (0 < Debug)
+        {
+            Print(str);
+        }
+    } // void print()
 
 }; // struct sDataVars
 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void InitDataVarsStruct(sDataVars &sd)
+void InitDataVarsStruct(sDataVars &sd, const string &symbol)
 {
 
+    sd.symbol = symbol;
     sd.periodKey = "";
     sd.periodNum = 0;
     sd.periodType = ENUM_PERIOD_TYPE_NONE;
@@ -116,12 +143,16 @@ void InitDataVarsStruct(sDataVars &sd)
     sd.c1 = 0.0;
     sd.t1 = 0;
 
+    sd.daily_open_t0 = 0;
+    sd.daily_open_c0 = 0.0;
+    sd.id_pro_chart = 0;
+
     sd.str_txt = "";
 
     //+------------------------------------------------------------------+
     //|                                                                  |
     //+------------------------------------------------------------------+
-} // void InitDataVarsStruct(sDataVars &sd)
+} // void InitDataVarsStruct(sDataVars &sd, const string& symbol)
 //+------------------------------------------------------------------+
 
 // sDataVars sData[9];
@@ -236,16 +267,31 @@ void ExtractHighLowFromMqlTickArray(const MqlTick &mqltickarray[], int &OC, int 
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &sd)
+bool GetPeriodFromKeyAndInitDataVarsStruct(const string &symbol, const string &periodKey, sDataVars &sd)
 {
 
-    InitDataVarsStruct(sd);
+    InitDataVarsStruct(sd, symbol);
+
+    if ("PRO" == periodKey)
+    {
+        sd.periodType = ENUM_PERIOD_TYPE_PRO;
+        sd.periodNum = 0;
+        sd.periodKey = periodKey;
+
+        sd.daily_open_t0 = 0;
+        sd.daily_open_c0 = 0.0;
+        sd.id_pro_chart = 0;
+
+        sd.print();
+        return true;
+    }
 
     if ("T15" == periodKey)
     {
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 15;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -254,6 +300,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 30;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -262,6 +309,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 60;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -270,6 +318,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 300;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -278,6 +327,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 900;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -286,6 +336,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_TICKS_T;
         sd.periodNum = 3600;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -294,6 +345,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_T;
         sd.periodNum = 0;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -302,6 +354,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 15;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -310,6 +363,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 30;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -318,6 +372,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 60;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -326,6 +381,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 300;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -334,6 +390,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 900;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -342,6 +399,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_SECONDS_S;
         sd.periodNum = 3600;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -350,6 +408,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_S;
         sd.periodNum = 0;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -358,6 +417,7 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
         sd.periodType = ENUM_PERIOD_TYPE_AVERAGE_SUM;
         sd.periodNum = 0;
         sd.periodKey = periodKey;
+        sd.print();
         return true;
     }
 
@@ -377,85 +437,146 @@ bool GetPeriodFromKeyAndInitDataVarsStruct(const string &periodKey, sDataVars &s
 int _OnInit(void)
 {
 
-    datetime t0 = iTime(_Symbol, PERIOD_M1, 0);
-    MqlDateTime dt0;
-    TimeToStruct(t0, dt0);
+    datetime dt0 = iTime(_Symbol, PERIOD_M1, 0);
+    MqlDateTime t0;
+    TimeToStruct(dt0, t0);
     symbolNameAppendix = StringFormat("%04d-%02d-%02d",
-                                      dt0.year,
-                                      dt0.mon,
-                                      dt0.day);
-    //customSymbolName = Symbol() + symbolNameAppendix;
+                                      t0.year,
+                                      t0.mon,
+                                      t0.day);
+
+    FolderOfTheDay = StringFormat("%04d\\%02d\\%02d",
+                                  t0.year,
+                                  t0.mon,
+                                  t0.day);
+    FolderCreate(FolderOfTheDay);
+    FnAnaFolder = FolderOfTheDay + "\\ANA";
+    FolderCreate(FnAnaFolder);
+
+    FnAnaFolderTimeMS = StringFormat("%s\\%02d-%02d-%02d.%03d",
+                                     FnAnaFolder,
+                                     t0.hour,
+                                     t0.min,
+                                     t0.sec,
+                                     0); // TODO use tsmsc later once all symbols run from one chart/agent //tsmsc % 1000 );
+    FolderCreate(FnAnaFolderTimeMS);
+
     customSymbolName = symbolNameAppendix + "_PRO_" + Symbol();
-    
+    FnInAll = Symbol() + "_INP_ALL.csv";
+    FnInCur = Symbol() + "_INP_CUR.csv";
+    FnInScr1 = Symbol() + "_INP_SCR1.png";
+    FnInScr2 = Symbol() + "_INP_SCR2.png";
+    FnInAllPath = FolderOfTheDay + "\\" + FnInAll;
+    FnInCurPath = FolderOfTheDay + "\\" + FnInCur;
+    FnInScr1Path = FolderOfTheDay + "\\" + FnInScr1;
+    FnInScr2Path = FolderOfTheDay + "\\" + FnInScr2;
+
     bool justCreated = false;
 
-    if(SymbolInfoInteger(_Symbol, SYMBOL_CUSTOM))
+    if (SymbolInfoInteger(_Symbol, SYMBOL_CUSTOM))
     {
         Alert("" + _Symbol + " is a custom symbol. Only built-in symbol can be used as a host.");
         return INIT_FAILED;
     }
 
-    if(!SymbolSelect(customSymbolName, true))
+    if (!SymbolSelect(customSymbolName, true))
     {
         ResetLastError();
         SymbolInfoInteger(customSymbolName, SYMBOL_CUSTOM);
-        if(ERR_MARKET_UNKNOWN_SYMBOL == GetLastError())
+        if (ERR_MARKET_UNKNOWN_SYMBOL == GetLastError())
         {
-            Print( "create symbol: " + customSymbolName );
-            //CustomSymbolCreate( customSymbolName, _Symbol, _Symbol );
-            CustomSymbolCreate( customSymbolName );
+            Print("create symbol: " + customSymbolName);
+            // CustomSymbolCreate( customSymbolName, _Symbol, _Symbol );
+            CustomSymbolCreate(customSymbolName);
             justCreated = true;
         }
 
-        if(!SymbolSelect(customSymbolName, true))
+        if (!SymbolSelect(customSymbolName, true))
         {
             Alert("Can't select symbol:", customSymbolName, " err:", GetLastError());
             return INIT_FAILED;
         }
     }
 
-
-    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+    if (!TerminalInfoInteger(TERMINAL_CONNECTED))
     {
         Print("Waiting for connection...");
-        return(INIT_FAILED);
+        return (INIT_FAILED);
     }
     // NB! Since some MT5 build function SeriesInfoInteger(SERIES_SYNCHRONIZED) does not work properly anymore
     // and returns false always, so replaced with SymbolIsSynchronized
     // if(!SeriesInfoInteger(_Symbol, _Period, SERIES_SYNCHRONIZED))
-    if(!SymbolIsSynchronized(_Symbol))
+    if (!SymbolIsSynchronized(_Symbol))
     {
         Print("Unsynchronized, skipping ticks...");
-        return(INIT_FAILED);
+        return (INIT_FAILED);
     }
 
-    // TODO make me optional maybe, the opening of the chart
-    //if(justCreated)
-    //  justCreated = false;
+    id_pro_chart = 0;
+    id_chart = 0;
 
-    long id = ChartOpen(customSymbolName, PERIOD_M1);
-    if(id == 0)
+    //--- variables for chart identifiers
+    long curr_chart = ChartFirst();
+    int cnt_chart = 0;
+
+    //--- until the open chart limit is reached (CHARTS_MAX)
+    while (!IsStopped() && cnt_chart < CHARTS_MAX)
     {
-        Print("Can't open new chart for ", customSymbolName, ", code: ", GetLastError());
-        return(INIT_FAILED);
-    }
-    
-    string TicksTmplFN = "TicksTmpl.tpl";
-    ResetLastError();
-    // was the applying of the template successful
-    bool okTmplApply = ChartApplyTemplate(id, TicksTmplFN);
-    if( false == okTmplApply )
+        //--- terminate the loop if the end of the chart list is reached
+        if (curr_chart < 0)
+            break;
+
+        string chart_sym = ChartSymbol(curr_chart);
+        if (0 == StringCompare(customSymbolName, chart_sym))
+        {
+            // TODO consolidate with sDataVars structure
+            id_pro_chart = curr_chart;
+            //--- print the next chart data in the journal if it matches
+            if (0 < Debug)
+                PrintFormat("Chart[%d] ID: %I64d,  symbol: %s", cnt_chart, id_pro_chart, chart_sym);
+        }
+        if (0 == StringCompare(_Symbol, chart_sym))
+        {
+            // TODO consolidate with sDataVars structure
+            id_chart = curr_chart;
+            //--- print the next chart data in the journal if it matches
+            if (0 < Debug)
+                PrintFormat("Chart[%d] ID: %I64d,  symbol: %s", cnt_chart, id_chart, chart_sym);
+        }
+
+        //--- get the next chart ID based on the previous one
+        curr_chart = ChartNext(curr_chart);
+
+        //--- increase the chart counter
+        cnt_chart++;
+    } // while (!IsStopped() && cnt_chart < CHARTS_MAX)
+
+    if (id_pro_chart == 0)
     {
-        Print("ChartApplyTemplate() error ", GetLastError());
-        // string tmpl = TerminalInfoString(TERMINAL_DATA_PATH)+"\\Mql5\\Profiles\\Templates\\TicksTmpl.tpl";
-        // 2025.12.25 10:18:06.925	Ticks (EURUSD,M1)	C:\Users\G6\AppData\Roaming\MetaTrader5_RF5D03\Mql5\Profiles\Templates\TicksTmpl.tpl
-        // 2025.12.25 10:18:07.925	Ticks (EURUSD,M1)	ChartApplyTemplate() error 5019
-        // ERR_FILE_NOT_EXIST 5019 File does not exist
-        // chart template not found or error while applying chart template
-        ChartSetSymbolPeriod(id, customSymbolName, PERIOD_M1);
-        ChartSetInteger(id, CHART_MODE, CHART_CANDLES);
-    }
-            
+        long id = ChartOpen(customSymbolName, PERIOD_M1);
+        if (id == 0)
+        {
+            Print("Can't open new chart for ", customSymbolName, ", code: ", GetLastError());
+            return (INIT_FAILED);
+        }
+        id_pro_chart = id;
+
+        string TicksTmplFN = "TicksTmpl.tpl";
+        ResetLastError();
+        // was the applying of the template successful
+        bool okTmplApply = ChartApplyTemplate(id, TicksTmplFN);
+        if (false == okTmplApply)
+        {
+            Print("ChartApplyTemplate() error ", GetLastError());
+            // string tmpl = TerminalInfoString(TERMINAL_DATA_PATH)+"\\Mql5\\Profiles\\Templates\\TicksTmpl.tpl";
+            // 2025.12.25 10:18:06.925	Ticks (EURUSD,M1)	C:\Users\G6\AppData\Roaming\MetaTrader5_RF5D03\Mql5\Profiles\Templates\TicksTmpl.tpl
+            // 2025.12.25 10:18:07.925	Ticks (EURUSD,M1)	ChartApplyTemplate() error 5019
+            // ERR_FILE_NOT_EXIST 5019 File does not exist
+            // chart template not found or error while applying chart template
+            ChartSetSymbolPeriod(id, customSymbolName, PERIOD_M1);
+            ChartSetInteger(id, CHART_MODE, CHART_CANDLES);
+        }
+    } // if (id_pro_chart == 0)
 
     //--- panel position
     int y = 30;
@@ -472,18 +593,6 @@ int _OnInit(void)
     comment2.SetAutoColors(InpAutoColors);
     comment2.SetColor(COLOR_YELLOW, COLOR_BLACK, 255);
     comment2.SetFont("Lucida Console", 12, false, 1.7);
-
-    if (!TerminalInfoInteger(TERMINAL_CONNECTED))
-    {
-        Print("Waiting for connection...");
-        return (INIT_FAILED);
-    }
-
-    if (!SymbolIsSynchronized(_Symbol))
-    {
-        Print("Unsynchronized, skipping ticks...");
-        return (INIT_FAILED);
-    }
 
     //
     // init all sData structs with default values and set periodKey
@@ -506,7 +615,7 @@ int _OnInit(void)
 
     for (int cnt = 0; cnt < num_sep; cnt++)
     {
-        if (false == GetPeriodFromKeyAndInitDataVarsStruct(str_period_split[cnt], sData[cnt]))
+        if (false == GetPeriodFromKeyAndInitDataVarsStruct(_Symbol, str_period_split[cnt], sData[cnt]))
         {
             Print(" GetPeriodFromKeyAndInitDataVarsStruct failed ", str_period_split[cnt]);
             return (INIT_FAILED);
@@ -555,36 +664,16 @@ datetime GetSystemTimeMsc(void)
 void _OnTimer()
 {
 
-    // update custom profit rate symbol
     datetime dt0 = iTime(_Symbol, PERIOD_M1, 0);
-    double c0 = AccountInfoDouble(ACCOUNT_PROFIT);
-    MqlRates r[1];
-    int length = CopyRates(customSymbolName,PERIOD_M1, dt0, 1, r);
-    if( (1 == length) && (r[0].time == dt0) )
-    {
-        //r[0].time = dt0;
-        //r[0].open = iOpen(_Symbol, PERIOD_M1, 0);
-        if( c0 > r[0].high)
-            r[0].high = c0;
-        if( c0 < r[0].low)
-            r[0].low = c0;
-        r[0].close = c0;
-        r[0].tick_volume = r[0].tick_volume+1;
-    }
-    else
-    {
-        r[0].time = dt0;
-        r[0].open = c0;
-        r[0].high = c0;
-        r[0].low = c0;
-        r[0].close = c0;
-        r[0].real_volume = 0;
-        r[0].spread = 0;
-        r[0].tick_volume = 1;
-    }
-    
-    CustomRatesUpdate(customSymbolName, r);
-
+    MqlDateTime t0;
+    TimeToStruct(dt0, t0);
+    FnAnaFolderTimeMS = StringFormat("%s\\%02d-%02d-%02d.%03d",
+                                     FnAnaFolder,
+                                     t0.hour,
+                                     t0.min,
+                                     t0.sec,
+                                     0); // TODO use tsmsc later once all symbols run from one chart/agent //tsmsc % 1000 );
+    FolderCreate(FnAnaFolderTimeMS);
 
     string str;
     datetime tc = TimeCurrent();
@@ -615,12 +704,16 @@ void _OnTimer()
             last_price = (t.ask + t.bid) / 2;
 
             delta_ms_since_last_tick = (int)(tsmsc - t.time_msc);
-            if (0 != delta_ms_since_last_tick)
+            delta_ms_since_last_tick_str = StringFormat("%3d.%03ds", 0, 0);
+            // if the tick was faster than system time then set null
+            // TODO find out why tsmsc was late
+            if (tsmsc < t.time_msc)
             {
-                delta_ms_since_last_tick_str = StringFormat("%3d.%03ds",
-                                                            (int)((tsmsc - t.time_msc) / 1000),
-                                                            (int)((tsmsc - t.time_msc) % 1000));
+                delta_ms_since_last_tick = 0;
             }
+            delta_ms_since_last_tick_str = StringFormat("%3d.%03ds",
+                                                        (int)(delta_ms_since_last_tick / 1000),
+                                                        (int)(delta_ms_since_last_tick % 1000));
 
             if (0 < Debug)
             {
@@ -926,7 +1019,7 @@ void _OnTimer()
 
     str = StringFormat(" t: %s  no open position", TimeToString(TimeCurrent(), TIME_SECONDS));
 
-    string sBS = "";
+    string sBS = "-";
     //--- check if a position is present and display the time of its changing
     if (PositionSelect(_Symbol))
     {
@@ -946,13 +1039,13 @@ void _OnTimer()
         if (POSITION_TYPE_BUY == pos_open_type)
         {
             pos_open_price_delta = (long)((pos_open_price_last - pos_open_price) / _Point);
-            sBS = "BUY ";
+            sBS = "B";
         }
 
         if (POSITION_TYPE_SELL == pos_open_type)
         {
             pos_open_price_delta = (long)((pos_open_price - pos_open_price_last) / _Point);
-            sBS = "SELL";
+            sBS = "S";
         }
 
         str = StringFormat(" t: %s [%s v%0.2f] %s #%d   %6d / %6ds ",
@@ -975,6 +1068,145 @@ void _OnTimer()
                             create_time_delta, TimeToString(TimeCurrent(), TIME_SECONDS), TimeToString(pos_open_time, TIME_SECONDS));
 
     } // if(PositionSelect(_Symbol))
+
+    // TODO performance deal_cnt doesn't need to be calculated every time for performance reasons
+    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0);
+    datetime dt_now = tsmsc / 1000 - 1;
+    string histOKstatus = "OK";
+    sDataHist hist;
+    hist.init(_Symbol, dt_start_of_today, dt_now);
+    bool histOK = m_LogHistoryDeals(hist);
+    if (false == histOK)
+    {
+        histOKstatus = "NO";
+        Print("ERROR m_LogHistoryDeals TODO implement error handling here");
+    }
+    // 2025.12.29 23:13:38.541	Ticks (NZDUSD,H1)	1767053618541  2025.12.30 00:13:38.541 NZDUSD @ 0.58012  d:   111 s: 92/161 SUM_AVG (OC:   -13 HL:   161   OC/HL: -0.08)  0.00@  PRO:     0 over      0s /    0.00 /    0.00 HIST[OK]: NZDUSD(2025.12.30 00:00:00-00:13:37 profit: #0  0.00 win: #0  0.00 loss: #0  0.00  comm:  0.00 / TOTAL profit: #0  0.00 win: #0  0.00 loss: #0  0.00  comm:  0.00)
+    string hist_str = StringFormat("HIST[%s]: %s",
+                                   histOKstatus,
+                                   hist.formatstr());
+
+    // 2025.12.29 17:03:18.125	Ticks (EURUSD,H1)	1767031398123  2025.12.29 18:03:18.123 EURUSD d:     0 s:  0/  6    SUM_AVG (OC:   -52 HL:    99   OC/HL: -0.53)  0.01@BUY   PRO:   -71 over   6137s /   -0.72 /    0.12
+    // update custom profit rate symbol
+    double pro_acc = AccountInfoDouble(ACCOUNT_PROFIT); // full total profit
+    double pro_sym = pos_open_profit;                   // profit per symbol
+    int last = sDataSize - 1;
+    double c0 = NormalizeDouble(((double)sData[last].OC / (double)sData[last].HL), 2);
+    if (0 < Debug)
+    {
+        str = StringFormat("%ld%03d  %s.%03d %s @ %s  d:%6d s:%3d/%3d %7s (OC: %5d HL: %5d   OC/HL: %5.2f)  %3.2f@%s  PRO: %5d over %6ds / %7.2f / %7.2f %s",
+                           (long)tsmsc / 1000, tsmsc % 1000,
+                           TimeToString(tsmsc / 1000, TIME_SECONDS | TIME_DATE),
+                           tsmsc % 1000,
+                           sData[last].symbol,
+                           DoubleToString(last_price, Digits()),
+                           delta_ms_since_last_tick,
+                           (int)last_spread,
+                           (int)sData[last].SPREAD,
+                           sData[last].periodKey,
+                           sData[last].OC,
+                           sData[last].HL,
+                           c0,
+                           pos_open_vol,
+                           sBS,
+                           pos_open_price_delta,
+                           create_time_delta,
+                           pro_sym,
+                           pro_acc,
+                           hist_str);
+        Print(str);
+    }
+
+    //
+    // File input operations START
+    //
+
+    //                  1767053618541 2025.12.30 00:13:38.541 NZDUSD 0.58012     111     92   161   -13   161 -0.08 0.00 -       0      0    0.00    0.00 HIST[OK]: NZDUSD(2025.12.30 00:00:00-00:13:37 profit: #0  0.00 win: #0  0.00 loss: #0  0.00  comm:  0.00 / TOTAL profit: #0  0.00 win: #0  0.00 loss: #0  0.00  comm:  0.00)
+    string csvheader = "epocms        date       time         symbol price   dtickms spread spavg    oc    hl oc_hl  vol T dprofit  dtime  sympro  allpro HIST";
+    csvheader = csvheader + " " + hist.formatstrcsvheader();
+    str = StringFormat("%ld%03d %s.%03d %s %s %7d %6d %5d %5d %5d %5.2f %3.2f %s %7d %6d %7.2f %7.2f %4s %s",
+                       (long)tsmsc / 1000, tsmsc % 1000,
+                       TimeToString(tsmsc / 1000, TIME_SECONDS | TIME_DATE),
+                       tsmsc % 1000,
+                       sData[last].symbol,
+                       DoubleToString(last_price, Digits()),
+                       delta_ms_since_last_tick,
+                       (int)last_spread,
+                       (int)sData[last].SPREAD,
+                       sData[last].OC,
+                       sData[last].HL,
+                       c0,
+                       pos_open_vol,
+                       sBS,
+                       pos_open_price_delta,
+                       create_time_delta,
+                       pro_sym,
+                       pro_acc,
+                       histOKstatus,
+                       hist.formatstrcsv());
+    // Print(str);
+
+    // write the last INP(ut) "one line CUR(rent)" with csv header
+    // recreate file as FILE_WRITE only is set
+    ResetLastError();
+    int file_handle = FileOpen(FnInCurPath, FILE_WRITE | FILE_CSV | FILE_ANSI);
+    if (file_handle != INVALID_HANDLE)
+    {
+        FileWriteString(file_handle, csvheader);
+        FileWriteString(file_handle, str + "\n");
+        FileClose(file_handle);
+    } // if(file_handle!=INVALID_HANDLE)
+    if (true == CopyIntoAnaFolder)
+    {
+        string fndst = FnAnaFolderTimeMS + "\\" + FnInCur;
+        FileCopy(FnInCurPath, 0, fndst, FILE_REWRITE);
+    }
+
+    // attach the last INPut to ALL whole day log to the last line
+    ResetLastError();
+    file_handle = FileOpen(FnInAllPath, FILE_READ | FILE_WRITE | FILE_CSV | FILE_ANSI);
+    if (file_handle != INVALID_HANDLE)
+    {
+        FileSeek(file_handle, 0, SEEK_END);
+        FileWriteString(file_handle, str + "\n");
+        FileClose(file_handle);
+    } // if(file_handle!=INVALID_HANDLE)
+    if (true == CopyIntoAnaFolder)
+    {
+        string fndst = FnAnaFolderTimeMS + "\\" + FnInAll;
+        FileCopy(FnInAllPath, 0, fndst, FILE_REWRITE);
+    }
+
+    //
+    // File input operations END
+    //
+
+    MqlRates r[1];
+    int length = CopyRates(customSymbolName, PERIOD_M1, dt0, 1, r);
+    if ((1 == length) && (r[0].time == dt0))
+    {
+        // r[0].time = dt0;
+        // r[0].open = iOpen(_Symbol, PERIOD_M1, 0);
+        if (c0 > r[0].high)
+            r[0].high = c0;
+        if (c0 < r[0].low)
+            r[0].low = c0;
+        r[0].close = c0;
+        r[0].tick_volume = r[0].tick_volume + 1;
+    }
+    else
+    {
+        r[0].time = dt0;
+        r[0].open = c0;
+        r[0].high = c0;
+        r[0].low = c0;
+        r[0].close = c0;
+        r[0].real_volume = 0;
+        r[0].spread = 0;
+        r[0].tick_volume = 1;
+    }
+
+    CustomRatesUpdate(customSymbolName, r);
 
     if (0 < Debug)
         Print(str);
@@ -1041,7 +1273,7 @@ void _OnTimer()
     //
     _comment_txt_line_start += sDataSize;
 
-    if ("" == sBS || 0.0 == pos_open_vol)
+    if ("-" == sBS || 0.0 == pos_open_vol)
     {
         string bs_str = StringFormat("%s(0.00)",
                                      _Symbol);
@@ -1062,9 +1294,9 @@ void _OnTimer()
         bs_str = bs_str + "%";
         if (10 < pos_open_price_delta)
         {
-            if ("BUY " == sBS)
+            if ("B" == sBS)
                 comment.SetText(_comment_txt_line_start, bs_str, COLOR_BLUE);
-            else if ("SELL" == sBS)
+            else if ("S" == sBS)
                 comment.SetText(_comment_txt_line_start, bs_str, COLOR_RED);
             else
                 comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
@@ -1077,7 +1309,7 @@ void _OnTimer()
         {
             comment.SetText(_comment_txt_line_start, bs_str, COLOR_TEXT);
         }
-    } // if( "" == sBS || 0.0 == pos_open_vol )
+    } // if( "-" == sBS || 0.0 == pos_open_vol )
 
     /*
     double acc_bal = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -1092,9 +1324,9 @@ void _OnTimer()
     */
 
     color col = COLOR_TEXT;
-    if ("BUY " == sBS)
+    if ("B" == sBS)
         col = COLOR_BLUE;
-    else if ("SELL" == sBS)
+    else if ("S" == sBS)
         col = COLOR_RED;
 
     _comment_txt_line_start++;
@@ -1114,12 +1346,12 @@ void _OnTimer()
     comment.SetText(_comment_txt_line_start, ac_mrg_str, col);
 
     _comment_txt_line_start++;
-    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0); // 0);
-    datetime dt_now = tsmsc / 1000 - 1;
-    int deal_cnt = m_LogHistoryDeals(dt_start_of_today, dt_now, _Symbol);
+    // datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0);
+    // datetime dt_now = tsmsc / 1000 - 1;
+    // int deal_cnt = m_LogHistoryDeals(dt_start_of_today, dt_now, _Symbol);
     string ac_hist_str = StringFormat("%s( history: %d deal_cnts )",
                                       _Symbol,
-                                      deal_cnt);
+                                      hist.deal_cnt);
     comment.SetText(_comment_txt_line_start, ac_hist_str, col);
 
     //
@@ -1130,10 +1362,16 @@ void _OnTimer()
     string c2_str = StringFormat("%s %s  %s",
                                  TimeToString(TimeCurrent(), TIME_SECONDS),
                                  symbolNameAppendix,
-                                 _Symbol
-                                 );
+                                 _Symbol);
     comment2.SetText(0, c2_str, COLOR_TEXT);
     comment2.Show();
+
+    ChartScreenShot(0, FnInScr1Path, 1600, 900, ALIGN_RIGHT);
+    if (true == CopyIntoAnaFolder)
+    {
+        string fndst = FnAnaFolderTimeMS + "\\" + FnInScr1;
+        FileCopy(FnInScr1Path, 0, fndst, FILE_REWRITE);
+    }
 
     //+------------------------------------------------------------------+
     //|                                                                  |
@@ -1178,11 +1416,114 @@ void _OnDeinit(const int reason)
 //
 // helper functions
 //
+struct sDataHist
+{
+
+    // global params
+    string symbol;
+    datetime dtstart;
+    datetime dtend;
+
+    // information per symbol
+    int deal_cnt;
+    int deal_cnt_win;
+    int deal_cnt_loss;
+    double deal_profit;
+    double deal_profit_win;
+    double deal_profit_loss;
+    double commission;
+
+    // information for "ALL" symbols
+    int Adeal_cnt;
+    int Adeal_cnt_win;
+    int Adeal_cnt_loss;
+    double Adeal_profit;
+    double Adeal_profit_win;
+    double Adeal_profit_loss;
+    double Acommission;
+
+    void init(const string &a_symbol, const datetime &a_dtstart, const datetime &a_dtend)
+    {
+        symbol = a_symbol;
+        dtstart = a_dtstart;
+        dtend = a_dtend;
+
+        // information per symbol
+        deal_cnt = 0;
+        deal_cnt_win = 0;
+        deal_cnt_loss = 0;
+        deal_profit = 0;
+        deal_profit_win = 0;
+        deal_profit_loss = 0;
+        commission = 0;
+
+        // information for "ALL" symbols
+        Adeal_cnt = 0;
+        Adeal_cnt_win = 0;
+        Adeal_cnt_loss = 0;
+        Adeal_profit = 0;
+        Adeal_profit_win = 0;
+        Adeal_profit_loss = 0;
+        Acommission = 0;
+    } // void init( const string& symbol, const datetime& a_dtstart, const datetime& a_dtend )
+
+    string formatstr()
+    {
+        string str = StringFormat("%s(%s-%s profit: #%d %5.2f win: #%d %5.2f loss: #%d %5.2f  comm: %5.2f / TOTAL profit: #%d %5.2f win: #%d %5.2f loss: #%d %5.2f  comm: %5.2f)",
+                                  symbol,
+                                  TimeToString(dtstart, TIME_SECONDS | TIME_DATE),
+                                  TimeToString(dtend, TIME_SECONDS),
+                                  deal_cnt,
+                                  deal_profit,
+                                  deal_cnt_win,
+                                  deal_profit_win,
+                                  deal_cnt_loss,
+                                  deal_profit_loss,
+                                  commission,
+                                  Adeal_cnt,
+                                  Adeal_profit,
+                                  Adeal_cnt_win,
+                                  Adeal_profit_win,
+                                  Adeal_cnt_loss,
+                                  Adeal_profit_loss,
+                                  Acommission);
+        return (str);
+    }
+
+    string formatstrcsvheader()
+    {
+        string str = "dtstart     dtend  #deal profit #dealwin profitwin #dealloss profitloss comm  #Adeal Aprofit #Adealwin Aprofitwin #Adealloss Aprofitloss Acomm\n";
+        return str;
+    }
+
+    string formatstrcsv()
+    {
+        string str = StringFormat("%s %s %6d %5.2f %6d %5.2f %6d %5.2f %5.2f %6d %5.2f %6d %5.2f %6d %5.2f %5.2f",
+                                  TimeToString(dtstart, TIME_SECONDS),
+                                  TimeToString(dtend, TIME_SECONDS),
+                                  deal_cnt,
+                                  deal_profit,
+                                  deal_cnt_win,
+                                  deal_profit_win,
+                                  deal_cnt_loss,
+                                  deal_profit_loss,
+                                  commission,
+                                  Adeal_cnt,
+                                  Adeal_profit,
+                                  Adeal_cnt_win,
+                                  Adeal_profit_win,
+                                  Adeal_cnt_loss,
+                                  Adeal_profit_loss,
+                                  Acommission);
+        return (str);
+    }
+
+}; // struct sDataHist
 
 //+------------------------------------------------------------------+
 //|   m_LogHistoryDeals
 //+------------------------------------------------------------------+
-int m_LogHistoryDeals(const datetime &a_start, const datetime &a_end, string a_symbol = "ALL")
+bool m_LogHistoryDeals(sDataHist &a_hist)
 {
     //
     // Get total deals in history
@@ -1193,62 +1534,102 @@ int m_LogHistoryDeals(const datetime &a_start, const datetime &a_end, string a_s
     //  DEAL_TIME_MSC is always 0
     //
 
-    int deal_cnt = 0;
-    if (true == HistorySelect(a_start, a_end))
+    if (false == HistorySelect(a_hist.dtstart, a_hist.dtend))
     {
-        int total = HistoryDealsTotal();
+        printf("DEBUG ERROR HISTORY SELECT2 ( %s %s %s ) [%s]", a_hist.symbol, TimeToString(a_hist.dtstart), TimeToString(a_hist.dtend), GetLastError());
+        return false;
+    }
 
-        for (int j = 0; j < total; j++)
+    int total = HistoryDealsTotal();
+
+    for (int j = 0; j < total; j++)
+    {
+        ulong d_ticket = HistoryDealGetTicket(j);
+        if (d_ticket > 0)
         {
-            ulong d_ticket = HistoryDealGetTicket(j);
-            if (d_ticket > 0)
-            {
 
-                if (a_symbol != "ALL")
+            // calc here for ALL symbols the total together
+            a_hist.Acommission += HistoryDealGetDouble(d_ticket, DEAL_COMMISSION);
+            ENUM_DEAL_ENTRY Adentry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket, DEAL_ENTRY);
+            if (DEAL_ENTRY_INOUT == Adentry || DEAL_ENTRY_OUT == Adentry || DEAL_ENTRY_INOUT == Adentry)
+            {
+                a_hist.Adeal_cnt++;
+                double profit = HistoryDealGetDouble(d_ticket, DEAL_PROFIT);
+                a_hist.Adeal_profit += profit;
+                if (0.0 < profit)
                 {
-                    if (a_symbol != HistoryDealGetString(d_ticket, DEAL_SYMBOL))
-                    {
-                        continue;
-                    }
+                    a_hist.Adeal_cnt_win++;
+                    a_hist.Adeal_profit_win += profit;
+                }
+                else
+                {
+                    a_hist.Adeal_cnt_loss++;
+                    a_hist.Adeal_profit_loss += profit;
                 }
 
-                deal_cnt++;
-                if (0 < Debug)
+            } // if( DEAL_ENTRY_INOUT == Adentry || DEAL_ENTRY_OUT == Adentry || DEAL_ENTRY_INOUT == Adentry )
+
+            if (a_hist.symbol != "ALL")
+            {
+                if (a_hist.symbol != HistoryDealGetString(d_ticket, DEAL_SYMBOL))
                 {
+                    continue;
+                }
+            }
 
-                    string str = StringFormat("%s(%s-%s #%d %s %15s %15s %6.2f %d)",
-                                              HistoryDealGetString(d_ticket, DEAL_SYMBOL),
-                                              TimeToString(a_start, TIME_SECONDS),
-                                              TimeToString(a_end, TIME_SECONDS),
-                                              d_ticket,
-                                              TimeToString(HistoryDealGetInteger(d_ticket, DEAL_TIME), TIME_DATE | TIME_SECONDS),
-                                              EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket, DEAL_TYPE)),
-                                              EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket, DEAL_ENTRY)),
-                                              HistoryDealGetDouble(d_ticket, DEAL_PROFIT)
-                                              /*HistoryDealGetInteger(d_ticket,DEAL_TIME_MSC),
-                                              HistoryDealGetInteger(d_ticket,DEAL_TIME),
-                                              HistoryDealGetInteger(d_ticket,DEAL_ORDER),
-                                              EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket,DEAL_TYPE)),
-                                              EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket,DEAL_ENTRY)),
-                                              HistoryDealGetDouble(d_ticket,DEAL_VOLUME),
-                                              HistoryDealGetDouble(d_ticket,DEAL_PRICE),
-                                              HistoryDealGetDouble(d_ticket,DEAL_PROFIT),
-                                              HistoryDealGetString(d_ticket,DEAL_COMMENT),
-                                              HistoryDealGetDouble(d_ticket,DEAL_COMMISSION),
-                                              HistoryDealGetDouble(d_ticket,DEAL_SWAP),
-                                              HistoryDealGetInteger(d_ticket,DEAL_MAGIC),
-                                              HistoryDealGetInteger(d_ticket,DEAL_POSITION_ID)*/
-                    );
-                    Print(str);
-                } // if( true == a_log )
-            } // if (d_ticket>0)
-        } // for (int j=0; j<tot_deals; j++)
-    }
-    else
-    {
-        // printf("DEBUG ERROR HISTORY SELECT2 ( %s %s %s ) [%s]", SYMBOL,TimeToString(a_start), TimeToString(a_end), GetLastError());
-    } // if( true == HistorySelect(a_start, a_end) )
-    return (deal_cnt);
+            // calc here for a_symbol only
+            a_hist.commission += HistoryDealGetDouble(d_ticket, DEAL_COMMISSION);
+            ENUM_DEAL_ENTRY dentry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket, DEAL_ENTRY);
+            if (DEAL_ENTRY_INOUT == dentry || DEAL_ENTRY_OUT == dentry || DEAL_ENTRY_INOUT == dentry)
+            {
+                a_hist.deal_cnt++;
+                double profit = HistoryDealGetDouble(d_ticket, DEAL_PROFIT);
+                a_hist.deal_profit += profit;
+                if (0.0 < profit)
+                {
+                    a_hist.deal_cnt_win++;
+                    a_hist.deal_profit_win += profit;
+                }
+                else
+                {
+                    a_hist.deal_cnt_loss++;
+                    a_hist.deal_profit_loss += profit;
+                }
 
-} // int m_LogHistoryDeals(const string &a_symbol, const datetime &a_start, const datetime &a_end, bool a_log = true)
+            } // if( DEAL_ENTRY_INOUT == dentry || DEAL_ENTRY_OUT == dentry || DEAL_ENTRY_INOUT == dentry )
+
+            if (0 < Debug)
+            {
+
+                string str = StringFormat("%s(%s-%s #%d %s %15s %15s %6.2f %d)",
+                                          HistoryDealGetString(d_ticket, DEAL_SYMBOL),
+                                          TimeToString(a_hist.dtstart, TIME_SECONDS),
+                                          TimeToString(a_hist.dtend, TIME_SECONDS),
+                                          d_ticket,
+                                          TimeToString(HistoryDealGetInteger(d_ticket, DEAL_TIME), TIME_DATE | TIME_SECONDS),
+                                          EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket, DEAL_TYPE)),
+                                          EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket, DEAL_ENTRY)),
+                                          HistoryDealGetDouble(d_ticket, DEAL_PROFIT)
+                                          /*HistoryDealGetInteger(d_ticket,DEAL_TIME_MSC),
+                                          HistoryDealGetInteger(d_ticket,DEAL_TIME),
+                                          HistoryDealGetInteger(d_ticket,DEAL_ORDER),
+                                          EnumToString((ENUM_DEAL_TYPE)HistoryDealGetInteger(d_ticket,DEAL_TYPE)),
+                                          EnumToString((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d_ticket,DEAL_ENTRY)),
+                                          HistoryDealGetDouble(d_ticket,DEAL_VOLUME),
+                                          HistoryDealGetDouble(d_ticket,DEAL_PRICE),
+                                          HistoryDealGetDouble(d_ticket,DEAL_PROFIT),
+                                          HistoryDealGetString(d_ticket,DEAL_COMMENT),
+                                          HistoryDealGetDouble(d_ticket,DEAL_COMMISSION),
+                                          HistoryDealGetDouble(d_ticket,DEAL_SWAP),
+                                          HistoryDealGetInteger(d_ticket,DEAL_MAGIC),
+                                          HistoryDealGetInteger(d_ticket,DEAL_POSITION_ID)*/
+                );
+                Print(str);
+            } // if( true == a_log )
+        } // if (d_ticket>0)
+    } // for (int j=0; j<tot_deals; j++)
+
+    return true;
+
+} // bool m_LogHistoryDeals(const string &a_symbol, const datetime &a_start, const datetime &a_end, bool a_log = true)
 //+------------------------------------------------------------------+
