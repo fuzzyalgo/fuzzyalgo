@@ -93,12 +93,13 @@ epocms        date       time         symbol price   dtickms spread spavg    oc 
 1767138899185 2025.12.30 23:54:59.185 EURGBP 0.87220    2857      2    17    -7    23 -0.30 0.01 S      49  20892    0.67   -0.07   OK 00:00:00 23:54:58      1  1.29      1  1.29      0  0.00 -0.03      4 -2.50      1  1.29      3 -3.79 -0.12
 1767138900068 2025.12.30 23:55:00.068 EURGBP 0.87220    3740      2    17    -7    23 -0.30 0.01 S      49  20893    0.67   -0.07   OK 00:00:00 23:54:59      1  1.29      1  1.29      0  0.00 -0.03      4 -2.50      1  1.29      3 -3.79 -0.12
 ```
-# meaning of each column in the data files
+## meaning of each column in the data files
 
 ```cs
 epocms        date       time         symbol price   dtickms spread spavg    oc    hl oc_hl  vol T dprofit  dtime  sympro  allpro HIST dtstart     dtend  #deal profit #dealwin profitwin #dealloss profitloss comm  #Adeal Aprofit #Adealwin Aprofitwin #Adealloss Aprofitloss Acomm
 1767138900068 2025.12.30 23:55:00.068 EURGBP 0.87220    3740      2    17    -7    23 -0.30 0.01 S      49  20893    0.67   -0.07   OK 00:00:00 23:54:59      1  1.29      1  1.29      0  0.00 -0.03      4 -2.50      1  1.29      3 -3.79 -0.12
 ```
+
 - epocms: Epoch time in milliseconds
 - date: Date in YYYY.MM.DD format
 - time: Time in HH:MM:SS.mmm format
@@ -133,6 +134,16 @@ epocms        date       time         symbol price   dtickms spread spavg    oc 
 - #Adealloss: All symbols number of losing closed deals
 - Aprofitloss: All symbols total loss from losing closed deals in account currency
 - Acomm: All symbols total commission from closed deals in account currency
+
+## which logical groups do the columns belong to
+
+| Logical Group         | Columns                                                                                 |
+|-----------------------|-----------------------------------------------------------------------------------------|
+| **TIME status**       | epocms, date, time, symbol                                                              |
+| **PRICE status**      | price, dtickms, spread, spavg                                                           |
+| **SIGNAL status**     | oc, hl, oc_hl                                                                           |
+| **TRADE status**      | vol, T, dprofit, dtime, sympro, allpro                                                  |
+| **TRADE HISTORY status** | HIST, dtstart, dtend, #deal, profit, #dealwin, profitwin, #dealloss, profitloss, comm, #Adeal, Aprofit, #Adealwin, Aprofitwin, #Adealloss, Aprofitloss, Acomm |
 
 
 
