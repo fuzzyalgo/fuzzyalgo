@@ -69,6 +69,7 @@ bool CopyIntoAnaFolder = true;
 long id_pro_chart = 0;
 long id_chart = 0;
 
+
 CComment comment;
 CComment comment2;
 
@@ -162,6 +163,7 @@ int sDataSize;
 
 string customSymbolName;
 string symbolNameAppendix;
+MqlDateTime symbolNameAppendixT0 = {0};
 
 // E V E N T   H A N D L E R S IMPLEMENTATION
 
@@ -181,6 +183,20 @@ int OnInit(void)
 //+------------------------------------------------------------------+
 void OnTimer(void)
 {
+
+    // check first if Ticks expert was running over midnight
+    datetime dt0day = iTime(_Symbol, PERIOD_D1, 0);
+    MqlDateTime t0day;
+    // get the opening time of the day
+    TimeToStruct(dt0day, t0day);
+    // if day has changed without running init function first
+    if( t0day.day != symbolNameAppendixT0.day )
+    {
+        _OnDeinit(0);
+        // TODO error handling
+        int ret = _OnInit();
+        Print( "newDay: ",  TimeToString(dt0day,TIME_DATE|TIME_SECONDS ), " _OnInit: ", ret );        
+    }
 
     _OnTimer();
 
@@ -445,6 +461,7 @@ int _OnInit(void)
                                       t0.year,
                                       t0.mon,
                                       t0.day);
+    symbolNameAppendixT0 = t0;
 
     FolderOfTheDay = StringFormat("%s\\%04d\\%02d\\%02d",
                                   ACCOUNT,
@@ -666,6 +683,17 @@ datetime GetSystemTimeMsc(void)
 void _OnTimer()
 {
 
+    // get time
+    string str;
+    datetime tc = TimeCurrent();
+    datetime tl = TimeLocal();
+    datetime tsmsc = GetSystemTimeMsc();
+    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0);
+    datetime dt_now = tsmsc / 1000 - 1;
+
+    string delta_ms_since_last_tick_str = "n/a";
+    int delta_ms_since_last_tick = 0;
+
     datetime dt0 = iTime(_Symbol, PERIOD_M1, 0);
     MqlDateTime t0;
     TimeToStruct(dt0, t0);
@@ -676,14 +704,6 @@ void _OnTimer()
                                      t0.sec,
                                      0); // TODO use tsmsc later once all symbols run from one chart/agent //tsmsc % 1000 );
     FolderCreate(FnAnaFolderTimeMS);
-
-    string str;
-    datetime tc = TimeCurrent();
-    datetime tl = TimeLocal();
-    datetime tsmsc = GetSystemTimeMsc();
-
-    string delta_ms_since_last_tick_str = "n/a";
-    int delta_ms_since_last_tick = 0;
 
     //--- get data on the last tick
     double last_price = 0;
@@ -702,9 +722,11 @@ void _OnTimer()
         }
         else
         {
+            // TODO decide here to continue or to close all if spread too high and market volatile
             last_spread = (t.ask - t.bid) / _Point;
             last_price = (t.ask + t.bid) / 2;
 
+            // TODO perfomrance decide here to continue if there was no new tick
             delta_ms_since_last_tick = (int)(tsmsc - t.time_msc);
             delta_ms_since_last_tick_str = StringFormat("%3d.%03ds", 0, 0);
             // if the tick was faster than system time then set null
@@ -1072,8 +1094,6 @@ void _OnTimer()
     } // if(PositionSelect(_Symbol))
 
     // TODO performance deal_cnt doesn't need to be calculated every time for performance reasons
-    datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0);
-    datetime dt_now = tsmsc / 1000 - 1;
     string histOKstatus = "OK";
     sDataHist hist;
     hist.init(_Symbol, dt_start_of_today, dt_now);
@@ -1348,9 +1368,7 @@ void _OnTimer()
     comment.SetText(_comment_txt_line_start, ac_mrg_str, col);
 
     _comment_txt_line_start++;
-    // datetime dt_start_of_today = iTime(Symbol(), PERIOD_D1, 0);
-    // datetime dt_now = tsmsc / 1000 - 1;
-    // int deal_cnt = m_LogHistoryDeals(dt_start_of_today, dt_now, _Symbol);
+
     string ac_hist_str = StringFormat("%s( history: %d deal_cnts )",
                                       _Symbol,
                                       hist.deal_cnt);
