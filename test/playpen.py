@@ -3,7 +3,13 @@
 Created on Mon Jan  6 14:08:18 2025
 
 @author: G6
+
 """
+
+# C:\code\fuzzyalgo>C:/apps/miniforge3/Scripts/activate
+# (base) C:\code\fuzzyalgo>C:/apps/miniforge3/Scripts/activate fuzzyalgo-py39
+# (base) C:\code\fuzzyalgo>C:/apps/miniforge3/envs/fuzzyalgo-py39/python.exe c:/code/fuzzyalgo/test/playpen.py
+
 
 import time
 _start = time.time()
