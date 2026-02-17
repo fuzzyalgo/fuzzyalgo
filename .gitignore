@@ -1,6 +1,7 @@
 **/__pycache__
 src/logs/*
 test/RF5*
+.vscode
 .spyproject
 .ipynb_checkpoints
 .virtual_documents

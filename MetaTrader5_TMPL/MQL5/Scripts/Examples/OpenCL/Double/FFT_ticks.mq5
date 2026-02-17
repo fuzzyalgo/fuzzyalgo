@@ -7,6 +7,8 @@
 #property link "https://www.mql5.com"
 #property version "1.00"
 
+#include <FuzzyAlgo/variables.mqh>
+
 /*
 #include <Math/Stat/Math.mqh>
 #include <OpenCL/OpenCL.mqh>
@@ -19,18 +21,6 @@
 
 //#define NUM_POINTS 128
 //#define FFT_DIRECTION 1
-
-enum ENUM_PERIOD_TYPE
-{
-    ENUM_PERIOD_TYPE_NONE,
-    ENUM_PERIOD_TYPE_PRO,
-    ENUM_PERIOD_TYPE_SECONDS_S,
-    ENUM_PERIOD_TYPE_TICKS_T,
-    ENUM_PERIOD_TYPE_AVERAGE_S,
-    ENUM_PERIOD_TYPE_AVERAGE_T,
-    ENUM_PERIOD_TYPE_AVERAGE_SUM,
-    ENUM_PERIOD_TYPE_MAX
-};
 
 
 struct sFFTVars
@@ -308,6 +298,10 @@ public:
 //+------------------------------------------------------------------+
 void OnStart()
 {
+
+
+    
+
     int fft_size = 512;
     int fft_iterations = 400;
     int fft_iterations_delta_ms = 10 * 1000;
@@ -369,5 +363,7 @@ void OnStart()
         dt_to += fft_iterations_delta_ms;
 
     } // while( ++cnt < fft_iterations )
+    
+    sGlobalVars g(ACCOUNT, SYMBOLS, PERIODS);
 
 } // void OnStart()
