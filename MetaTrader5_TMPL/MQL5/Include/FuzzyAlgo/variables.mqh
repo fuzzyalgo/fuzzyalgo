@@ -29,7 +29,7 @@ input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; 
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost";             // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
-input int I_DEBUG = 1;                                        // enable debug output
+input int I_DEBUG = 0;                                        // enable debug output
 input int I_EVENT_TIMER_INTERVAL_MSC = 1000;                  // Event Timer Interval in milliseconds
 
 // input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
@@ -37,6 +37,7 @@ input int I_EVENT_TIMER_INTERVAL_MSC = 1000;                  // Event Timer Int
 // input string PERIODS = "T15:T30:T60:T300:T_AVG";            // periods are seperated by colon. T for Ticks and S for seconds
 
 // G L O B A L S
+struct sData;
 
 int string_split_g(const string &in_string_to_split, const string &in_seperator, string &out_split_array[])
 {
@@ -147,16 +148,78 @@ void get_period_num_and_type_g(const string &in_period_key, int &out_period_num,
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+bool init_data_from_ticks_arr_g(
+    const datetime &in_time_msc,
+    const string &in_symbol,
+    const int &in_period_num,
+    const ENUM_PERIOD_TYPE &in_period_type,
+    const MqlTick &in_array[],
+    double &out_ticks_arr[],
+    sData &out_data)
+{
+    // local variables
+    int spread = 0;
+    double high = 0;
+    double low = 1000000000;
+
+    // set c0, c1, t0, t1, OC
+    bool ret = true;
+    int size1 = ArraySize(in_array);
+    double point = SymbolInfoDouble(in_symbol, SYMBOL_POINT);
+    out_data.c0 = (in_array[size1 - 1].ask + in_array[size1 - 1].bid) / 2;
+    out_data.t0 = in_array[size1 - 1].time_msc;
+    out_data.c1 = (in_array[0].ask + in_array[0].bid) / 2;
+    out_data.t1 = in_array[0].time_msc;
+    out_data.OC = (int)((out_data.c0 - out_data.c1) / point);
+    out_data.VOLS = size1;
+
+    ArrayResize(out_ticks_arr, size1);
+    double p1 = out_data.c1;
+    for (int cnt = 0; cnt < size1; cnt++)
+    {
+
+        // sanity check
+        if (in_array[cnt].ask == 0 || in_array[cnt].bid == 0 || in_array[cnt].ask < in_array[cnt].bid)
+        {
+            Print("@TODO throw exception here - init_ticks_arr_g ASK | BID" + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type) + " " + DoubleToString(in_array[cnt].ask) + " " + DoubleToString(in_array[cnt].bid));
+            ret = false;
+            continue;
+        }
+
+        // set ticks_arr
+        double p0 = ((in_array[cnt].ask + in_array[cnt].bid) / 2);
+        out_ticks_arr[cnt] = ((p0 - p1) / point);
+
+        // set HL & SPREAD
+        if (high < in_array[cnt].ask)
+            high = in_array[cnt].ask;
+        if (low > in_array[cnt].bid)
+            low = in_array[cnt].bid;
+        int s = (int)((in_array[cnt].ask - in_array[cnt].bid) / point);
+        if (spread < s)
+            spread = s;
+        out_data.HL = (int)((high - low) / point);
+        out_data.SPREAD = spread;
+
+    } // for (int cnt = 0; cnt < size1; cnt++)
+
+    return ret;
+    //+------------------------------------------------------------------+
+    //|                                                                  |
+    //+------------------------------------------------------------------+
+} // bool init_data_from_ticks_arr_g
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool init_ticks_arr_g(
     const datetime &in_time_msc,
     const string &in_symbol,
     const int &in_period_num,
     const ENUM_PERIOD_TYPE &in_period_type,
     double &out_ticks_arr[],
-    double &out_c0,
-    long &out_t0,
-    double &out_c1,
-    long &out_t1 )
+    sData &out_data)
 {
 
     sConfigVars conf;
@@ -166,32 +229,21 @@ bool init_ticks_arr_g(
     {
 
         ret = false;
-        MqlTick array[];
-        int size1 = CopyTicksRange(in_symbol, array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
+        MqlTick in_array[];
+        int size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
         if (0 < size1)
         {
-            out_c0 = (array[size1 - 1].ask + array[size1 - 1].bid) / 2;
-            out_t0 = array[size1 - 1].time_msc;
-            out_c1 = (array[0].ask + array[0].bid) / 2;
-            out_t1 = array[0].time_msc;
 
-            ArrayResize(out_ticks_arr, size1);
-            double p1 = ((array[0].ask + array[0].bid) / 2);
-            double point = SymbolInfoDouble(in_symbol, SYMBOL_POINT);
-            for (int cnt = 0; cnt < size1; cnt++)
-            {
-
-                // sanity check
-                if (array[cnt].ask == 0 || array[cnt].bid == 0 || array[cnt].ask < array[cnt].bid)
-                {
-                    Print("@TODO throw exception here - init_ticks_arr_g ASK | BID" + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type) + " " + DoubleToString( array[cnt].ask ) + " " + DoubleToString( array[cnt].bid ) );
-                    continue;
-                }
-
-                double p0 = ((array[cnt].ask + array[cnt].bid) / 2);
-                out_ticks_arr[cnt] = ((p0 - p1) / point);
-            }
-            ret = true;
+            ret = init_data_from_ticks_arr_g(
+                in_time_msc,
+                in_symbol,
+                in_period_num,
+                in_period_type,
+                in_array,
+                out_ticks_arr,
+                out_data);
+            if (false == ret)
+                Print("@TODO throw exception here - init_ticks_arr_g " + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type));
 
         } // if (0 < size1)
 
@@ -213,33 +265,22 @@ bool init_ticks_arr_g(
         if (src_size > in_period_num)
         {
 
-            MqlTick array[];
-            ArrayCopy(array, src_array, 0, (src_size - in_period_num), in_period_num);
-            int size1 = ArraySize(array);
+            MqlTick in_array[];
+            ArrayCopy(in_array, src_array, 0, (src_size - in_period_num), in_period_num);
+            int size1 = ArraySize(in_array);
             if (in_period_num == size1)
             {
 
-                out_c0 = (array[size1 - 1].ask + array[size1 - 1].bid) / 2;
-                out_t0 = array[size1 - 1].time_msc;
-                out_c1 = (array[0].ask + array[0].bid) / 2;
-                out_t1 = array[0].time_msc;
-
-                ArrayResize(out_ticks_arr, size1);
-                double p1 = ((array[0].ask + array[0].bid) / 2);
-                double point = SymbolInfoDouble(in_symbol, SYMBOL_POINT);
-                for (int cnt = 0; cnt < size1; cnt++)
-                {
-                    // sanity check
-                    if (array[cnt].ask == 0 || array[cnt].bid == 0 || array[cnt].ask < array[cnt].bid)
-                    {
-                        Print("@TODO throw exception here - init_ticks_arr_g ASK | BID" + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type) + " " + DoubleToString( array[cnt].ask ) + " " + DoubleToString( array[cnt].bid ) );
-                        continue;
-                    }
-
-                    double p0 = ((array[cnt].ask + array[cnt].bid) / 2);
-                    out_ticks_arr[cnt] = ((p0 - p1) / point);
-                }
-                ret = true;
+                ret = init_data_from_ticks_arr_g(
+                    in_time_msc,
+                    in_symbol,
+                    in_period_num,
+                    in_period_type,
+                    in_array,
+                    out_ticks_arr,
+                    out_data);
+                if (false == ret)
+                    Print("@TODO throw exception here - init_ticks_arr_g " + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type));
 
             } // if ( period_num == dst_size)
 
@@ -303,18 +344,8 @@ struct sConfigVars
 
 }; // struct sConfigVars
 
-struct sDataVars : sConfigVars
+struct sData
 {
-
-    datetime time_msc;
-
-    string symbol;
-    int symbol_idx;
-    string period;
-    int period_idx;
-    int period_num;
-    ENUM_PERIOD_TYPE period_type;
-
     int DELTA;
     int PS;
     int OC;
@@ -336,6 +367,73 @@ struct sDataVars : sConfigVars
     long daily_open_t0;
     double daily_open_c0;
     long id_pro_chart;
+
+    sData()
+    {
+
+        DELTA = 0;
+        PS = 0;
+        OC = 0;
+        HL = 0;
+        VOLS = 0;
+        TD = 0;
+        TT = 0;
+        SPREAD = 0;
+        OC_HL = 0;
+        VOLS_TD = 0;
+        HL_TD = 0;
+        SUMCOL = 0;
+
+        c0 = 0.0;
+        t0 = 0;
+        c1 = 0.0;
+        t1 = 0;
+
+        daily_open_t0 = 0;
+        daily_open_c0 = 0.0;
+        id_pro_chart = 0;
+
+        Print("sData");
+    };
+};
+
+struct sDataVars : sConfigVars
+{
+
+    datetime time_msc;
+
+    string symbol;
+    int symbol_idx;
+    string period;
+    int period_idx;
+    int period_num;
+    ENUM_PERIOD_TYPE period_type;
+
+    sData d;
+
+    /*
+    int DELTA;
+    int PS;
+    int OC;
+    int HL;
+    int VOLS;
+    int TD;
+    int TT;
+    int SPREAD;
+    double OC_HL;
+    double VOLS_TD;
+    double HL_TD;
+    double SUMCOL;
+
+    long t0;
+    long t1;
+    double c0;
+    double c1;
+
+    long daily_open_t0;
+    double daily_open_c0;
+    long id_pro_chart;
+    */
 
     string str_txt;
 
@@ -360,41 +458,16 @@ struct sDataVars : sConfigVars
         period_idx = _period_idx;
         get_period_num_and_type(period, period_num, period_type);
 
-        DELTA = 0;
-        PS = 0;
-        OC = 0;
-        HL = 0;
-        VOLS = 0;
-        TD = 0;
-        TT = 0;
-        SPREAD = 0;
-        OC_HL = 0;
-        VOLS_TD = 0;
-        HL_TD = 0;
-        SUMCOL = 0;
-
-        c0 = 0.0;
-        t0 = 0;
-        c1 = 0.0;
-        t1 = 0;
-
-        daily_open_t0 = 0;
-        daily_open_c0 = 0.0;
-        id_pro_chart = 0;
-
         str_txt = "";
 
-        if( false == init_ticks_arr_g(
-            time_msc,
-            symbol,
-            period_num,
-            period_type,
-            ticks_arr,
-            c0,
-            t0,
-            c1,
-            t1) )
-            Print("@TODO throw exception here - init_ticks_arr_g " + symbol + " " + IntegerToString(period_num) + " " + EnumToString(period_type) );
+        if (false == init_ticks_arr_g(
+                         time_msc,
+                         symbol,
+                         period_num,
+                         period_type,
+                         ticks_arr,
+                         d))
+            Print("@TODO throw exception here - init_ticks_arr_g " + symbol + " " + IntegerToString(period_num) + " " + EnumToString(period_type));
 
         print();
     };
@@ -596,7 +669,7 @@ public:
             for (int p = 0; p < ArraySize(m_buf[phys].sSym[s].sData); p++)
             {
                 // choose the right symbol/period condition here
-                outValue = (double)m_buf[phys].sSym[s].sData[p].OC;
+                outValue = (double)m_buf[phys].sSym[s].sData[p].d.OC;
                 return true;
             }
         }
