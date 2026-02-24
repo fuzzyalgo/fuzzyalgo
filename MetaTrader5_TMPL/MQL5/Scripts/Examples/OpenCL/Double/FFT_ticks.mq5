@@ -8,6 +8,7 @@
 #property version "1.00"
 
 #include <FuzzyAlgo/variables.mqh>
+#include <WinAPI/sysinfoapi.mqh>
 
 /*
 #include <Math/Stat/Math.mqh>
@@ -364,6 +365,61 @@ void OnStart()
 
     } // while( ++cnt < fft_iterations )
     
-    sGlobalVars g(ACCOUNT, SYMBOLS, PERIODS);
+    datetime time_msc = GetSystemTimeMsc();
+    sGlobalVars g(time_msc);
+    Print( "symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num) );
+    ArrayPrint( g.c.SYMBOLS_arr );
+    Print( "symbols " + g.c.PERIODS + " | " + IntegerToString(g.c.PERIODS_num) );
+    ArrayPrint( g.c.PERIODS_arr );
+    Print( "symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num) );
+    ArrayPrint( g.c.HOSTS_arr );
+    //g.init(c);
+    
+    
+    CRingTryGet<sGlobalVars> ring;
+    bool res = ring.init(2, true);
+    g.time_msc = 123456;
+    ring.Add(g);
+    g.time_msc = 654321;
+    ring.Add(g);
+
+    sGlobalVars tmp;
+    res = ring.TryGet(0, tmp);
+    Print( (long)tmp.time_msc );
+    res = ring.TryGet(1, tmp);
+    Print( (long)tmp.time_msc );
+
+    //bool res = ring.init(50, true);
+    // ringinit(50);
+    // ring.init(50, true); // At(0)=newest
+
+    //ProcessCopy();
+    //ProcessPtr();
 
 } // void OnStart()
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+// #include <WinAPI/sysinfoapi.mqh>
+// https://www.mql5.com/en/forum/462879/page2
+datetime GetSystemTimeMsc(void)
+{
+    SYSTEMTIME st;
+    GetSystemTime(st);
+
+    MqlDateTime dt;
+    dt.year = st.wYear;
+    dt.mon = st.wMonth;
+    dt.day = st.wDay;
+    dt.hour = st.wHour;
+    dt.min = st.wMinute;
+    dt.sec = st.wSecond;
+    //---
+    return (1000 * (StructToTime(dt) + 7200) + st.wMilliseconds);
+} // long GetSystemTimeMsc(void)
+//+------------------------------------------------------------------+
+
+
+
