@@ -172,6 +172,15 @@ bool init_data_from_ticks_arr_g(
     out_data.t1 = in_array[0].time_msc;
     out_data.OC = (int)((out_data.c0 - out_data.c1) / point);
     out_data.VOLS = size1;
+    if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
+        out_data.TD = in_period_num;
+    else
+        out_data.TD = (int)(out_data.t0 - out_data.t1) / 1000;
+    out_data.TT = int((out_data.TD * 1000) / out_data.VOLS);
+    out_data.OC_HL = MathAbs((double)((double)out_data.OC / (double)out_data.HL));
+    out_data.VOLS_TD = (double)((double)out_data.VOLS / (double)out_data.TD);
+    out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
+    out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
 
     ArrayResize(out_ticks_arr, size1);
     double p1 = out_data.c1;
@@ -392,8 +401,6 @@ struct sData
         daily_open_t0 = 0;
         daily_open_c0 = 0.0;
         id_pro_chart = 0;
-
-        Print("sData");
     };
 };
 
@@ -410,30 +417,6 @@ struct sDataVars : sConfigVars
     ENUM_PERIOD_TYPE period_type;
 
     sData d;
-
-    /*
-    int DELTA;
-    int PS;
-    int OC;
-    int HL;
-    int VOLS;
-    int TD;
-    int TT;
-    int SPREAD;
-    double OC_HL;
-    double VOLS_TD;
-    double HL_TD;
-    double SUMCOL;
-
-    long t0;
-    long t1;
-    double c0;
-    double c1;
-
-    long daily_open_t0;
-    double daily_open_c0;
-    long id_pro_chart;
-    */
 
     string str_txt;
 
