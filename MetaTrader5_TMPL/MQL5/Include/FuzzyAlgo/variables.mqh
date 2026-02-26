@@ -207,10 +207,16 @@ bool init_data_from_ticks_arr_g(
         int s = (int)((in_array[cnt].ask - in_array[cnt].bid) / point);
         if (spread < s)
             spread = s;
-        out_data.HL = (int)((high - low) / point);
-        out_data.SPREAD = spread;
+
+        if (0.0 < p1)
+            out_data.SUM_POS += p1;
+        if (0.0 > p1)
+            out_data.SUM_NEG += p1;
 
     } // for (int cnt = 0; cnt < size1; cnt++)
+
+    out_data.HL = (int)((high - low) / point);
+    out_data.SPREAD = spread;
 
     return ret;
     //+------------------------------------------------------------------+
@@ -355,6 +361,7 @@ struct sConfigVars
 
 struct sData
 {
+    // generic
     int DELTA;
     int PS;
     int OC;
@@ -368,11 +375,17 @@ struct sData
     double HL_TD;
     double SUMCOL;
 
+    // prices and time
     long t0;
     long t1;
     double c0;
     double c1;
 
+    // fft
+    double SUM_POS;
+    double SUM_NEG;
+
+    // daily openings
     long daily_open_t0;
     double daily_open_c0;
     long id_pro_chart;
@@ -380,6 +393,7 @@ struct sData
     sData()
     {
 
+        // generic
         DELTA = 0;
         PS = 0;
         OC = 0;
@@ -393,11 +407,17 @@ struct sData
         HL_TD = 0;
         SUMCOL = 0;
 
+        // prices and time
         c0 = 0.0;
         t0 = 0;
         c1 = 0.0;
         t1 = 0;
 
+        // fft
+        SUM_POS = 0.0;
+        SUM_NEG = 0.0; 
+
+        // daily openings
         daily_open_t0 = 0;
         daily_open_c0 = 0.0;
         id_pro_chart = 0;
@@ -480,6 +500,7 @@ struct sSymbolVars : sConfigVars
         {
             sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
+
     }
 
     sSymbolVars()
