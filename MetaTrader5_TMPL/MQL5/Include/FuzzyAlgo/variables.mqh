@@ -25,8 +25,10 @@ enum ENUM_PERIOD_TYPE
 // dynamic inputs
 input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
-input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost";             // hosts where the forex expert is running
+// input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+// input string I_PERIODS = "S60:S300:S900:S3600";
+input string I_PERIODS = "T15:T60:T300:T900";
+input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
 input int I_DEBUG = 0;                                        // enable debug output
@@ -181,6 +183,8 @@ bool init_data_from_ticks_arr_g(
     out_data.VOLS_TD = (double)((double)out_data.VOLS / (double)out_data.TD);
     out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
     out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
+    out_data.SUM_POS = 0;
+    out_data.SUM_NEG = 0;
 
     ArrayResize(out_ticks_arr, size1);
     double p1 = out_data.c1;
@@ -208,10 +212,10 @@ bool init_data_from_ticks_arr_g(
         if (spread < s)
             spread = s;
 
-        if (0.0 < p1)
-            out_data.SUM_POS += p1;
-        if (0.0 > p1)
-            out_data.SUM_NEG += p1;
+        if (0.0 < out_ticks_arr[cnt])
+            out_data.SUM_POS += out_ticks_arr[cnt];
+        if (0.0 > out_ticks_arr[cnt])
+            out_data.SUM_NEG += out_ticks_arr[cnt];
 
     } // for (int cnt = 0; cnt < size1; cnt++)
 
@@ -258,7 +262,15 @@ bool init_ticks_arr_g(
                 out_ticks_arr,
                 out_data);
             if (false == ret)
-                Print("@TODO throw exception here - init_ticks_arr_g " + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type));
+            {
+                string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s",
+                                          TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                          in_time_msc % 1000,
+                                          in_symbol,
+                                          in_period_num,
+                                          EnumToString(in_period_type));
+                Print(str);
+            }
 
         } // if (0 < size1)
 
@@ -295,7 +307,15 @@ bool init_ticks_arr_g(
                     out_ticks_arr,
                     out_data);
                 if (false == ret)
-                    Print("@TODO throw exception here - init_ticks_arr_g " + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type));
+                {
+                    string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s",
+                                              TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                              in_time_msc % 1000,
+                                              in_symbol,
+                                              in_period_num,
+                                              EnumToString(in_period_type));
+                    Print(str);
+                }
 
             } // if ( period_num == dst_size)
 
@@ -415,7 +435,7 @@ struct sData
 
         // fft
         SUM_POS = 0.0;
-        SUM_NEG = 0.0; 
+        SUM_NEG = 0.0;
 
         // daily openings
         daily_open_t0 = 0;
@@ -463,16 +483,23 @@ struct sDataVars : sConfigVars
 
         str_txt = "";
 
-        if (false == init_ticks_arr_g(
-                         time_msc,
-                         symbol,
-                         period_num,
-                         period_type,
-                         ticks_arr,
-                         d))
-            Print("@TODO throw exception here - init_ticks_arr_g " + symbol + " " + IntegerToString(period_num) + " " + EnumToString(period_type));
-
-        print();
+        bool ret = init_ticks_arr_g(
+            time_msc,
+            symbol,
+            period_num,
+            period_type,
+            ticks_arr,
+            d);
+        if (false == ret)
+        {
+            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g %s.%03d  %s %5d %s",
+                                      TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                      time_msc % 1000,
+                                      symbol,
+                                      period_num,
+                                      EnumToString(period_type));
+            Print(str);
+        }
     };
 
     sDataVars() {
@@ -500,7 +527,6 @@ struct sSymbolVars : sConfigVars
         {
             sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
-
     }
 
     sSymbolVars()
@@ -533,11 +559,11 @@ struct sGlobalVars : sConfigVars
 }; // struct sGlobalVars;
 
 //+------------------------------------------------------------------+
-//| CRingTryGet.mqh                                                  |
+//| sRingBuf.mqh                                                     |
 //+------------------------------------------------------------------+
 
 template <typename T>
-struct CRingTryGet
+struct sRingBuf
 {
 private:
     T m_buf[]; // circular storage
@@ -582,7 +608,7 @@ private:
     }
 
 public:
-    CRingTryGet()
+    sRingBuf()
     {
         m_capacity = 0;
         m_head = 0;
@@ -606,7 +632,7 @@ public:
     int Count() const { return m_count; }
 
     // O(1) add
-    void Add(const T &item)
+    void AddBuf(const T &item)
     {
         m_buf[m_head] = item;
         m_head++;
@@ -621,7 +647,7 @@ public:
     {
         if (m_count == 0)
         {
-            Add(item);
+            AddBuf(item);
             return;
         }
         int pos = m_head - 1;
@@ -687,12 +713,12 @@ public:
         for (int i = 0; i < m_count; i++)
             outIdx[i] = MapLogicalToPhysical(i);
     }
-};
+}; // sRingBuf
 //+------------------------------------------------------------------+
 
 /*
 
-CRingTryGet<sGlobalVars> ring;
+sRingBuf<sGlobalVars> ring;
 bool res = ring.init(50, true);
 
 

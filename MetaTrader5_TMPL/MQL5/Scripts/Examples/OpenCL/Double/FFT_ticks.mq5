@@ -20,9 +20,8 @@
 #define kernel_scale "fft_scale"
 */
 
-//#define NUM_POINTS 128
-//#define FFT_DIRECTION 1
-
+// #define NUM_POINTS 128
+// #define FFT_DIRECTION 1
 
 struct sFFTVars
 {
@@ -37,14 +36,13 @@ struct sFFTVars
     void print()
     {
         string str = StringFormat("sym: %s num: %4d key: %10s type: %s", symbol, periodNum, periodKey, EnumToString(periodType));
-        //if (0 < Debug)
+        // if (0 < Debug)
         {
             Print(str);
         }
     } // void print()
 
 }; // struct sFFTVars
-
 
 class AlgoFFT
 {
@@ -160,7 +158,7 @@ class AlgoFFT
         ArrayCopy(data_imag, XX_imag, 0, 0, WHOLE_ARRAY);
         //---
         return (true);
-    } //bool FFT_CPU(int direction, int power, double &data_real[], double &data_imag[], ulong &time_cpu)
+    } // bool FFT_CPU(int direction, int power, double &data_real[], double &data_imag[], ulong &time_cpu)
 
 public:
     void FftCalc(const int &size, const MqlTick &mqltickarray[], int direction = 1)
@@ -300,9 +298,6 @@ public:
 void OnStart()
 {
 
-
-    
-
     int fft_size = 512;
     int fft_iterations = 400;
     int fft_iterations_delta_ms = 10 * 1000;
@@ -364,40 +359,83 @@ void OnStart()
         dt_to += fft_iterations_delta_ms;
 
     } // while( ++cnt < fft_iterations )
-    
-    datetime time_msc = GetSystemTimeMsc();
-    sGlobalVars g(time_msc);
-    Print( "symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num) );
-    ArrayPrint( g.c.SYMBOLS_arr );
-    Print( "symbols " + g.c.PERIODS + " | " + IntegerToString(g.c.PERIODS_num) );
-    ArrayPrint( g.c.PERIODS_arr );
-    Print( "symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num) );
-    ArrayPrint( g.c.HOSTS_arr );
-    //g.init(c);
-    
-    
-    CRingTryGet<sGlobalVars> ring;
-    bool res = ring.init(2, true);
-    g.time_msc = 123456;
-    ring.Add(g);
-    g.time_msc = 654321;
-    ring.Add(g);
 
-    sGlobalVars tmp;
-    res = ring.TryGet(0, tmp);
-    Print( (long)tmp.time_msc );
-    res = ring.TryGet(1, tmp);
-    Print( (long)tmp.time_msc );
+    MqlDateTime time_struct = {};
+    time_struct.year = 2026;
+    time_struct.mon = 2;
+    time_struct.day = 26;
+    time_struct.hour = 17;
+    time_struct.min = 0;
+    time_struct.sec = 0;
+    datetime in_time_msc;
+    // in_time_msc = StructToTime(time_struct) * 1000;
+    in_time_msc = GetSystemTimeMsc();
+    // in_time_msc = TimeCurrent()*1000;
+    // in_time_msc = TimeLocal()*1000;
+    // in_time_msc = (datetime)t.time_msc;
+    sGlobalVars g(in_time_msc);
+    Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
+    ArrayPrint(g.c.SYMBOLS_arr);
+    Print("symbols " + g.c.PERIODS + " | " + IntegerToString(g.c.PERIODS_num));
+    ArrayPrint(g.c.PERIODS_arr);
+    Print("symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
+    ArrayPrint(g.c.HOSTS_arr);
 
-    //bool res = ring.init(50, true);
-    // ringinit(50);
-    // ring.init(50, true); // At(0)=newest
+    int buf_num = 600;
+    sRingBuf<sGlobalVars> ringbuf;
+    bool res = ringbuf.init(buf_num, false);
 
-    //ProcessCopy();
-    //ProcessPtr();
+    for (int min_cnt = (buf_num - 1); min_cnt >= 0; min_cnt--)
+    {
+        datetime time_msc = in_time_msc - min_cnt * 1000;
+        sGlobalVars tmp(time_msc);
+        ringbuf.AddBuf(tmp);
+        string msg = "IN ";
+        string str = StringFormat("%s %s.%03d %s | %s %5d %5d | %s %5d %5d | %s %5d %5d | %s %5d %5d", msg,
+                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                  time_msc % 1000,
+                                  tmp.sSym[0].symbol,
+                                  tmp.sSym[0].sData[0].period,
+                                  tmp.sSym[0].sData[0].d.OC,
+                                  tmp.sSym[0].sData[0].d.HL,
+                                  tmp.sSym[0].sData[1].period,
+                                  tmp.sSym[0].sData[1].d.OC,
+                                  tmp.sSym[0].sData[1].d.HL,
+                                  tmp.sSym[0].sData[2].period,
+                                  tmp.sSym[0].sData[2].d.OC,
+                                  tmp.sSym[0].sData[2].d.HL,
+                                  tmp.sSym[0].sData[3].period,
+                                  tmp.sSym[0].sData[3].d.OC,
+                                  tmp.sSym[0].sData[3].d.HL);
+        Print(str);
+    }
+
+    for (int min_cnt = 0; min_cnt < buf_num; min_cnt++)
+    {
+        sGlobalVars tmp;
+        res = ringbuf.TryGet(min_cnt, tmp);
+        datetime time_msc = tmp.time_msc;
+        string msg = "OUT";
+        string str = StringFormat("%s %s.%03d %s | %s %5d %5d | %s %5d %5d | %s %5d %5d | %s %5d %5d", msg,
+                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                  time_msc % 1000,
+                                  tmp.sSym[0].symbol,
+                                  tmp.sSym[0].sData[0].period,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+                                  tmp.sSym[0].sData[1].period,
+                                  (int)tmp.sSym[0].sData[1].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[1].d.SUM_NEG,
+                                  tmp.sSym[0].sData[2].period,
+                                  (int)tmp.sSym[0].sData[2].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG,
+                                  tmp.sSym[0].sData[3].period,
+                                  (int)tmp.sSym[0].sData[3].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[3].d.SUM_NEG);
+        Print(str);
+    }
 
 } // void OnStart()
-
 
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -420,6 +458,3 @@ datetime GetSystemTimeMsc(void)
     return (1000 * (StructToTime(dt) + 7200) + st.wMilliseconds);
 } // long GetSystemTimeMsc(void)
 //+------------------------------------------------------------------+
-
-
-
