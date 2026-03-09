@@ -25,9 +25,9 @@ enum ENUM_PERIOD_TYPE
 // dynamic inputs
 input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
-// input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-// input string I_PERIODS = "S60:S300:S900:S3600";
-input string I_PERIODS = "T15:T60:T300:T900";
+//input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+input string I_PERIODS = "S300:S900:S3600";
+//input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
@@ -272,6 +272,17 @@ bool init_ticks_arr_g(
                 Print(str);
             }
 
+        }
+        else
+        {
+            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE0 - %s.%03d  %s %5d %s",
+                                        TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                        in_time_msc % 1000,
+                                        in_symbol,
+                                        in_period_num,
+                                        EnumToString(in_period_type));
+            Print(str);
+
         } // if (0 < size1)
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
@@ -318,6 +329,17 @@ bool init_ticks_arr_g(
                 }
 
             } // if ( period_num == dst_size)
+
+        }
+        else
+        {
+            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE_2_SMALL - %s.%03d  %s %5d %s",
+                                        TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                        in_time_msc % 1000,
+                                        in_symbol,
+                                        in_period_num,
+                                        EnumToString(in_period_type));
+            Print(str);
 
         } // if (size1 > period_num)
 

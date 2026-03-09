@@ -362,9 +362,9 @@ void OnStart()
 
     MqlDateTime time_struct = {};
     time_struct.year = 2026;
-    time_struct.mon = 2;
-    time_struct.day = 26;
-    time_struct.hour = 17;
+    time_struct.mon = 3;
+    time_struct.day = 6;
+    time_struct.hour = 16;
     time_struct.min = 0;
     time_struct.sec = 0;
     datetime in_time_msc;
@@ -381,57 +381,64 @@ void OnStart()
     Print("symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
     ArrayPrint(g.c.HOSTS_arr);
 
-    int buf_num = 600;
+    int buf_num = 60;
     sRingBuf<sGlobalVars> ringbuf;
     bool res = ringbuf.init(buf_num, false);
 
     for (int min_cnt = (buf_num - 1); min_cnt >= 0; min_cnt--)
     {
-        datetime time_msc = in_time_msc - min_cnt * 1000;
+        datetime time_msc = in_time_msc - min_cnt * 60*1000;
         sGlobalVars tmp(time_msc);
         ringbuf.AddBuf(tmp);
-        string msg = "IN ";
-        string str = StringFormat("%s %s.%03d %s | %s %5d %5d | %s %5d %5d | %s %5d %5d | %s %5d %5d", msg,
-                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
-                                  time_msc % 1000,
-                                  tmp.sSym[0].symbol,
-                                  tmp.sSym[0].sData[0].period,
-                                  tmp.sSym[0].sData[0].d.OC,
-                                  tmp.sSym[0].sData[0].d.HL,
-                                  tmp.sSym[0].sData[1].period,
-                                  tmp.sSym[0].sData[1].d.OC,
-                                  tmp.sSym[0].sData[1].d.HL,
-                                  tmp.sSym[0].sData[2].period,
-                                  tmp.sSym[0].sData[2].d.OC,
-                                  tmp.sSym[0].sData[2].d.HL,
-                                  tmp.sSym[0].sData[3].period,
-                                  tmp.sSym[0].sData[3].d.OC,
-                                  tmp.sSym[0].sData[3].d.HL);
-        Print(str);
+
     }
+
+    double c1 = 0;
+    int SUM_POS = 0;
+    int SUM_NEG = 0;
+    int SUM_ALL = 0;
 
     for (int min_cnt = 0; min_cnt < buf_num; min_cnt++)
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
+        if( 0 == min_cnt )
+        {
+            c1 = tmp.sSym[0].sData[0].d.c0;
+        }
+        double c0 = tmp.sSym[0].sData[0].d.c0;
+        double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
+        int p0 = (int)((c0 - c1)/point);
+        if( 0 < p0 )
+            SUM_POS += p0;
+        if( 0 > p0 )
+            SUM_NEG += p0;
+        SUM_ALL += p0;
+
         datetime time_msc = tmp.time_msc;
         string msg = "OUT";
-        string str = StringFormat("%s %s.%03d %s | %s %5d %5d | %s %5d %5d | %s %5d %5d | %s %5d %5d", msg,
+        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d | %s %7d %7d | %s %7d %7d", msg,
                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                   time_msc % 1000,
                                   tmp.sSym[0].symbol,
+
+                                  c0,
+                                  p0,
+                                  SUM_ALL,
+                                  SUM_POS,
+                                  SUM_NEG,
+
                                   tmp.sSym[0].sData[0].period,
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+
                                   tmp.sSym[0].sData[1].period,
                                   (int)tmp.sSym[0].sData[1].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[1].d.SUM_NEG,
+
                                   tmp.sSym[0].sData[2].period,
                                   (int)tmp.sSym[0].sData[2].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG,
-                                  tmp.sSym[0].sData[3].period,
-                                  (int)tmp.sSym[0].sData[3].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[3].d.SUM_NEG);
+                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG);
         Print(str);
     }
 
