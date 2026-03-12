@@ -9,6 +9,7 @@
 
 #include <FuzzyAlgo/variables.mqh>
 #include <WinAPI/sysinfoapi.mqh>
+#include <Canvas\Charts\HistogramChart.mqh>
 
 /*
 #include <Math/Stat/Math.mqh>
@@ -161,7 +162,7 @@ class AlgoFFT
     } // bool FFT_CPU(int direction, int power, double &data_real[], double &data_imag[], ulong &time_cpu)
 
 public:
-    void FftCalc(const int &size, const MqlTick &mqltickarray[], int direction = 1)
+    void FftCalc(const int &size, const MqlTick &mqltickarray[], double& CPU_real[], double& CPU_imag[], int direction = 1)
     {
 
         int datacount = size;
@@ -183,7 +184,7 @@ public:
         }
         // int direction=FFT_DIRECTION;
         //--- data arrays for CPU calculation
-        double CPU_real[], CPU_imag[];
+        //double CPU_real[], CPU_imag[];
         ArrayCopy(CPU_real, data_real, 0, 0, WHOLE_ARRAY);
         ArrayCopy(CPU_imag, data_imag, 0, 0, WHOLE_ARRAY);
         ulong time_cpu = 0;
@@ -303,6 +304,8 @@ void OnStart()
     int fft_iterations_delta_ms = 10 * 1000;
     int fft_direction = 1;
 
+    double CPU_real[];
+    double CPU_imag[];
     AlgoFFT fft();
 
     MqlTick t;
@@ -318,7 +321,17 @@ void OnStart()
     long tn = 0;
     double cn = 0.0;
 
+    MqlDateTime time_struct = {};
+    time_struct.year = 2026;
+    time_struct.mon = 3;
+    time_struct.day = 9;
+    time_struct.hour = 21;
+    time_struct.min = 0;
+    time_struct.sec = 0;
+    datetime fft_time_msc;
+    fft_time_msc = StructToTime(time_struct) * 1000;
     long dt_to = t.time_msc;
+    dt_to = fft_time_msc;
 
     // dt_to = 1767373259249; // 1767373259249 2026.01.02 17:00:59.249
     // dt_to = 1767373200000 - 1200000; // 1767373259249 2026.01.02 17:00:00.000
@@ -350,7 +363,7 @@ void OnStart()
                 }
 
                 Print("do FFT @ ", str, " O: ", DoubleToString(dst_array[0].ask, _Digits), " C: ", DoubleToString(dst_array[dst_size - 1].ask, _Digits));
-                fft.FftCalc(fft_size, dst_array, fft_direction);
+                fft.FftCalc(fft_size, dst_array, CPU_real, CPU_imag, fft_direction);
 
             } // if (fft_size == dst_size)
 
@@ -360,15 +373,15 @@ void OnStart()
 
     } // while( ++cnt < fft_iterations )
 
-    MqlDateTime time_struct = {};
+    /*MqlDateTime time_struct = {};*/
     time_struct.year = 2026;
     time_struct.mon = 3;
-    time_struct.day = 6;
-    time_struct.hour = 16;
+    time_struct.day = 9;
+    time_struct.hour = 21;
     time_struct.min = 0;
     time_struct.sec = 0;
     datetime in_time_msc;
-    // in_time_msc = StructToTime(time_struct) * 1000;
+    //in_time_msc = StructToTime(time_struct) * 1000;
     in_time_msc = GetSystemTimeMsc();
     // in_time_msc = TimeCurrent()*1000;
     // in_time_msc = TimeLocal()*1000;
@@ -387,10 +400,9 @@ void OnStart()
 
     for (int min_cnt = (buf_num - 1); min_cnt >= 0; min_cnt--)
     {
-        datetime time_msc = in_time_msc - min_cnt * 60*1000;
+        datetime time_msc = in_time_msc - min_cnt * 1 * 1000;
         sGlobalVars tmp(time_msc);
         ringbuf.AddBuf(tmp);
-
     }
 
     double c1 = 0;
@@ -402,22 +414,22 @@ void OnStart()
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
-        if( 0 == min_cnt )
+        if (0 == min_cnt)
         {
             c1 = tmp.sSym[0].sData[0].d.c0;
         }
         double c0 = tmp.sSym[0].sData[0].d.c0;
         double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
-        int p0 = (int)((c0 - c1)/point);
-        if( 0 < p0 )
+        int p0 = (int)((c0 - c1) / point);
+        if (0 < p0)
             SUM_POS += p0;
-        if( 0 > p0 )
+        if (0 > p0)
             SUM_NEG += p0;
         SUM_ALL += p0;
 
         datetime time_msc = tmp.time_msc;
         string msg = "OUT";
-        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d | %s %7d %7d | %s %7d %7d", msg,
+        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                   time_msc % 1000,
                                   tmp.sSym[0].symbol,
@@ -429,18 +441,95 @@ void OnStart()
                                   SUM_NEG,
 
                                   tmp.sSym[0].sData[0].period,
+                                  (int)tmp.sSym[0].sData[0].d.OC,
+                                  (int)tmp.sSym[0].sData[0].d.HL,
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[0].d.SUM_NEG,
 
                                   tmp.sSym[0].sData[1].period,
+                                  (int)tmp.sSym[0].sData[1].d.OC,
+                                  (int)tmp.sSym[0].sData[1].d.HL,
                                   (int)tmp.sSym[0].sData[1].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[1].d.SUM_NEG,
 
                                   tmp.sSym[0].sData[2].period,
+                                  (int)tmp.sSym[0].sData[2].d.OC,
+                                  (int)tmp.sSym[0].sData[2].d.HL,
                                   (int)tmp.sSym[0].sData[2].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[2].d.SUM_NEG);
         Print(str);
     }
+
+    /*CHistogramChart chart;
+    if (!chart.CreateBitmapLabel("SampleHistogramChart", 10, 10, 600, 450))
+    {
+        Print("Error creating histogram chart: ", GetLastError());
+        return;
+    }
+    //chart.Accumulative();
+    chart.ShowValue(true);
+    chart.ShowScaleTop(false);
+    chart.ShowScaleBottom(false);
+    chart.ShowScaleRight(false);
+    chart.ShowLegend();
+    chart.VScaleParams(2000,-2000,20);
+    
+    chart.SeriesAdd(CPU_real,"Item"+IntegerToString(1));
+    chart.SeriesAdd(CPU_imag,"Item"+IntegerToString(2));*/
+
+
+    int min_cnt = 0;
+    while (!IsStopped())
+    {
+        datetime time_msc = in_time_msc + min_cnt * 1 * 1000;
+        time_msc = GetSystemTimeMsc();
+        sGlobalVars tmp(time_msc);
+        min_cnt++;
+
+        double c0 = tmp.sSym[0].sData[0].d.c0;
+        double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
+        int p0 = (int)((c0 - c1) / point);
+        if (0 < p0)
+            SUM_POS += p0;
+        if (0 > p0)
+            SUM_NEG += p0;
+        SUM_ALL += p0;
+
+        // time_msc = tmp.time_msc;
+        string msg = "OUT";
+        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
+                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                  time_msc % 1000,
+                                  tmp.sSym[0].symbol,
+
+                                  c0,
+                                  p0,
+                                  SUM_ALL,
+                                  SUM_POS,
+                                  SUM_NEG,
+
+                                  tmp.sSym[0].sData[0].period,
+                                  (int)tmp.sSym[0].sData[0].d.OC,
+                                  (int)tmp.sSym[0].sData[0].d.HL,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+
+                                  tmp.sSym[0].sData[1].period,
+                                  (int)tmp.sSym[0].sData[1].d.OC,
+                                  (int)tmp.sSym[0].sData[1].d.HL,
+                                  (int)tmp.sSym[0].sData[1].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[1].d.SUM_NEG,
+
+                                  tmp.sSym[0].sData[2].period,
+                                  (int)tmp.sSym[0].sData[2].d.OC,
+                                  (int)tmp.sSym[0].sData[2].d.HL,
+                                  (int)tmp.sSym[0].sData[2].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG);
+        Print(str);
+        Sleep(1000);
+    }
+
+   //chart.Destroy();
 
 } // void OnStart()
 
