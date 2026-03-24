@@ -13,6 +13,8 @@ enum ENUM_PERIOD_TYPE
 {
     ENUM_PERIOD_TYPE_NONE,
     ENUM_PERIOD_TYPE_PRO,
+    ENUM_PERIOD_TYPE_DAY,
+    ENUM_PERIOD_TYPE_REF,
     ENUM_PERIOD_TYPE_SECONDS_S,
     ENUM_PERIOD_TYPE_TICKS_T,
     ENUM_PERIOD_TYPE_AVERAGE_S,
@@ -60,6 +62,16 @@ void get_period_num_and_type_g(const string &in_period_key, int &out_period_num,
     if ("PRO" == in_period_key)
     {
         out_period_type = ENUM_PERIOD_TYPE_PRO;
+        out_period_num = 0;
+    }
+    else if ("DAY" == in_period_key)
+    {
+        out_period_type = ENUM_PERIOD_TYPE_DAY;
+        out_period_num = 0;
+    }
+    else if ("REF" == in_period_key)
+    {
+        out_period_type = ENUM_PERIOD_TYPE_REF;
         out_period_num = 0;
     }
     else if ("T15" == in_period_key)
@@ -253,14 +265,14 @@ bool init_ticks_arr_g(
 {
 
     sConfigVars conf;
-    bool ret = true;
+    bool ret = false;
+    MqlTick in_array[];
+    int size1 = 0;
 
-    if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
+    if (ENUM_PERIOD_TYPE_DAY == in_period_type)
     {
 
-        ret = false;
-        MqlTick in_array[];
-        int size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
+        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
         if (0 < size1)
         {
 
@@ -272,35 +284,33 @@ bool init_ticks_arr_g(
                 in_array,
                 out_ticks_arr,
                 out_data);
-            if (false == ret)
-            {
-                string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s",
-                                          TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                          in_time_msc % 1000,
-                                          in_symbol,
-                                          in_period_num,
-                                          EnumToString(in_period_type));
-                Print(str);
-            }
         }
-        else
-        {
-            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE0 - %s.%03d  %s %5d %s",
-                                      TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                      in_time_msc % 1000,
-                                      in_symbol,
-                                      in_period_num,
-                                      EnumToString(in_period_type));
-            Print(str);
 
-        } // if (0 < size1)
+
+    } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
+
+    else if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
+    {
+
+        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
+        if (0 < size1)
+        {
+
+            ret = init_data_from_ticks_arr_g(
+                in_time_msc,
+                in_symbol,
+                in_period_num,
+                in_period_type,
+                in_array,
+                out_ticks_arr,
+                out_data);
+        }
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
 
     else if (ENUM_PERIOD_TYPE_TICKS_T == in_period_type)
     {
 
-        ret = false;
         MqlTick src_array[];
         int src_size = 0;
         for (int inc_cnt = 5; inc_cnt < 15; inc_cnt++)
@@ -315,7 +325,7 @@ bool init_ticks_arr_g(
 
             MqlTick in_array[];
             ArrayCopy(in_array, src_array, 0, (src_size - in_period_num), in_period_num);
-            int size1 = ArraySize(in_array);
+            size1 = ArraySize(in_array);
             if (in_period_num == size1)
             {
 
@@ -327,32 +337,22 @@ bool init_ticks_arr_g(
                     in_array,
                     out_ticks_arr,
                     out_data);
-                if (false == ret)
-                {
-                    string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s",
-                                              TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                              in_time_msc % 1000,
-                                              in_symbol,
-                                              in_period_num,
-                                              EnumToString(in_period_type));
-                    Print(str);
-                }
-
             } // if ( period_num == dst_size)
         }
-        else
-        {
-            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE_2_SMALL - %s.%03d  %s %5d %s",
-                                      TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                      in_time_msc % 1000,
-                                      in_symbol,
-                                      in_period_num,
-                                      EnumToString(in_period_type));
-            Print(str);
-
-        } // if (size1 > period_num)
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_T == period_type )
+
+    if (false == ret)
+    {
+        string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s ticks: %5d",
+                                    TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                    in_time_msc % 1000,
+                                    in_symbol,
+                                    in_period_num,
+                                    EnumToString(in_period_type),
+                                    size1 );
+        Print(str);
+    }
 
     return ret;
     //+------------------------------------------------------------------+
