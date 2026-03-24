@@ -9,41 +9,7 @@
 
 #include <FuzzyAlgo/variables.mqh>
 #include <WinAPI/sysinfoapi.mqh>
-#include <Canvas\Charts\HistogramChart.mqh>
-
-/*
-#include <Math/Stat/Math.mqh>
-#include <OpenCL/OpenCL.mqh>
-
-#resource "Kernels/fft.cl" as string cl_program
-#define kernel_init  "fft_init"
-#define kernel_stage "fft_stage"
-#define kernel_scale "fft_scale"
-*/
-
-// #define NUM_POINTS 128
-// #define FFT_DIRECTION 1
-
-struct sFFTVars
-{
-
-    string symbol;
-    string periodKey;
-    int periodNum;
-    ENUM_PERIOD_TYPE periodType;
-
-    string str_txt;
-
-    void print()
-    {
-        string str = StringFormat("sym: %s num: %4d key: %10s type: %s", symbol, periodNum, periodKey, EnumToString(periodType));
-        // if (0 < Debug)
-        {
-            Print(str);
-        }
-    } // void print()
-
-}; // struct sFFTVars
+#include <Canvas/Charts/HistogramChart.mqh>
 
 class AlgoFFT
 {
@@ -162,7 +128,7 @@ class AlgoFFT
     } // bool FFT_CPU(int direction, int power, double &data_real[], double &data_imag[], ulong &time_cpu)
 
 public:
-    void FftCalc(const int &size, const MqlTick &mqltickarray[], double& CPU_real[], double& CPU_imag[], int direction = 1)
+    void FftCalc(const int &size, const MqlTick &in_mqltickarray[], double &out_CPU_input[], double &out_CPU_real[], double &out_CPU_imag[], int direction = 1)
     {
 
         int datacount = size;
@@ -178,31 +144,32 @@ public:
         ArrayResize(data_imag, datacount);
         for (int cnt = 0; cnt < datacount; cnt++)
         {
-            double val = ((((mqltickarray[cnt].ask + mqltickarray[cnt].bid) / 2) - ((mqltickarray[0].ask + mqltickarray[0].bid) / 2)) / _Point);
+            double val = ((((in_mqltickarray[cnt].ask + in_mqltickarray[cnt].bid) / 2) - ((in_mqltickarray[0].ask + in_mqltickarray[0].bid) / 2)) / _Point);
             data_real[cnt] = val;
             data_imag[cnt] = 0;
         }
         // int direction=FFT_DIRECTION;
         //--- data arrays for CPU calculation
-        //double CPU_real[], CPU_imag[];
-        ArrayCopy(CPU_real, data_real, 0, 0, WHOLE_ARRAY);
-        ArrayCopy(CPU_imag, data_imag, 0, 0, WHOLE_ARRAY);
+        // double CPU_real[], CPU_imag[];
+        ArrayCopy(out_CPU_input, data_real, 0, 0, WHOLE_ARRAY);
+        ArrayCopy(out_CPU_real, data_real, 0, 0, WHOLE_ARRAY);
+        ArrayCopy(out_CPU_imag, data_imag, 0, 0, WHOLE_ARRAY);
         ulong time_cpu = 0;
         //--- calculate FFT using CPU
 
-        ArrayPrint(CPU_real);
+        ArrayPrint(out_CPU_input);
         // ArrayPrint(CPU_imag);
 
         double high = 0;
         double low = 1000000000;
         double sum_pos = 0;
         double sum_neg = 0;
-        double open = CPU_real[0];
-        double close = CPU_real[size - 1];
+        double open = out_CPU_real[0];
+        double close = out_CPU_real[size - 1];
         double OC = close - open;
         for (int cnt = 0; cnt < size; cnt++)
         {
-            double val = CPU_real[cnt];
+            double val = out_CPU_input[cnt];
             if (high < val)
                 high = val;
             if (low > val)
@@ -220,13 +187,13 @@ public:
         double OC_HL = OCA / HL;
         PrintFormat("FFT_INPU: H %7.2f  L %7.2f SP %8.2f  SN %8.2f  OC %8.2f/%8.2f/%8.2f/%8.2f HL %8.2f OC/HL %8.2f   SIZE %5d CPU=%dus.", high, low, sum_pos, sum_neg, OC, OC2, OC3, OCA, HL, OC_HL, datacount, time_cpu);
 
-        FFT_CPU(direction, power, CPU_real, CPU_imag, time_cpu);
+        FFT_CPU(direction, power, out_CPU_real, out_CPU_imag, time_cpu);
 
         int N2 = (int)(size / 2);
-        ArrayResize(CPU_real, N2);
+        ArrayResize(out_CPU_real, N2);
         // ArrayPrint(CPU_real);
 
-        ArrayResize(CPU_imag, N2);
+        ArrayResize(out_CPU_imag, N2);
         // ArrayPrint(CPU_imag);
 
         high = 0;
@@ -235,7 +202,7 @@ public:
         sum_neg = 0;
         for (int cnt = 0; cnt < N2; cnt++)
         {
-            double val = CPU_real[cnt];
+            double val = out_CPU_real[cnt];
             if (high < val)
                 high = val;
             if (low > val)
@@ -254,7 +221,7 @@ public:
         sum_neg = 0;
         for (int cnt = 0; cnt < N2; cnt++)
         {
-            double val = CPU_imag[cnt];
+            double val = out_CPU_imag[cnt];
             if (high < val)
                 high = val;
             if (low > val)
@@ -293,33 +260,64 @@ public:
 
 }; // struct AlgoFFT
 
+void FftCalc(const long& in_time_msc, const int fft_size = 32, const int fft_direction = 1  )
+{
+    // @TODO move calling of FFT into variables
+    int fft_size_divider = 2;
+    double CPU_input[];
+    double CPU_real[];
+    double CPU_imag[];
+    AlgoFFT fft();
+    MqlTick src_array[];
+    int src_size = CopyTicksRange(_Symbol, src_array, COPY_TICKS_TIME_MS, in_time_msc - (10) * fft_size * 1000, in_time_msc);
+    if (src_size > fft_size)
+    {
+        MqlTick dst_array[];
+        int dst_size = 0;
+        long t0 = 0;
+        double c0 = 0.0;
+        ArrayCopy(dst_array, src_array, 0, (src_size - fft_size), fft_size);
+        dst_size = ArraySize(dst_array);
+        if (fft_size == dst_size)
+        {
+            t0 = dst_array[dst_size - 1].time_msc;
+            c0 = (dst_array[dst_size - 1].ask + dst_array[dst_size - 1].bid) / 2;
+            string time_str = StringFormat("%s.%03d", TimeToString(in_time_msc / 1000, TIME_DATE | TIME_SECONDS), in_time_msc % 1000);
+            Print("do FFT @ ", time_str, " O: ", DoubleToString(dst_array[0].ask, _Digits), " C: ", DoubleToString(dst_array[dst_size - 1].ask, _Digits));
+            fft.FftCalc(fft_size, dst_array, CPU_input, CPU_real, CPU_imag, fft_direction);
+
+            CHistogramChart chart;
+            if (!chart.CreateBitmapLabel("SampleHistogramChart", 10, 10, 600, 450))
+            {
+                Print("Error creating histogram chart: ", GetLastError());
+                return;
+            }
+            // chart.Accumulative();
+            int size2 = (int)(fft_size / fft_size_divider);
+            chart.ShowValue(false);
+            chart.ShowScaleTop(false);
+            chart.ShowScaleBottom(false);
+            chart.ShowScaleRight(false);
+            chart.ShowLegend(true);
+            chart.VScaleParams((int)size2, -1 * size2, 20);
+            // ArrayResize(CPU_input, fft_size);
+            ArrayResize(CPU_real, size2);
+            ArrayResize(CPU_imag, size2);
+            // chart.SeriesAdd(CPU_real,"FFT-REAL");
+            // chart.SeriesAdd(CPU_imag,"FFT-IMAG");
+            chart.SeriesAdd(CPU_input, "INPUT");
+
+        } // if (fft_size == dst_size)
+    } // if (src_size > fft_size)
+} // void FftCalc(const long& in_time_msc )
+
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
 //+------------------------------------------------------------------+
 void OnStart()
 {
 
-    int fft_size = 512;
-    int fft_iterations = 400;
-    int fft_iterations_delta_ms = 10 * 1000;
-    int fft_direction = 1;
-
-    double CPU_real[];
-    double CPU_imag[];
-    AlgoFFT fft();
-
-    MqlTick t;
-    if (!SymbolInfoTick(Symbol(), t))
-        Print("SymbolInfoTick() failed, error = ", GetLastError());
-
-    MqlTick dst_array[];
-    MqlTick src_array[];
-    int src_size = 0;
-    int dst_size = 0;
-    long t0 = 0;
-    double c0 = 0.0;
-    long tn = 0;
-    double cn = 0.0;
+    int ring_buf_num = 10;
 
     MqlDateTime time_struct = {};
     time_struct.year = 2026;
@@ -328,64 +326,19 @@ void OnStart()
     time_struct.hour = 21;
     time_struct.min = 0;
     time_struct.sec = 0;
-    datetime fft_time_msc;
-    fft_time_msc = StructToTime(time_struct) * 1000;
-    long dt_to = t.time_msc;
-    dt_to = fft_time_msc;
-
-    // dt_to = 1767373259249; // 1767373259249 2026.01.02 17:00:59.249
-    // dt_to = 1767373200000 - 1200000; // 1767373259249 2026.01.02 17:00:00.000
-
-    int cnt = 0;
-    // while( ++cnt < fft_iterations )
-    {
-
-        string str = StringFormat("%s.%03d", TimeToString(dt_to / 1000, TIME_DATE | TIME_SECONDS), dt_to % 1000);
-
-        src_size = CopyTicksRange(_Symbol, src_array, COPY_TICKS_TIME_MS, dt_to - (10) * fft_size * 1000, dt_to);
-        if (src_size > fft_size)
-        {
-
-            ArrayCopy(dst_array, src_array, 0, (src_size - fft_size), fft_size);
-            dst_size = ArraySize(dst_array);
-            if (fft_size == dst_size)
-            {
-
-                if (1 == cnt)
-                {
-                    t0 = dst_array[dst_size - 1].time_msc;
-                    c0 = (dst_array[dst_size - 1].ask + dst_array[dst_size - 1].bid) / 2;
-                }
-                if (1 == cnt)
-                {
-                    t0 = dst_array[dst_size - 1].time_msc;
-                    c0 = (dst_array[dst_size - 1].ask + dst_array[dst_size - 1].bid) / 2;
-                }
-
-                Print("do FFT @ ", str, " O: ", DoubleToString(dst_array[0].ask, _Digits), " C: ", DoubleToString(dst_array[dst_size - 1].ask, _Digits));
-                fft.FftCalc(fft_size, dst_array, CPU_real, CPU_imag, fft_direction);
-
-            } // if (fft_size == dst_size)
-
-        } // if (src_size > fft_size)
-
-        dt_to += fft_iterations_delta_ms;
-
-    } // while( ++cnt < fft_iterations )
-
-    /*MqlDateTime time_struct = {};*/
-    time_struct.year = 2026;
-    time_struct.mon = 3;
-    time_struct.day = 9;
-    time_struct.hour = 21;
-    time_struct.min = 0;
-    time_struct.sec = 0;
-    datetime in_time_msc;
-    //in_time_msc = StructToTime(time_struct) * 1000;
+    long in_time_msc;
+    // in_time_msc = StructToTime(time_struct) * 1000;
     in_time_msc = GetSystemTimeMsc();
-    // in_time_msc = TimeCurrent()*1000;
-    // in_time_msc = TimeLocal()*1000;
-    // in_time_msc = (datetime)t.time_msc;
+    //  in_time_msc = TimeCurrent()*1000;
+    //  in_time_msc = TimeLocal()*1000;
+    //  in_time_msc = (datetime)t.time_msc;
+
+    // @TODO move calling of FFT into variables
+    int fft_size = 32;
+    int fft_direction = 1;
+    FftCalc(in_time_msc, fft_size, fft_direction);
+
+
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
     ArrayPrint(g.c.SYMBOLS_arr);
@@ -394,23 +347,22 @@ void OnStart()
     Print("symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
     ArrayPrint(g.c.HOSTS_arr);
 
-    int buf_num = 60;
     sRingBuf<sGlobalVars> ringbuf;
-    bool res = ringbuf.init(buf_num, false);
-
-    for (int min_cnt = (buf_num - 1); min_cnt >= 0; min_cnt--)
+    bool res = ringbuf.init(ring_buf_num, false);
+    for (int min_cnt = (ring_buf_num - 1); min_cnt >= 0; min_cnt--)
     {
-        datetime time_msc = in_time_msc - min_cnt * 1 * 1000;
+        long time_msc = in_time_msc - min_cnt * 1 * 1000;
         sGlobalVars tmp(time_msc);
         ringbuf.AddBuf(tmp);
     }
 
+    // @TODO move SUM_POS et.al. into variables
     double c1 = 0;
     int SUM_POS = 0;
     int SUM_NEG = 0;
     int SUM_ALL = 0;
 
-    for (int min_cnt = 0; min_cnt < buf_num; min_cnt++)
+    for (int min_cnt = 0; min_cnt < ring_buf_num; min_cnt++)
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
@@ -427,8 +379,8 @@ void OnStart()
             SUM_NEG += p0;
         SUM_ALL += p0;
 
-        datetime time_msc = tmp.time_msc;
-        string msg = "OUT";
+        long time_msc = tmp.time_msc;
+        string msg = "OUT2";
         string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                   time_msc % 1000,
@@ -460,30 +412,18 @@ void OnStart()
         Print(str);
     }
 
-    /*CHistogramChart chart;
-    if (!chart.CreateBitmapLabel("SampleHistogramChart", 10, 10, 600, 450))
-    {
-        Print("Error creating histogram chart: ", GetLastError());
-        return;
-    }
-    //chart.Accumulative();
-    chart.ShowValue(true);
-    chart.ShowScaleTop(false);
-    chart.ShowScaleBottom(false);
-    chart.ShowScaleRight(false);
-    chart.ShowLegend();
-    chart.VScaleParams(2000,-2000,20);
-    
-    chart.SeriesAdd(CPU_real,"Item"+IntegerToString(1));
-    chart.SeriesAdd(CPU_imag,"Item"+IntegerToString(2));*/
-
+    sRefPoint sr3(in_time_msc);
 
     int min_cnt = 0;
     while (!IsStopped())
     {
-        datetime time_msc = in_time_msc + min_cnt * 1 * 1000;
+        long time_msc = in_time_msc + min_cnt * 1 * 1000;
         time_msc = GetSystemTimeMsc();
-        sGlobalVars tmp(time_msc);
+        ulong start = GetTickCount64();
+        sGlobalVars tmp1(time_msc, sr3);
+        ringbuf.AddBuf(tmp1);
+        sGlobalVars tmp;
+        res = ringbuf.TryGet(0, tmp);
         min_cnt++;
 
         double c0 = tmp.sSym[0].sData[0].d.c0;
@@ -496,11 +436,12 @@ void OnStart()
         SUM_ALL += p0;
 
         // time_msc = tmp.time_msc;
-        string msg = "OUT";
-        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
+        string msg = "OUT3";
+        string str = StringFormat("%s %s.%03d %s %3d | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                   time_msc % 1000,
                                   tmp.sSym[0].symbol,
+                                  (GetTickCount64() - start),
 
                                   c0,
                                   p0,
@@ -528,8 +469,6 @@ void OnStart()
         Print(str);
         Sleep(1000);
     }
-
-   //chart.Destroy();
 
 } // void OnStart()
 

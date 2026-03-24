@@ -25,9 +25,10 @@ enum ENUM_PERIOD_TYPE
 // dynamic inputs
 input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
-//input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
+// input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 input string I_PERIODS = "S300:S900:S3600";
-//input string I_PERIODS = "T300:T900:T3600";
+//input string I_PERIODS = "S300:S14400:S86400";
+// input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
@@ -125,6 +126,16 @@ void get_period_num_and_type_g(const string &in_period_key, int &out_period_num,
     {
         out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
         out_period_num = 3600;
+    }
+    else if ("S14400" == in_period_key)
+    {
+        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
+        out_period_num = 14400;
+    }
+    else if ("S86400" == in_period_key)
+    {
+        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
+        out_period_num = 86400;
     }
     else if ("S_AVG" == in_period_key)
     {
@@ -271,16 +282,15 @@ bool init_ticks_arr_g(
                                           EnumToString(in_period_type));
                 Print(str);
             }
-
         }
         else
         {
             string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE0 - %s.%03d  %s %5d %s",
-                                        TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                        in_time_msc % 1000,
-                                        in_symbol,
-                                        in_period_num,
-                                        EnumToString(in_period_type));
+                                      TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                      in_time_msc % 1000,
+                                      in_symbol,
+                                      in_period_num,
+                                      EnumToString(in_period_type));
             Print(str);
 
         } // if (0 < size1)
@@ -329,16 +339,15 @@ bool init_ticks_arr_g(
                 }
 
             } // if ( period_num == dst_size)
-
         }
         else
         {
             string str = StringFormat("@TODO throw exception here - init_ticks_arr_g SIZE_2_SMALL - %s.%03d  %s %5d %s",
-                                        TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                        in_time_msc % 1000,
-                                        in_symbol,
-                                        in_period_num,
-                                        EnumToString(in_period_type));
+                                      TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                      in_time_msc % 1000,
+                                      in_symbol,
+                                      in_period_num,
+                                      EnumToString(in_period_type));
             Print(str);
 
         } // if (size1 > period_num)
@@ -432,7 +441,7 @@ struct sData
     double daily_open_c0;
     long id_pro_chart;
 
-    sData()
+    sData(long _tr_msc = 0, double _cr = 0)
     {
 
         // generic
@@ -556,21 +565,97 @@ struct sSymbolVars : sConfigVars
         ArrayResize(sData, c.PERIODS_num);
     }
 
-}; // struct sSymbolVars;
+}; // struct sSymbolVars
+
+struct sRefPoint : sConfigVars
+{
+    long time_msc_ref;
+    string time_msc_ref_str;
+    double c0_ref[];
+    string str_ref[];
+
+    sRefPoint() : time_msc_ref(0)
+    {
+        time_msc_ref_str = "";
+        ArrayResize(c0_ref, c.SYMBOLS_num);
+        ArrayResize(str_ref, c.SYMBOLS_num);
+        for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
+        {
+            c0_ref[cnt] = 0.0;
+            str_ref[cnt] = "";
+        }
+    };
+
+    sRefPoint(const long &_tref) : time_msc_ref(_tref)
+    {
+        ArrayResize(c0_ref, c.SYMBOLS_num);
+        ArrayResize(str_ref, c.SYMBOLS_num);
+        time_msc_ref_str = StringFormat("%s.%03d",
+                                        TimeToString(time_msc_ref / 1000, TIME_SECONDS),
+                                        time_msc_ref % 1000);
+
+        for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
+        {
+            string sym = c.SYMBOLS_arr[cnt];
+            long digits = SymbolInfoInteger(sym, SYMBOL_DIGITS);
+            MqlTick tarr[];
+            int len = CopyTicks(sym, tarr, COPY_TICKS_TIME_MS, time_msc_ref, 1);
+            if (0 < len)
+            {
+                // OK
+                c0_ref[cnt] = (tarr[0].ask + tarr[0].bid) / 2;
+                c0_ref[cnt] = NormalizeDouble(c0_ref[cnt], (int)digits);
+                str_ref[cnt] = StringFormat("OK  %s %s delta ms: %6d price: %s",
+                                            sym,
+                                            time_msc_ref_str,
+                                            (int)(tarr[0].time_msc - time_msc_ref),
+                                            DoubleToString(c0_ref[cnt], (int)digits));
+                Print(str_ref[cnt]);
+            }
+            else
+            {
+                // ERROR case - @TODO make this work in case of error
+                c0_ref[cnt] = 0;
+                str_ref[cnt] = StringFormat("XX  %s %s delta ms: %6d price: %s",
+                                            sym,
+                                            time_msc_ref_str,
+                                            0,
+                                            DoubleToString(c0_ref[cnt], (int)digits));
+                Print(str_ref[cnt]);
+            } // if (0 < len)
+
+        } // for( int cnt = 0; cnt < num_symbols; cnt++ )
+
+    }; // sRefPoint(  const long& _tref )
+
+}; // struct sRefPoint
 
 struct sGlobalVars : sConfigVars
 {
 
     datetime time_msc;
+    sRefPoint ref_point;
     sSymbolVars sSym[];
 
     // empty default constructor - used for ArrayResize with non initialised sGlobalVars
     sGlobalVars() : time_msc(0)
     {
+        // Print( " sGlobalVars(): ", time_msc);
     }
 
-    sGlobalVars(const datetime &_tmsc) : time_msc(_tmsc)
+    sGlobalVars(const datetime &_tmsc) : time_msc(_tmsc), ref_point()
     {
+        sGlobalVarsImpl();
+    }
+
+    sGlobalVars(const datetime &_tmsc, const sRefPoint &_ref_point) : time_msc(_tmsc), ref_point(_ref_point)
+    {
+        sGlobalVarsImpl();
+    }
+
+    void sGlobalVarsImpl()
+    {
+
         ArrayResize(sSym, c.SYMBOLS_num);
         for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
         {
