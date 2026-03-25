@@ -29,8 +29,8 @@ input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
 // input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 input string I_PERIODS = "S300:S900:S3600";
-//input string I_PERIODS = "S300:S14400:S86400";
-// input string I_PERIODS = "T300:T900:T3600";
+// input string I_PERIODS = "S300:S14400:S86400";
+//  input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
@@ -286,7 +286,6 @@ bool init_ticks_arr_g(
                 out_data);
         }
 
-
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
 
     else if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
@@ -345,12 +344,12 @@ bool init_ticks_arr_g(
     if (false == ret)
     {
         string str = StringFormat("@TODO throw exception here - init_data_from_ticks_arr_g %s.%03d  %s %5d %s ticks: %5d",
-                                    TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                                    in_time_msc % 1000,
-                                    in_symbol,
-                                    in_period_num,
-                                    EnumToString(in_period_type),
-                                    size1 );
+                                  TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                                  in_time_msc % 1000,
+                                  in_symbol,
+                                  in_period_num,
+                                  EnumToString(in_period_type),
+                                  size1);
         Print(str);
     }
 
@@ -432,6 +431,10 @@ struct sData
     double c0;
     double c1;
 
+    // ref_point
+    long time_msc_ref;
+    double c0_ref;
+
     // fft
     double SUM_POS;
     double SUM_NEG;
@@ -441,7 +444,7 @@ struct sData
     double daily_open_c0;
     long id_pro_chart;
 
-    sData(long _tr_msc = 0, double _cr = 0)
+    sData()
     {
 
         // generic
@@ -468,6 +471,10 @@ struct sData
         SUM_POS = 0.0;
         SUM_NEG = 0.0;
 
+        // ref_point
+        time_msc_ref = 0;
+        c0_ref = 0;
+
         // daily openings
         daily_open_t0 = 0;
         daily_open_c0 = 0.0;
@@ -479,6 +486,7 @@ struct sDataVars : sConfigVars
 {
 
     datetime time_msc;
+    sData d;
 
     string symbol;
     int symbol_idx;
@@ -487,10 +495,7 @@ struct sDataVars : sConfigVars
     int period_num;
     ENUM_PERIOD_TYPE period_type;
 
-    sData d;
-
     string str_txt;
-
     double ticks_arr[];
 
     void print()
@@ -502,7 +507,11 @@ struct sDataVars : sConfigVars
         }
     }; // void print()
 
-    void init(const datetime &_time_msc, const string &_symbol, const int &_symbol_idx, const string &_period, const int &_period_idx)
+    void init(const datetime &_time_msc,
+              const string &_symbol,
+              const int &_symbol_idx,
+              const string &_period,
+              const int &_period_idx)
     {
 
         time_msc = _time_msc;
@@ -533,39 +542,10 @@ struct sDataVars : sConfigVars
         }
     };
 
-    sDataVars() {
-    };
+    sDataVars() : time_msc(0), d() {
+                  };
 
 }; // struct sDataVars
-
-struct sSymbolVars : sConfigVars
-{
-
-    datetime time_msc;
-
-    string symbol;
-    int symbol_idx;
-    sDataVars sData[];
-
-    void init(const datetime &_time_msc, const string &_symbol, const int &_symbol_idx)
-    {
-        time_msc = _time_msc;
-
-        symbol = _symbol;
-        symbol_idx = _symbol_idx;
-
-        for (int cnt = 0; cnt < c.PERIODS_num; cnt++)
-        {
-            sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt);
-        } // for( int cnt = 0; cnt < num_symbols; cnt++ )
-    }
-
-    sSymbolVars()
-    {
-        ArrayResize(sData, c.PERIODS_num);
-    }
-
-}; // struct sSymbolVars
 
 struct sRefPoint : sConfigVars
 {
@@ -630,6 +610,40 @@ struct sRefPoint : sConfigVars
 
 }; // struct sRefPoint
 
+struct sSymbolVars : sConfigVars
+{
+
+    datetime time_msc;
+
+    string symbol;
+    int symbol_idx;
+    sDataVars sData[];
+
+    void init(const datetime &_time_msc,
+              const string &_symbol,
+              const int &_symbol_idx,
+              const sRefPoint &ref_point)
+    {
+        time_msc = _time_msc;
+
+        symbol = _symbol;
+        symbol_idx = _symbol_idx;
+
+        for (int cnt = 0; cnt < c.PERIODS_num; cnt++)
+        {
+            sData[cnt].d.time_msc_ref = ref_point.time_msc_ref;
+            sData[cnt].d.c0_ref = ref_point.c0_ref[symbol_idx];
+            sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt);
+        } // for( int cnt = 0; cnt < num_symbols; cnt++ )
+    }
+
+    sSymbolVars() : time_msc(0), symbol_idx(-1)
+    {
+        ArrayResize(sData, c.PERIODS_num);
+    }
+
+}; // struct sSymbolVars
+
 struct sGlobalVars : sConfigVars
 {
 
@@ -659,7 +673,7 @@ struct sGlobalVars : sConfigVars
         ArrayResize(sSym, c.SYMBOLS_num);
         for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
         {
-            sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt);
+            sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
     }
 

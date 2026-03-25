@@ -260,7 +260,7 @@ public:
 
 }; // struct AlgoFFT
 
-void FftCalc(const long& in_time_msc, const int fft_size = 32, const int fft_direction = 1  )
+void FftCalc(const long &in_time_msc, const int fft_size = 32, const int fft_direction = 1)
 {
     // @TODO move calling of FFT into variables
     int fft_size_divider = 2;
@@ -337,7 +337,6 @@ void OnStart()
     int fft_size = 32;
     int fft_direction = 1;
     FftCalc(in_time_msc, fft_size, fft_direction);
-
 
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
