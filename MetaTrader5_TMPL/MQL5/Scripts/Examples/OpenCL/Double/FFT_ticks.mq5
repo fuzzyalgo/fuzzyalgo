@@ -329,7 +329,7 @@ void OnStart()
     long in_time_msc;
     // in_time_msc = StructToTime(time_struct) * 1000;
     in_time_msc = GetSystemTimeMsc();
-    //  in_time_msc = TimeCurrent()*1000;
+    //in_time_msc = TimeCurrent()*1000;
     //  in_time_msc = TimeLocal()*1000;
     //  in_time_msc = (datetime)t.time_msc;
 
@@ -489,6 +489,6 @@ datetime GetSystemTimeMsc(void)
     dt.min = st.wMinute;
     dt.sec = st.wSecond;
     //---
-    return (1000 * (StructToTime(dt) + 7200) + st.wMilliseconds);
+    return (1000 * (StructToTime(dt) + 3*3600 /*7200*/) + st.wMilliseconds);
 } // long GetSystemTimeMsc(void)
 //+------------------------------------------------------------------+
