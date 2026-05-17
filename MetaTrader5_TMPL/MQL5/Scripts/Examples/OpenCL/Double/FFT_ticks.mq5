@@ -8,8 +8,113 @@
 #property version "1.00"
 
 #include <FuzzyAlgo/variables.mqh>
+#include <FuzzyAlgo/HistogramChart.mqh>
 #include <WinAPI/sysinfoapi.mqh>
-#include <Canvas/Charts/HistogramChart.mqh>
+
+struct sFftParams
+{
+    const int fft_size;
+    const int fft_min_size;
+    const int fft_grid_scale_divider;
+    const int fft_direction;
+    const int fft_real_part_size_used;
+    const int fft_real_part_start_pos;
+    const int fft_imag_part_size_used;
+    const int fft_imag_part_start_pos;
+
+    sFftParams() : fft_size(0),
+                   fft_min_size(0),
+                   fft_grid_scale_divider(2),
+                   fft_direction(1),
+                   fft_real_part_size_used(1),
+                   fft_real_part_start_pos(0),
+                   fft_imag_part_size_used(1),
+                   fft_imag_part_start_pos(1) {};
+
+    sFftParams(const int &_fft_size) : fft_size(_fft_size),
+                                       fft_min_size(16),
+                                       fft_grid_scale_divider(2),
+                                       fft_direction(1),
+                                       fft_real_part_size_used(1),
+                                       fft_real_part_start_pos(0),
+                                       fft_imag_part_size_used(2),
+                                       fft_imag_part_start_pos(1) {};
+
+    sFftParams(const int &_fft_size,
+               const int &_fft_min_size,
+               const int &_fft_grid_scale_divider,
+               const int &_fft_direction,
+               const int &_fft_real_part_size_used,
+               const int &_fft_real_part_start_pos,
+               const int &_fft_imag_part_size_used,
+               const int &_fft_imag_part_start_pos) : fft_size(_fft_size),
+                                                      fft_min_size(_fft_min_size),
+                                                      fft_grid_scale_divider(_fft_grid_scale_divider),
+                                                      fft_direction(_fft_direction),
+                                                      fft_real_part_size_used(_fft_real_part_size_used),
+                                                      fft_real_part_start_pos(_fft_real_part_start_pos),
+                                                      fft_imag_part_size_used(_fft_imag_part_size_used),
+                                                      fft_imag_part_start_pos(_fft_imag_part_start_pos) {};
+
+}; // struct sFftParams
+
+struct sAlgoFftChart
+{
+    const string name;
+    const int x;
+    const int y;
+    const int width;
+    const int height;
+    bool created;
+    sFftParams fft_params;
+    CHistogramChart chart;
+
+    void create()
+    {
+        if (chart.CreateBitmapLabel(name, x, y, width, height))
+        {
+            created = true;
+            // chart.Accumulative();
+            chart.ShowValue(false);
+            chart.ShowScaleTop(false);
+            chart.ShowScaleBottom(false);
+            chart.ShowScaleRight(false);
+            chart.ShowLegend(true);
+            int size2 = (int)(fft_params.fft_size / fft_params.fft_grid_scale_divider);
+            chart.VScaleParams((int)size2, -1 * size2, fft_params.fft_min_size);
+        }
+        else
+        {
+            created = false;
+            Print("Error creating histogram chart: ", GetLastError());
+            // @TODO raise exception here
+        }
+    }
+
+    void destroy()
+    {
+        chart.Destroy();
+        created = false;
+    }
+
+    sAlgoFftChart() : name("FFtChart"),
+                      x(10), y(10), width(600), height(450), created(false),
+                      fft_params(sFftParams()) {};
+
+    sAlgoFftChart(
+        const string &_name,
+        const int &_x,
+        const int &_y,
+        const int &_width,
+        const int &_height,
+        const sFftParams &_fft_params) : name(_name),
+                                         x(_x), y(_y), width(_width), height(_height), created(false),
+                                         fft_params(_fft_params)
+    {
+        create();
+    };
+
+}; // sAlgoFftChart
 
 class AlgoFFT
 {
@@ -260,52 +365,43 @@ public:
 
 }; // struct AlgoFFT
 
-void FftCalc(const long &in_time_msc, const int fft_size = 32, const int fft_direction = 1)
+void FftCalc(const long &in_time_msc, sAlgoFftChart &afc)
 {
     // @TODO move calling of FFT into variables
     int fft_size_divider = 2;
     double CPU_input[];
+    double CPU_input_disp[];
     double CPU_real[];
     double CPU_imag[];
     AlgoFFT fft();
     MqlTick src_array[];
-    int src_size = CopyTicksRange(_Symbol, src_array, COPY_TICKS_TIME_MS, in_time_msc - (10) * fft_size * 1000, in_time_msc);
-    if (src_size > fft_size)
+    int src_size = CopyTicksRange(_Symbol, src_array, COPY_TICKS_TIME_MS, in_time_msc - (10) * afc.fft_params.fft_size * 1000, in_time_msc);
+    if (src_size > afc.fft_params.fft_size)
     {
         MqlTick dst_array[];
         int dst_size = 0;
         long t0 = 0;
         double c0 = 0.0;
-        ArrayCopy(dst_array, src_array, 0, (src_size - fft_size), fft_size);
+        ArrayCopy(dst_array, src_array, 0, (src_size - afc.fft_params.fft_size), afc.fft_params.fft_size);
         dst_size = ArraySize(dst_array);
-        if (fft_size == dst_size)
+        if (afc.fft_params.fft_size == dst_size)
         {
             t0 = dst_array[dst_size - 1].time_msc;
             c0 = (dst_array[dst_size - 1].ask + dst_array[dst_size - 1].bid) / 2;
             string time_str = StringFormat("%s.%03d", TimeToString(in_time_msc / 1000, TIME_DATE | TIME_SECONDS), in_time_msc % 1000);
             Print("do FFT @ ", time_str, " O: ", DoubleToString(dst_array[0].ask, _Digits), " C: ", DoubleToString(dst_array[dst_size - 1].ask, _Digits));
-            fft.FftCalc(fft_size, dst_array, CPU_input, CPU_real, CPU_imag, fft_direction);
+            fft.FftCalc(afc.fft_params.fft_size, dst_array, CPU_input, CPU_real, CPU_imag, afc.fft_params.fft_direction);
 
-            CHistogramChart chart;
-            if (!chart.CreateBitmapLabel("SampleHistogramChart", 10, 10, 600, 450))
+            if (true == afc.created)
             {
-                Print("Error creating histogram chart: ", GetLastError());
-                return;
-            }
-            // chart.Accumulative();
-            int size2 = (int)(fft_size / fft_size_divider);
-            chart.ShowValue(false);
-            chart.ShowScaleTop(false);
-            chart.ShowScaleBottom(false);
-            chart.ShowScaleRight(false);
-            chart.ShowLegend(true);
-            chart.VScaleParams((int)size2, -1 * size2, 20);
-            // ArrayResize(CPU_input, fft_size);
-            ArrayResize(CPU_real, size2);
-            ArrayResize(CPU_imag, size2);
-            // chart.SeriesAdd(CPU_real,"FFT-REAL");
-            // chart.SeriesAdd(CPU_imag,"FFT-IMAG");
-            chart.SeriesAdd(CPU_input, "INPUT");
+                ArrayResize(CPU_input_disp, afc.fft_params.fft_min_size);
+                ArrayCopy(CPU_input_disp, CPU_input, 0, ArraySize(CPU_input) - afc.fft_params.fft_min_size, afc.fft_params.fft_min_size);
+                ArrayResize(CPU_real, afc.fft_params.fft_real_part_size_used);
+                ArrayResize(CPU_imag, afc.fft_params.fft_imag_part_size_used);
+                afc.chart.SeriesUpdate(0, CPU_real, "FFT-REAL");
+                afc.chart.SeriesUpdate(1, CPU_imag, "FFT-IMAG");
+                afc.chart.SeriesUpdate(2, CPU_input_disp, "INPUT");
+            } // if( true == afc.created )
 
         } // if (fft_size == dst_size)
     } // if (src_size > fft_size)
@@ -321,22 +417,48 @@ void OnStart()
 
     MqlDateTime time_struct = {};
     time_struct.year = 2026;
-    time_struct.mon = 3;
-    time_struct.day = 9;
-    time_struct.hour = 21;
+    time_struct.mon = 5;
+    time_struct.day = 15;
+    time_struct.hour = 12;
     time_struct.min = 0;
     time_struct.sec = 0;
     long in_time_msc;
-    // in_time_msc = StructToTime(time_struct) * 1000;
-    in_time_msc = GetSystemTimeMsc();
-    //in_time_msc = TimeCurrent()*1000;
-    //  in_time_msc = TimeLocal()*1000;
-    //  in_time_msc = (datetime)t.time_msc;
+    in_time_msc = StructToTime(time_struct) * 1000;
+    // in_time_msc = GetSystemTimeMsc();
+    // in_time_msc = TimeCurrent()*1000;
+    //   in_time_msc = TimeLocal()*1000;
+    //   in_time_msc = (datetime)t.time_msc;
 
     // @TODO move calling of FFT into variables
-    int fft_size = 32;
-    int fft_direction = 1;
-    FftCalc(in_time_msc, fft_size, fft_direction);
+    sFftParams fftp1(16);
+    string name1 = "FFT" + IntegerToString(fftp1.fft_size);
+    sAlgoFftChart afc1(name1, (10 + 0 * 640), 10, 640, 450, fftp1);
+    FftCalc(in_time_msc, afc1);
+
+    sFftParams fftp2(32);
+    string name2 = "FFT" + IntegerToString(fftp2.fft_size);
+    sAlgoFftChart afc2(name2, (10 + 1 * 640), 10, 640, 450, fftp2);
+    FftCalc(in_time_msc, afc2);
+
+    sFftParams fftp3(64);
+    string name3 = "FFT" + IntegerToString(fftp3.fft_size);
+    sAlgoFftChart afc3(name3, (10 + 2 * 640), 10, 640, 450, fftp3);
+    FftCalc(in_time_msc, afc3);
+
+    sFftParams fftp4(128);
+    string name4 = "FFT" + IntegerToString(fftp4.fft_size);
+    sAlgoFftChart afc4(name4, (10 + 0 * 640), (10 + 1 * 450), 640, 450, fftp4);
+    FftCalc(in_time_msc, afc4);
+
+    sFftParams fftp5(256);
+    string name5 = "FFT" + IntegerToString(fftp5.fft_size);
+    sAlgoFftChart afc5(name5, (10 + 1 * 640), (10 + 1 * 450), 640, 450, fftp5);
+    FftCalc(in_time_msc, afc5);
+
+    sFftParams fftp6(512);
+    string name6 = "FFT" + IntegerToString(fftp6.fft_size);
+    sAlgoFftChart afc6(name6, (10 + 2 * 640), (10 + 1 * 450), 640, 450, fftp6);
+    FftCalc(in_time_msc, afc6);
 
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
@@ -416,8 +538,8 @@ void OnStart()
     int min_cnt = 0;
     while (!IsStopped())
     {
-        long time_msc = in_time_msc + min_cnt * 1 * 1000;
-        time_msc = GetSystemTimeMsc();
+        long time_msc = in_time_msc + min_cnt * 60 * 1000;
+        // time_msc = GetSystemTimeMsc();
         ulong start = GetTickCount64();
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
@@ -465,9 +587,24 @@ void OnStart()
                                   (int)tmp.sSym[0].sData[2].d.HL,
                                   (int)tmp.sSym[0].sData[2].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[2].d.SUM_NEG);
+
+        FftCalc(time_msc, afc1);
+        FftCalc(time_msc, afc2);
+        FftCalc(time_msc, afc3);
+        FftCalc(time_msc, afc4);
+        FftCalc(time_msc, afc5);
+        FftCalc(time_msc, afc6);
         Print(str);
-        Sleep(1000);
-    }
+        Sleep(100);
+
+    } // while (!IsStopped())
+
+    afc1.destroy();
+    afc2.destroy();
+    afc3.destroy();
+    afc4.destroy();
+    afc5.destroy();
+    afc6.destroy();
 
 } // void OnStart()
 
@@ -489,6 +626,6 @@ datetime GetSystemTimeMsc(void)
     dt.min = st.wMinute;
     dt.sec = st.wSecond;
     //---
-    return (1000 * (StructToTime(dt) + 3*3600 /*7200*/) + st.wMilliseconds);
+    return (1000 * (StructToTime(dt) + 3 * 3600 /*7200*/) + st.wMilliseconds);
 } // long GetSystemTimeMsc(void)
 //+------------------------------------------------------------------+
