@@ -79,9 +79,9 @@ struct sAlgoFftChart
             chart.ShowScaleTop(false);
             chart.ShowScaleBottom(false);
             chart.ShowScaleRight(false);
-            chart.ShowLegend(true);
+            chart.ShowLegend(false);
             int size2 = (int)(fft_params.fft_size / fft_params.fft_grid_scale_divider);
-            chart.VScaleParams((int)size2, -1 * size2, fft_params.fft_min_size);
+            chart.VScaleParams((int)size2, -1 * size2, 2/*fft_params.fft_min_size*/);
         }
         else
         {
@@ -400,7 +400,7 @@ void FftCalc(const long &in_time_msc, sAlgoFftChart &afc)
                 ArrayResize(CPU_imag, afc.fft_params.fft_imag_part_size_used);
                 afc.chart.SeriesUpdate(0, CPU_real, "FFT-REAL");
                 afc.chart.SeriesUpdate(1, CPU_imag, "FFT-IMAG");
-                afc.chart.SeriesUpdate(2, CPU_input_disp, "INPUT");
+                //afc.chart.SeriesUpdate(2, CPU_input_disp, "INPUT");
             } // if( true == afc.created )
 
         } // if (fft_size == dst_size)
@@ -424,40 +424,59 @@ void OnStart()
     time_struct.sec = 0;
     long in_time_msc;
     in_time_msc = StructToTime(time_struct) * 1000;
-    // in_time_msc = GetSystemTimeMsc();
+    in_time_msc = GetSystemTimeMsc();
     // in_time_msc = TimeCurrent()*1000;
     //   in_time_msc = TimeLocal()*1000;
     //   in_time_msc = (datetime)t.time_msc;
 
+    int diag_x;
+    int diag_y ;
+    int pos_x = 10;
+    int pos_y = 10;
+    int diag_width = 320;
+    int diag_height = 320;
+
     // @TODO move calling of FFT into variables
     sFftParams fftp1(16);
     string name1 = "FFT" + IntegerToString(fftp1.fft_size);
-    sAlgoFftChart afc1(name1, (10 + 0 * 640), 10, 640, 450, fftp1);
+    diag_x = pos_x + 0 * diag_width;
+    diag_y = pos_y + 0 * diag_height;
+    sAlgoFftChart afc1(name1, diag_x, diag_y, diag_width, diag_height, fftp1);
     FftCalc(in_time_msc, afc1);
 
     sFftParams fftp2(32);
     string name2 = "FFT" + IntegerToString(fftp2.fft_size);
-    sAlgoFftChart afc2(name2, (10 + 1 * 640), 10, 640, 450, fftp2);
+    diag_x = pos_x + 1 * diag_width;
+    diag_y = pos_y + 0 * diag_height;
+    sAlgoFftChart afc2(name2, diag_x, diag_y, diag_width, diag_height, fftp2);
     FftCalc(in_time_msc, afc2);
 
     sFftParams fftp3(64);
     string name3 = "FFT" + IntegerToString(fftp3.fft_size);
-    sAlgoFftChart afc3(name3, (10 + 2 * 640), 10, 640, 450, fftp3);
+    diag_x = pos_x + 2 * diag_width;
+    diag_y = pos_y + 0 * diag_height;
+    sAlgoFftChart afc3(name3, diag_x, diag_y, diag_width, diag_height, fftp3);
     FftCalc(in_time_msc, afc3);
 
     sFftParams fftp4(128);
     string name4 = "FFT" + IntegerToString(fftp4.fft_size);
-    sAlgoFftChart afc4(name4, (10 + 0 * 640), (10 + 1 * 450), 640, 450, fftp4);
+    diag_x = pos_x + 0 * diag_width;
+    diag_y = pos_y + 1 * diag_height;
+    sAlgoFftChart afc4(name4, diag_x, diag_y, diag_width, diag_height, fftp4);
     FftCalc(in_time_msc, afc4);
 
     sFftParams fftp5(256);
     string name5 = "FFT" + IntegerToString(fftp5.fft_size);
-    sAlgoFftChart afc5(name5, (10 + 1 * 640), (10 + 1 * 450), 640, 450, fftp5);
+    diag_x = pos_x + 1 * diag_width;
+    diag_y = pos_y + 1 * diag_height;
+    sAlgoFftChart afc5(name5, diag_x, diag_y, diag_width, diag_height, fftp5);
     FftCalc(in_time_msc, afc5);
 
     sFftParams fftp6(512);
     string name6 = "FFT" + IntegerToString(fftp6.fft_size);
-    sAlgoFftChart afc6(name6, (10 + 2 * 640), (10 + 1 * 450), 640, 450, fftp6);
+    diag_x = pos_x + 2 * diag_width;
+    diag_y = pos_y + 1 * diag_height;
+    sAlgoFftChart afc6(name6, diag_x, diag_y, diag_width, diag_height, fftp6);
     FftCalc(in_time_msc, afc6);
 
     sGlobalVars g(in_time_msc);
@@ -539,7 +558,7 @@ void OnStart()
     while (!IsStopped())
     {
         long time_msc = in_time_msc + min_cnt * 60 * 1000;
-        // time_msc = GetSystemTimeMsc();
+        time_msc = GetSystemTimeMsc();
         ulong start = GetTickCount64();
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
@@ -595,7 +614,7 @@ void OnStart()
         FftCalc(time_msc, afc5);
         FftCalc(time_msc, afc6);
         Print(str);
-        Sleep(100);
+        Sleep(1000);
 
     } // while (!IsStopped())
 
