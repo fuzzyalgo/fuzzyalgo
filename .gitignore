@@ -10,6 +10,7 @@ MetaTrader5_TMPL/config_*/cf_*.json
 MetaTrader5_TMPL/bases
 MetaTrader5_TMPL/config
 MetaTrader5_TMPL/logs
+MetaTrader5_TMPL/temp
 MetaTrader5_TMPL/metaeditor64.exe
 MetaTrader5_TMPL/metatester64.exe
 MetaTrader5_TMPL/terminal64.exe
