@@ -1,3 +1,61 @@
+<#
+.SYNOPSIS
+    Starts terminal64.exe with generated MetaTrader config.
+
+.DESCRIPTION
+    Directory structure:
+
+        ./RUN.ps1
+        ./terminal64.zip
+        ./terminal64.exe
+        ./config/common.ini
+        ./config/servers.dat
+        ./config_<SERVER>/servers.dat
+
+    Behavior:
+
+    - Requires --login and --password.
+    - Optional --profile defaults to "Default".
+    - Optional --server defaults to "RoboForex-ECN".
+    - If ./terminal64.exe does not exist, it is extracted from ./terminal64.zip.
+    - ./config/common.ini is recreated every time the script runs.
+    - Template placeholders are replaced:
+        %LOGINNUMBER%
+        %PASSWORD%
+        %PROFILE_NAME%
+        %SERVER%
+    - If ./config_<SERVER>/servers.dat exists and ./config/servers.dat does not exist,
+      it is copied to ./config/servers.dat.
+    - Starts terminal64.exe and exits with its exit code.
+
+.USAGE
+    .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]
+
+.EXAMPLES
+    Use mandatory arguments only.
+    Profile defaults to "Default".
+    Server defaults to "RoboForex-ECN".
+
+        .\RUN.ps1 --login=123456789 --password=MySecretPassword
+
+    Use custom profile with default server.
+
+        .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile
+
+    Use custom profile and custom server.
+
+        .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile --server=RoboForex-ECN
+
+.FULL TERMINAL COMMAND
+    The generated terminal command is:
+
+        terminal64.exe /portable /login:LOGINNUMBER /profile:PROFILE_NAME /config:CONFIG_FILE_PATH
+
+    Example:
+
+        terminal64.exe /portable /login:123456789 /profile:Default /config:.\config\common.ini
+#>
+
 [CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -10,6 +68,11 @@ $ErrorActionPreference = 'Stop'
 function Write-Usage {
     Write-Host "Usage:"
     Write-Host "  .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]"
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile --server=RoboForex-Pro"
 }
 
 # ------------------------------------------------------------
@@ -176,7 +239,7 @@ catch {
 # ------------------------------------------------------------
 # Copy server-specific servers.dat if available
 #
-# Example:
+# Example for default server:
 #   ./config_RoboForex-ECN/servers.dat
 #
 # Copy to:
@@ -209,6 +272,10 @@ $terminalArgs = @(
     "/profile:$profile"
     "/config:$configPath"
 )
+
+# Show the exact command being executed
+Write-Host "Starting terminal:"
+Write-Host "`"$terminalExePath`" $($terminalArgs -join ' ')"
 
 # ------------------------------------------------------------
 # Start terminal64.exe, check startup error and exit
