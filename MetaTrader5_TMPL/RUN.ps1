@@ -317,7 +317,13 @@ catch {
 }
 
 # ------------------------------------------------------------
-# Create or recreate ./config/common.ini when needed
+# Copy server-specific servers.dat when generating config
+#
+# Copy only if:
+#   - $generateConfig is $true
+#   - ./config_<SERVER>/servers.dat exists
+#
+# If ./config/servers.dat already exists, overwrite it.
 # ------------------------------------------------------------
 if ($generateConfig) {
     try {
@@ -333,26 +339,12 @@ if ($generateConfig) {
         exit 8
     }
 
-    # ------------------------------------------------------------
-    # Copy server-specific servers.dat if available
-    #
-    # Example:
-    #   ./config_RoboForex-ECN/servers.dat
-    #
-    # Copy to:
-    #   ./config/servers.dat
-    #
-    # Only copy if ./config/servers.dat does not already exist.
-    # ------------------------------------------------------------
     try {
         $serverConfigDirName = "config_$server"
         $serverConfigDir = Join-Path $scriptDir $serverConfigDirName
         $serverServersDatPath = Join-Path $serverConfigDir 'servers.dat'
 
-        if (
-            (Test-Path -LiteralPath $serverServersDatPath) -and
-            (-not (Test-Path -LiteralPath $configServersDatPath))
-        ) {
+        if (Test-Path -LiteralPath $serverServersDatPath) {
             Copy-Item `
                 -LiteralPath $serverServersDatPath `
                 -Destination $configServersDatPath `
