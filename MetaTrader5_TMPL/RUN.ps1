@@ -15,6 +15,8 @@
 
     Behavior:
 
+    - --help prints usage information and exits.
+
     - --list-server lists all available servers by scanning directories named:
         ./config_<SERVER>
 
@@ -52,6 +54,10 @@
     - Starts terminal64.exe.
 
 .USAGE
+    Show help:
+
+        .\RUN.ps1 --help
+
     List available servers:
 
         .\RUN.ps1 --list-server
@@ -72,6 +78,10 @@
         .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]
 
 .EXAMPLES
+    Show help:
+
+        .\RUN.ps1 --help
+
     List available servers:
 
         .\RUN.ps1 --list-server
@@ -117,6 +127,14 @@
 
         terminal64.exe /portable /login:123456789 /profile:Default /config:.\config\common.ini
 
+    Existing config, with custom profile:
+
+        terminal64.exe /portable /profile:MyProfile /config:.\config\common.ini
+
+    Existing config, with login and custom profile:
+
+        terminal64.exe /portable /login:123456789 /profile:MyProfile /config:.\config\common.ini
+
     Generated config:
 
         terminal64.exe /portable /login:123456789 /profile:Default /config:.\config\common.ini
@@ -134,6 +152,9 @@ $ErrorActionPreference = 'Stop'
 function Write-Usage {
     Write-Host "Usage:"
     Write-Host ""
+    Write-Host "  Show help:"
+    Write-Host "    .\RUN.ps1 --help"
+    Write-Host ""
     Write-Host "  List available servers:"
     Write-Host "    .\RUN.ps1 --list-server"
     Write-Host ""
@@ -150,6 +171,7 @@ function Write-Usage {
     Write-Host "    .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]"
     Write-Host ""
     Write-Host "Examples:"
+    Write-Host "  .\RUN.ps1 --help"
     Write-Host "  .\RUN.ps1 --list-server"
     Write-Host "  .\RUN.ps1 --list-profile"
     Write-Host "  .\RUN.ps1"
@@ -170,9 +192,15 @@ $profile = $null
 $server = $null
 $listServer = $false
 $listProfile = $false
+$showHelp = $false
 
 foreach ($arg in $ArgsList) {
     switch -Regex ($arg) {
+        '^--help$' {
+            $showHelp = $true
+            continue
+        }
+
         '^--list-server$' {
             $listServer = $true
             continue
@@ -222,6 +250,14 @@ $terminalZipPath = Join-Path $scriptDir 'terminal64.zip'
 $configDir = Join-Path $scriptDir 'config'
 $configPath = Join-Path $configDir 'common.ini'
 $configServersDatPath = Join-Path $configDir 'servers.dat'
+
+# ------------------------------------------------------------
+# Show help and exit
+# ------------------------------------------------------------
+if ($showHelp) {
+    Write-Usage
+    exit 0
+}
 
 # ------------------------------------------------------------
 # List available servers and exit
