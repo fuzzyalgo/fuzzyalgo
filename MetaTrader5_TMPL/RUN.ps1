@@ -11,11 +11,15 @@
         ./config/common.ini
         ./config/servers.dat
         ./config_<SERVER>/servers.dat
+        ./MQL5/Profiles/Charts/<PROFILE>
 
     Behavior:
 
     - --list-server lists all available servers by scanning directories named:
         ./config_<SERVER>
+
+    - --list-profile lists all available profiles by scanning directories below:
+        ./MQL5/Profiles/Charts
 
     - If ./terminal64.exe does not exist, it is extracted from ./terminal64.zip.
 
@@ -52,6 +56,10 @@
 
         .\RUN.ps1 --list-server
 
+    List available profiles:
+
+        .\RUN.ps1 --list-profile
+
     Use existing config:
 
         .\RUN.ps1
@@ -67,6 +75,10 @@
     List available servers:
 
         .\RUN.ps1 --list-server
+
+    List available profiles:
+
+        .\RUN.ps1 --list-profile
 
     Use existing config with default profile:
 
@@ -125,6 +137,9 @@ function Write-Usage {
     Write-Host "  List available servers:"
     Write-Host "    .\RUN.ps1 --list-server"
     Write-Host ""
+    Write-Host "  List available profiles:"
+    Write-Host "    .\RUN.ps1 --list-profile"
+    Write-Host ""
     Write-Host "  Use existing config:"
     Write-Host "    .\RUN.ps1"
     Write-Host "    .\RUN.ps1 --login=LOGINNUMBER"
@@ -136,6 +151,7 @@ function Write-Usage {
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\RUN.ps1 --list-server"
+    Write-Host "  .\RUN.ps1 --list-profile"
     Write-Host "  .\RUN.ps1"
     Write-Host "  .\RUN.ps1 --login=123456789"
     Write-Host "  .\RUN.ps1 --profile=MyProfile"
@@ -153,11 +169,17 @@ $password = $null
 $profile = $null
 $server = $null
 $listServer = $false
+$listProfile = $false
 
 foreach ($arg in $ArgsList) {
     switch -Regex ($arg) {
         '^--list-server$' {
             $listServer = $true
+            continue
+        }
+
+        '^--list-profile$' {
+            $listProfile = $true
             continue
         }
 
@@ -236,6 +258,45 @@ if ($listServer) {
     catch {
         Write-Error "Failed to list server directories. $($_.Exception.Message)"
         exit 12
+    }
+}
+
+# ------------------------------------------------------------
+# List available profiles and exit
+#
+# Finds directories below:
+#   ./MQL5/Profiles/Charts
+#
+# Prints:
+#   <PROFILE_NAME>
+# ------------------------------------------------------------
+if ($listProfile) {
+    try {
+        $chartsDir = Join-Path $scriptDir 'MQL5\Profiles\Charts'
+
+        if (-not (Test-Path -LiteralPath $chartsDir)) {
+            exit 0
+        }
+
+        $profiles = Get-ChildItem `
+                -LiteralPath $chartsDir `
+                -Directory `
+                -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_)
+            } |
+            Sort-Object -Unique
+
+        foreach ($profileName in $profiles) {
+            Write-Host $profileName
+        }
+
+        exit 0
+    }
+    catch {
+        Write-Error "Failed to list profile directories. $($_.Exception.Message)"
+        exit 13
     }
 }
 
