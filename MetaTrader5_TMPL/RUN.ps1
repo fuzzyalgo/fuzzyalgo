@@ -14,6 +14,9 @@
 
     Behavior:
 
+    - --list-server lists all available servers by scanning directories named:
+        ./config_<SERVER>
+
     - If ./terminal64.exe does not exist, it is extracted from ./terminal64.zip.
 
     - If ./config/common.ini exists:
@@ -30,18 +33,25 @@
         - Optional --server defaults to "RoboForex-ECN".
         - ./config/common.ini is created.
 
-    - Template placeholders are replaced:
-        %LOGINNUMBER%
-        %PASSWORD%
-        %PROFILE_NAME%
-        %SERVER%
+    - When ./config/common.ini is created or recreated:
+        - Template placeholders are replaced:
+            %LOGINNUMBER%
+            %PASSWORD%
+            %PROFILE_NAME%
+            %SERVER%
 
-    - If ./config_<SERVER>/servers.dat exists and ./config/servers.dat does not exist,
-      it is copied to ./config/servers.dat.
+        - If ./config_<SERVER>/servers.dat exists, it is copied to:
+            ./config/servers.dat
+
+        - Existing ./config/servers.dat is overwritten.
 
     - Starts terminal64.exe.
 
 .USAGE
+    List available servers:
+
+        .\RUN.ps1 --list-server
+
     Use existing config:
 
         .\RUN.ps1
@@ -54,6 +64,10 @@
         .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]
 
 .EXAMPLES
+    List available servers:
+
+        .\RUN.ps1 --list-server
+
     Use existing config with default profile:
 
         .\RUN.ps1
@@ -108,6 +122,9 @@ $ErrorActionPreference = 'Stop'
 function Write-Usage {
     Write-Host "Usage:"
     Write-Host ""
+    Write-Host "  List available servers:"
+    Write-Host "    .\RUN.ps1 --list-server"
+    Write-Host ""
     Write-Host "  Use existing config:"
     Write-Host "    .\RUN.ps1"
     Write-Host "    .\RUN.ps1 --login=LOGINNUMBER"
@@ -118,6 +135,7 @@ function Write-Usage {
     Write-Host "    .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]"
     Write-Host ""
     Write-Host "Examples:"
+    Write-Host "  .\RUN.ps1 --list-server"
     Write-Host "  .\RUN.ps1"
     Write-Host "  .\RUN.ps1 --login=123456789"
     Write-Host "  .\RUN.ps1 --profile=MyProfile"
@@ -134,9 +152,15 @@ $login = $null
 $password = $null
 $profile = $null
 $server = $null
+$listServer = $false
 
 foreach ($arg in $ArgsList) {
     switch -Regex ($arg) {
+        '^--list-server$' {
+            $listServer = $true
+            continue
+        }
+
         '^--login=(.+)$' {
             $login = $Matches[1]
             continue
@@ -166,17 +190,6 @@ foreach ($arg in $ArgsList) {
 }
 
 # ------------------------------------------------------------
-# Defaults
-# ------------------------------------------------------------
-if ([string]::IsNullOrWhiteSpace($profile)) {
-    $profile = 'Default'
-}
-
-if ([string]::IsNullOrWhiteSpace($server)) {
-    $server = 'RoboForex-ECN'
-}
-
-# ------------------------------------------------------------
 # Resolve paths
 # ------------------------------------------------------------
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -187,6 +200,55 @@ $terminalZipPath = Join-Path $scriptDir 'terminal64.zip'
 $configDir = Join-Path $scriptDir 'config'
 $configPath = Join-Path $configDir 'common.ini'
 $configServersDatPath = Join-Path $configDir 'servers.dat'
+
+# ------------------------------------------------------------
+# List available servers and exit
+#
+# Finds directories:
+#   ./config_<SERVER>
+#
+# Prints:
+#   <SERVER>
+# ------------------------------------------------------------
+if ($listServer) {
+    try {
+        $prefix = 'config_'
+
+        $servers = Get-ChildItem `
+                -LiteralPath $scriptDir `
+                -Directory `
+                -Filter "$prefix*" `
+                -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                $_.Name.Substring($prefix.Length)
+            } |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_)
+            } |
+            Sort-Object -Unique
+
+        foreach ($serverName in $servers) {
+            Write-Host $serverName
+        }
+
+        exit 0
+    }
+    catch {
+        Write-Error "Failed to list server directories. $($_.Exception.Message)"
+        exit 12
+    }
+}
+
+# ------------------------------------------------------------
+# Defaults
+# ------------------------------------------------------------
+if ([string]::IsNullOrWhiteSpace($profile)) {
+    $profile = 'Default'
+}
+
+if ([string]::IsNullOrWhiteSpace($server)) {
+    $server = 'RoboForex-ECN'
+}
 
 $configExists = Test-Path -LiteralPath $configPath
 
@@ -317,13 +379,7 @@ catch {
 }
 
 # ------------------------------------------------------------
-# Copy server-specific servers.dat when generating config
-#
-# Copy only if:
-#   - $generateConfig is $true
-#   - ./config_<SERVER>/servers.dat exists
-#
-# If ./config/servers.dat already exists, overwrite it.
+# Create or recreate ./config/common.ini when needed
 # ------------------------------------------------------------
 if ($generateConfig) {
     try {
@@ -339,6 +395,17 @@ if ($generateConfig) {
         exit 8
     }
 
+    # ------------------------------------------------------------
+    # Copy server-specific servers.dat when generating config
+    #
+    # Source:
+    #   ./config_<SERVER>/servers.dat
+    #
+    # Destination:
+    #   ./config/servers.dat
+    #
+    # If destination exists, overwrite it.
+    # ------------------------------------------------------------
     try {
         $serverConfigDirName = "config_$server"
         $serverConfigDir = Join-Path $scriptDir $serverConfigDirName
