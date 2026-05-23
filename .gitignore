@@ -16,6 +16,7 @@ MetaTrader5_TMPL/metatester64.exe
 MetaTrader5_TMPL/terminal64.exe
 MetaTrader5_TMPL/MQL5/experts.dat
 MetaTrader5_TMPL/MQL5/Files/*/
+MetaTrader5_TMPL/MQL5/logs
 MetaTrader5_TMPL/MQL5/Profiles/Charts/Default
 MetaTrader5_TMPL/MQL5/Profiles/deleted
 MetaTrader5_TMPL/MQL5/Profiles/Tester

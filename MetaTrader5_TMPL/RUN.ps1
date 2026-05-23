@@ -278,24 +278,14 @@ Write-Host "Starting terminal:"
 Write-Host "`"$terminalExePath`" $($terminalArgs -join ' ')"
 
 # ------------------------------------------------------------
-# Start terminal64.exe, check startup error and exit
+# Start terminal64.exe
 # ------------------------------------------------------------
 try {
-    & $terminalExePath @terminalArgs
-
-    $exitCode = $LASTEXITCODE
-
-    if ($null -eq $exitCode) {
-        $exitCode = 0
-    }
-
-    if ($exitCode -ne 0) {
-        Write-Error "terminal64.exe exited with code $exitCode"
-    }
-
-    exit $exitCode
+    Start-Process -FilePath $terminalExePath -ArgumentList $terminalArgs
+    # We started the GUI and are not waiting for it, so return success
+    exit 0
 }
 catch {
     Write-Error "Failed to start terminal64.exe. $($_.Exception.Message)"
-    exit 10
+    exit 255
 }
