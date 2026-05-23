@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Starts terminal64.exe with generated MetaTrader config.
+    Starts terminal64.exe with an existing or generated MetaTrader config.
 
 .DESCRIPTION
     Directory structure:
@@ -14,44 +14,84 @@
 
     Behavior:
 
-    - Requires --login and --password.
-    - Optional --profile defaults to "Default".
-    - Optional --server defaults to "RoboForex-ECN".
     - If ./terminal64.exe does not exist, it is extracted from ./terminal64.zip.
-    - ./config/common.ini is recreated every time the script runs.
+
+    - If ./config/common.ini exists:
+        - No arguments are required.
+        - Existing ./config/common.ini is reused unless --password is provided.
+        - --login is optional and, if provided, is passed to terminal64.exe.
+        - --profile is optional and defaults to "Default".
+        - --password together with --login recreates ./config/common.ini.
+        - --server is only used when recreating ./config/common.ini.
+
+    - If ./config/common.ini does not exist:
+        - --login and --password are mandatory.
+        - Optional --profile defaults to "Default".
+        - Optional --server defaults to "RoboForex-ECN".
+        - ./config/common.ini is created.
+
     - Template placeholders are replaced:
         %LOGINNUMBER%
         %PASSWORD%
         %PROFILE_NAME%
         %SERVER%
+
     - If ./config_<SERVER>/servers.dat exists and ./config/servers.dat does not exist,
       it is copied to ./config/servers.dat.
-    - Starts terminal64.exe and exits with its exit code.
+
+    - Starts terminal64.exe.
 
 .USAGE
-    .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]
+    Use existing config:
+
+        .\RUN.ps1
+        .\RUN.ps1 --login=LOGINNUMBER
+        .\RUN.ps1 --profile=PROFILE_NAME
+        .\RUN.ps1 --login=LOGINNUMBER --profile=PROFILE_NAME
+
+    Create or recreate config:
+
+        .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]
 
 .EXAMPLES
-    Use mandatory arguments only.
-    Profile defaults to "Default".
-    Server defaults to "RoboForex-ECN".
+    Use existing config with default profile:
 
-        .\RUN.ps1 --login=123456789 --password=MySecretPassword
+        .\RUN.ps1
 
-    Use custom profile with default server.
+    Use existing config with login override:
 
-        .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile
+        .\RUN.ps1 --login=123456789
 
-    Use custom profile and custom server.
+    Use existing config with custom profile:
 
-        .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile --server=RoboForex-ECN
+        .\RUN.ps1 --profile=MyProfile
+
+    Use existing config with login and custom profile:
+
+        .\RUN.ps1 --login=123456789 --profile=MyProfile
+
+    Create or recreate config with default profile and default server:
+
+        .\RUN.ps1 --login=123456789 --password=MyPassword
+
+    Create or recreate config with custom server:
+
+        .\RUN.ps1 --login=123456789 --password=MyPassword --server=MyServer
+
+    Create or recreate config with custom server and custom profile:
+
+        .\RUN.ps1 --login=123456789 --password=MyPassword --server=MyServer --profile=MyProfile
 
 .FULL TERMINAL COMMAND
-    The generated terminal command is:
+    Existing config, no login:
 
-        terminal64.exe /portable /login:LOGINNUMBER /profile:PROFILE_NAME /config:CONFIG_FILE_PATH
+        terminal64.exe /portable /profile:Default /config:.\config\common.ini
 
-    Example:
+    Existing config, with login:
+
+        terminal64.exe /portable /login:123456789 /profile:Default /config:.\config\common.ini
+
+    Generated config:
 
         terminal64.exe /portable /login:123456789 /profile:Default /config:.\config\common.ini
 #>
@@ -67,12 +107,24 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Usage {
     Write-Host "Usage:"
-    Write-Host "  .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]"
+    Write-Host ""
+    Write-Host "  Use existing config:"
+    Write-Host "    .\RUN.ps1"
+    Write-Host "    .\RUN.ps1 --login=LOGINNUMBER"
+    Write-Host "    .\RUN.ps1 --profile=PROFILE_NAME"
+    Write-Host "    .\RUN.ps1 --login=LOGINNUMBER --profile=PROFILE_NAME"
+    Write-Host ""
+    Write-Host "  Create or recreate config:"
+    Write-Host "    .\RUN.ps1 --login=LOGINNUMBER --password=PASSWORD [--profile=PROFILE_NAME] [--server=SERVER]"
     Write-Host ""
     Write-Host "Examples:"
-    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword"
-    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile"
-    Write-Host "  .\RUN.ps1 --login=123456789 --password=MySecretPassword --profile=MyProfile --server=RoboForex-Pro"
+    Write-Host "  .\RUN.ps1"
+    Write-Host "  .\RUN.ps1 --login=123456789"
+    Write-Host "  .\RUN.ps1 --profile=MyProfile"
+    Write-Host "  .\RUN.ps1 --login=123456789 --profile=MyProfile"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MyPassword"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MyPassword --server=MyServer"
+    Write-Host "  .\RUN.ps1 --login=123456789 --password=MyPassword --server=MyServer --profile=MyProfile"
 }
 
 # ------------------------------------------------------------
@@ -113,18 +165,9 @@ foreach ($arg in $ArgsList) {
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($login)) {
-    Write-Error "Missing mandatory argument: --login=LOGINNUMBER"
-    Write-Usage
-    exit 2
-}
-
-if ([string]::IsNullOrWhiteSpace($password)) {
-    Write-Error "Missing mandatory argument: --password=PASSWORD"
-    Write-Usage
-    exit 3
-}
-
+# ------------------------------------------------------------
+# Defaults
+# ------------------------------------------------------------
 if ([string]::IsNullOrWhiteSpace($profile)) {
     $profile = 'Default'
 }
@@ -145,9 +188,63 @@ $configDir = Join-Path $scriptDir 'config'
 $configPath = Join-Path $configDir 'common.ini'
 $configServersDatPath = Join-Path $configDir 'servers.dat'
 
-$serverConfigDirName = "config_$server"
-$serverConfigDir = Join-Path $scriptDir $serverConfigDirName
-$serverServersDatPath = Join-Path $serverConfigDir 'servers.dat'
+$configExists = Test-Path -LiteralPath $configPath
+
+# ------------------------------------------------------------
+# Decide whether common.ini must be created/recreated
+#
+# Rules:
+#   - If common.ini does not exist, generate it.
+#   - If common.ini exists and --password is provided, regenerate it.
+#   - If common.ini exists and --password is not provided, reuse it.
+# ------------------------------------------------------------
+$generateConfig = $false
+
+if (-not $configExists) {
+    $generateConfig = $true
+}
+elseif (-not [string]::IsNullOrWhiteSpace($password)) {
+    $generateConfig = $true
+}
+
+# ------------------------------------------------------------
+# Validate arguments
+# ------------------------------------------------------------
+
+# If config must be generated, login and password are mandatory.
+if ($generateConfig) {
+    if ([string]::IsNullOrWhiteSpace($login)) {
+        Write-Error "Missing mandatory argument: --login=LOGINNUMBER. It is required when creating or recreating ./config/common.ini."
+        Write-Usage
+        exit 2
+    }
+
+    if ([string]::IsNullOrWhiteSpace($password)) {
+        Write-Error "Missing mandatory argument: --password=PASSWORD. It is required because ./config/common.ini does not exist."
+        Write-Usage
+        exit 3
+    }
+}
+
+# If password is provided, login must also be provided.
+if (
+    (-not [string]::IsNullOrWhiteSpace($password)) -and
+    [string]::IsNullOrWhiteSpace($login)
+) {
+    Write-Error "Argument --password requires --login."
+    Write-Usage
+    exit 10
+}
+
+# If server is provided while not generating config, it has no useful effect.
+if (
+    (-not $generateConfig) -and
+    ($ArgsList -match '^--server=')
+) {
+    Write-Error "Argument --server can only be used together with --login and --password, because it is written into ./config/common.ini."
+    Write-Usage
+    exit 11
+}
 
 # ------------------------------------------------------------
 # Ensure terminal64.exe exists
@@ -220,47 +317,56 @@ catch {
 }
 
 # ------------------------------------------------------------
-# Create ./config/common.ini every time
-# Replace %LOGINNUMBER%, %PASSWORD%, %PROFILE_NAME%, %SERVER%
+# Create or recreate ./config/common.ini when needed
 # ------------------------------------------------------------
-try {
-    $configContent = $configTemplate.Replace('%LOGINNUMBER%', $login)
-    $configContent = $configContent.Replace('%PASSWORD%', $password)
-    $configContent = $configContent.Replace('%PROFILE_NAME%', $profile)
-    $configContent = $configContent.Replace('%SERVER%', $server)
+if ($generateConfig) {
+    try {
+        $configContent = $configTemplate.Replace('%LOGINNUMBER%', $login)
+        $configContent = $configContent.Replace('%PASSWORD%', $password)
+        $configContent = $configContent.Replace('%PROFILE_NAME%', $profile)
+        $configContent = $configContent.Replace('%SERVER%', $server)
 
-    Set-Content -LiteralPath $configPath -Value $configContent -Encoding UTF8
-}
-catch {
-    Write-Error "Failed to create config file: $configPath. $($_.Exception.Message)"
-    exit 8
-}
+        Set-Content -LiteralPath $configPath -Value $configContent -Encoding UTF8
+    }
+    catch {
+        Write-Error "Failed to create config file: $configPath. $($_.Exception.Message)"
+        exit 8
+    }
 
-# ------------------------------------------------------------
-# Copy server-specific servers.dat if available
-#
-# Example for default server:
-#   ./config_RoboForex-ECN/servers.dat
-#
-# Copy to:
-#   ./config/servers.dat
-#
-# Only copy if ./config/servers.dat does not already exist.
-# ------------------------------------------------------------
-try {
-    if (
-        (Test-Path -LiteralPath $serverServersDatPath) -and
-        (-not (Test-Path -LiteralPath $configServersDatPath))
-    ) {
-        Copy-Item `
-            -LiteralPath $serverServersDatPath `
-            -Destination $configServersDatPath `
-            -Force
+    # ------------------------------------------------------------
+    # Copy server-specific servers.dat if available
+    #
+    # Example:
+    #   ./config_RoboForex-ECN/servers.dat
+    #
+    # Copy to:
+    #   ./config/servers.dat
+    #
+    # Only copy if ./config/servers.dat does not already exist.
+    # ------------------------------------------------------------
+    try {
+        $serverConfigDirName = "config_$server"
+        $serverConfigDir = Join-Path $scriptDir $serverConfigDirName
+        $serverServersDatPath = Join-Path $serverConfigDir 'servers.dat'
+
+        if (
+            (Test-Path -LiteralPath $serverServersDatPath) -and
+            (-not (Test-Path -LiteralPath $configServersDatPath))
+        ) {
+            Copy-Item `
+                -LiteralPath $serverServersDatPath `
+                -Destination $configServersDatPath `
+                -Force
+        }
+    }
+    catch {
+        Write-Error "Failed to copy servers.dat from '$serverServersDatPath' to '$configServersDatPath'. $($_.Exception.Message)"
+        exit 9
     }
 }
-catch {
-    Write-Error "Failed to copy servers.dat from '$serverServersDatPath' to '$configServersDatPath'. $($_.Exception.Message)"
-    exit 9
+else {
+    Write-Host "Using existing config file:"
+    Write-Host "  $configPath"
 }
 
 # ------------------------------------------------------------
@@ -268,10 +374,19 @@ catch {
 # ------------------------------------------------------------
 $terminalArgs = @(
     '/portable'
-    "/login:$login"
-    "/profile:$profile"
-    "/config:$configPath"
 )
+
+# /login is only passed if --login was supplied.
+if (-not [string]::IsNullOrWhiteSpace($login)) {
+    $terminalArgs += "/login:$login"
+}
+
+# /profile is always passed.
+# If --profile was not supplied, it defaults to Default.
+$terminalArgs += "/profile:$profile"
+
+# /config is always passed.
+$terminalArgs += "/config:$configPath"
 
 # Show the exact command being executed
 Write-Host "Starting terminal:"
@@ -282,7 +397,8 @@ Write-Host "`"$terminalExePath`" $($terminalArgs -join ' ')"
 # ------------------------------------------------------------
 try {
     Start-Process -FilePath $terminalExePath -ArgumentList $terminalArgs
-    # We started the GUI and are not waiting for it, so return success
+
+    # We started the GUI and are not waiting for it, so return success.
     exit 0
 }
 catch {
