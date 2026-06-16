@@ -48,127 +48,10 @@ int string_split_g(const string &in_string_to_split, const string &in_seperator,
 {
     ushort u_sep = StringGetCharacter(in_seperator, 0);                       //--- Get the separator code
     int num_splits = StringSplit(in_string_to_split, u_sep, out_split_array); //--- Split the string to substrings
-    if ((num_splits != ArraySize(out_split_array)) || (0 >= num_splits))
+    if (num_splits != ArraySize(out_split_array))
         Print("@TODO throw exception here - string_split_g " + in_string_to_split + " " + in_seperator);
     return num_splits;
 }
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void get_period_num_and_type_g(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
-{
-
-    if ("PRO" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_PRO;
-        out_period_num = 0;
-    }
-    else if ("DAY" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_DAY;
-        out_period_num = 0;
-    }
-    else if ("REF" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_REF;
-        out_period_num = 0;
-    }
-    else if ("T15" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 15;
-    }
-    else if ("T30" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 30;
-    }
-    else if ("T60" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 60;
-    }
-    else if ("T300" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 300;
-    }
-    else if ("T900" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 900;
-    }
-    else if ("T3600" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-        out_period_num = 3600;
-    }
-    else if ("T_AVG" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_T;
-        out_period_num = 0;
-    }
-    else if ("S15" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 15;
-    }
-    else if ("S30" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 30;
-    }
-    else if ("S60" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 60;
-    }
-    else if ("S300" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 300;
-    }
-    else if ("S900" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 900;
-    }
-    else if ("S3600" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 3600;
-    }
-    else if ("S14400" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 14400;
-    }
-    else if ("S86400" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-        out_period_num = 86400;
-    }
-    else if ("S_AVG" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_S;
-        out_period_num = 0;
-    }
-    else if ("SUM_AVG" == in_period_key)
-    {
-        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_SUM;
-        out_period_num = 0;
-    }
-    else
-    {
-        Print("@TODO throw exception here - get_period_num_and_type_g " + in_period_key);
-    }
-
-    //+------------------------------------------------------------------+
-    //|                                                                  |
-    //+------------------------------------------------------------------+
-} // void get_period_num_and_type_g( const string &in_period_key, int & out_period_num, ENUM_PERIOD_TYPE& out_period_type )
-//+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -202,16 +85,16 @@ bool init_data_from_ticks_arr_g(
     else
         out_data.TD = (int)(out_data.t0 - out_data.t1) / 1000;
     out_data.TT = 0.0;
-    if( 0.0 != out_data.VOLS)
+    if (0.0 != out_data.VOLS)
         out_data.TT = int((out_data.TD * 1000) / out_data.VOLS);
     out_data.OC_HL = 0.0;
-    if( 0.0 != out_data.HL)
+    if (0.0 != out_data.HL)
         out_data.OC_HL = MathAbs((double)((double)out_data.OC / (double)out_data.HL));
-    out_data.VOLS_TD = 0.0; 
-    if( 0.0 != out_data.TD)
+    out_data.VOLS_TD = 0.0;
+    if (0.0 != out_data.TD)
         out_data.VOLS_TD = (double)((double)out_data.VOLS / (double)out_data.TD);
-    out_data.HL_TD = 0.0; 
-    if( 0.0 != out_data.TD)
+    out_data.HL_TD = 0.0;
+    if (0.0 != out_data.TD)
         out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
     out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
     out_data.SUM_POS = 0;
@@ -395,7 +278,81 @@ struct sConfigVars
 
     void get_period_num_and_type(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
     {
-        get_period_num_and_type_g(in_period_key, out_period_num, out_period_type);
+        // defaults
+        out_period_type = ENUM_PERIOD_TYPE_NONE;
+        out_period_num = 0;
+
+        // explicit fixed tokens
+        if (in_period_key == "PRO")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_PRO;
+            return;
+        }
+        if (in_period_key == "DAY")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_DAY;
+            return;
+        }
+        if (in_period_key == "REF")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_REF;
+            return;
+        }
+        if (in_period_key == "T_AVG")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_T;
+            return;
+        }
+        if (in_period_key == "S_AVG")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_S;
+            return;
+        }
+        if (in_period_key == "SUM_AVG")
+        {
+            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_SUM;
+            return;
+        }
+
+        // generic T... and S... handling (case-insensitive first letter)
+        if (StringLen(in_period_key) >= 2)
+        {
+            string prefix = StringSubstr(in_period_key, 0, 1);
+            if (prefix == "t")
+                prefix = "T";
+            if (prefix == "s")
+                prefix = "S";
+
+            string rest = StringSubstr(in_period_key, 1);
+            bool digits_only = StringLen(rest) > 0;
+            int ch;
+            for (int i = 0; i < StringLen(rest) && digits_only; ++i)
+            {
+                ch = StringGetCharacter(rest, i);
+                if (ch < '0' || ch > '9')
+                    digits_only = false;
+            }
+
+            if (digits_only)
+            {
+                int num = (int)StringToInteger(rest);
+                if (prefix == "T")
+                {
+                    out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
+                    out_period_num = num;
+                    return;
+                }
+                if (prefix == "S")
+                {
+                    out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
+                    out_period_num = num;
+                    return;
+                }
+            }
+        }
+
+        // unknown token
+        PrintFormat("get_period_num_and_type_g: unknown period key '%s'", in_period_key);
     }
 
     sConfigVars()

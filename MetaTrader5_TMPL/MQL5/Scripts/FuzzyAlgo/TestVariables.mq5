@@ -51,7 +51,7 @@ struct sFuzzyAlgoChart
     }
 
     sFuzzyAlgoChart() : name("FuzzyAlgoChart"),
-                      x(10), y(10), width(600), height(450), vscale_size(50), created(false) {};
+                        x(10), y(10), width(600), height(450), vscale_size(50), created(false) {};
 
     sFuzzyAlgoChart(
         const string &_name,
@@ -60,7 +60,7 @@ struct sFuzzyAlgoChart
         const int &_width,
         const int &_height,
         const int &_vscale_size) : name(_name),
-                              x(_x), y(_y), width(_width), height(_height), vscale_size(_vscale_size), created(false)
+                                   x(_x), y(_y), width(_width), height(_height), vscale_size(_vscale_size), created(false)
     {
         create();
     };
@@ -229,7 +229,7 @@ void OnStart()
                                   (int)tmp.sSym[0].sData[2].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[2].d.SUM_NEG);
 
-        //FftCalc(time_msc, afc1);
+        // FftCalc(time_msc, afc1);
         Print(str);
         Sleep(1000);
 
