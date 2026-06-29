@@ -77,17 +77,17 @@ void OnStart()
 
     MqlDateTime time_struct = {};
     time_struct.year = 2026;
-    time_struct.mon = 5;
-    time_struct.day = 15;
-    time_struct.hour = 12;
+    time_struct.mon = 6;
+    time_struct.day = 26;
+    time_struct.hour = 13;
     time_struct.min = 0;
     time_struct.sec = 0;
     long in_time_msc;
     in_time_msc = StructToTime(time_struct) * 1000;
-    in_time_msc = GetSystemTimeMsc();
+    // in_time_msc = GetSystemTimeMsc();
     // in_time_msc = TimeCurrent()*1000;
-    //   in_time_msc = TimeLocal()*1000;
-    //   in_time_msc = (datetime)t.time_msc;
+    // in_time_msc = TimeLocal()*1000;
+    // in_time_msc = (datetime)t.time_msc;
 
     int diag_x;
     int diag_y;
@@ -109,37 +109,22 @@ void OnStart()
     Print("symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
     ArrayPrint(g.c.HOSTS_arr);
 
+    sRefPoint sr2(in_time_msc);
+
     sRingBuf<sGlobalVars> ringbuf;
     bool res = ringbuf.init(ring_buf_num, false);
     for (int min_cnt = (ring_buf_num - 1); min_cnt >= 0; min_cnt--)
     {
         long time_msc = in_time_msc - min_cnt * 1 * 1000;
-        sGlobalVars tmp(time_msc);
+        sGlobalVars tmp(time_msc,sr2);
         ringbuf.AddBuf(tmp);
     }
-
-    // @TODO move SUM_POS et.al. into variables
-    double c1 = 0;
-    int SUM_POS = 0;
-    int SUM_NEG = 0;
-    int SUM_ALL = 0;
 
     for (int min_cnt = 0; min_cnt < ring_buf_num; min_cnt++)
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
-        if (0 == min_cnt)
-        {
-            c1 = tmp.sSym[0].sData[0].d.c0;
-        }
-        double c0 = tmp.sSym[0].sData[0].d.c0;
         double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
-        int p0 = (int)((c0 - c1) / point);
-        if (0 < p0)
-            SUM_POS += p0;
-        if (0 > p0)
-            SUM_NEG += p0;
-        SUM_ALL += p0;
 
         long time_msc = tmp.time_msc;
         string msg = "OUT2";
@@ -148,11 +133,11 @@ void OnStart()
                                   time_msc % 1000,
                                   tmp.sSym[0].symbol,
 
-                                  c0,
-                                  p0,
-                                  SUM_ALL,
-                                  SUM_POS,
-                                  SUM_NEG,
+                                  tmp.sSym[0].sData[0].d.c0,
+                                  (int)(tmp.sSym[0].sData[0].d.c0-tmp.sSym[0].sData[0].d.c0_ref/point),
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
 
                                   tmp.sSym[0].sData[0].period,
                                   (int)tmp.sSym[0].sData[0].d.OC,
@@ -180,7 +165,7 @@ void OnStart()
     while (!IsStopped())
     {
         long time_msc = in_time_msc + min_cnt * 60 * 1000;
-        time_msc = GetSystemTimeMsc();
+        //time_msc = GetSystemTimeMsc();
         ulong start = GetTickCount64();
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
@@ -188,14 +173,7 @@ void OnStart()
         res = ringbuf.TryGet(0, tmp);
         min_cnt++;
 
-        double c0 = tmp.sSym[0].sData[0].d.c0;
         double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
-        int p0 = (int)((c0 - c1) / point);
-        if (0 < p0)
-            SUM_POS += p0;
-        if (0 > p0)
-            SUM_NEG += p0;
-        SUM_ALL += p0;
 
         // time_msc = tmp.time_msc;
         string msg = "OUT3";
@@ -205,11 +183,11 @@ void OnStart()
                                   tmp.sSym[0].symbol,
                                   (GetTickCount64() - start),
 
-                                  c0,
-                                  p0,
-                                  SUM_ALL,
-                                  SUM_POS,
-                                  SUM_NEG,
+                                  tmp.sSym[0].sData[0].d.c0,
+                                  (int)(tmp.sSym[0].sData[0].d.c0-tmp.sSym[0].sData[0].d.c0_ref/point),
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
+                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
 
                                   tmp.sSym[0].sData[0].period,
                                   (int)tmp.sSym[0].sData[0].d.OC,
