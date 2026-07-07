@@ -72,22 +72,29 @@ struct sFuzzyAlgoChart
 //+------------------------------------------------------------------+
 void OnStart()
 {
-
+    bool doLive = true;
+    long in_time_msc;
     int ring_buf_num = 10;
 
-    MqlDateTime time_struct = {};
-    time_struct.year = 2026;
-    time_struct.mon = 6;
-    time_struct.day = 26;
-    time_struct.hour = 13;
-    time_struct.min = 0;
-    time_struct.sec = 0;
-    long in_time_msc;
-    in_time_msc = StructToTime(time_struct) * 1000;
-    // in_time_msc = GetSystemTimeMsc();
-    // in_time_msc = TimeCurrent()*1000;
-    // in_time_msc = TimeLocal()*1000;
-    // in_time_msc = (datetime)t.time_msc;
+    if (doLive)
+    {
+        in_time_msc = GetSystemTimeMsc();
+        // in_time_msc = TimeCurrent()*1000;
+        // in_time_msc = TimeLocal()*1000;
+        // in_time_msc = (datetime)t.time_msc;
+    }
+    else
+    {
+        MqlDateTime time_struct = {};
+        time_struct.year = 2026;
+        time_struct.mon = 6;
+        time_struct.day = 26;
+        time_struct.hour = 13;
+        time_struct.min = 0;
+        time_struct.sec = 0;
+        in_time_msc = StructToTime(time_struct) * 1000;
+
+    } // if( doLive )
 
     int diag_x;
     int diag_y;
@@ -116,7 +123,7 @@ void OnStart()
     for (int min_cnt = (ring_buf_num - 1); min_cnt >= 0; min_cnt--)
     {
         long time_msc = in_time_msc - min_cnt * 1 * 1000;
-        sGlobalVars tmp(time_msc,sr2);
+        sGlobalVars tmp(time_msc, sr2);
         ringbuf.AddBuf(tmp);
     }
 
@@ -134,7 +141,7 @@ void OnStart()
                                   tmp.sSym[0].symbol,
 
                                   tmp.sSym[0].sData[0].d.c0,
-                                  (int)(tmp.sSym[0].sData[0].d.c0-tmp.sSym[0].sData[0].d.c0_ref/point),
+                                  (int)((tmp.sSym[0].sData[0].d.c0 - tmp.sSym[0].sData[0].d.c0_ref) / point),
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[0].d.SUM_NEG,
@@ -164,8 +171,12 @@ void OnStart()
     int min_cnt = 0;
     while (!IsStopped())
     {
-        long time_msc = in_time_msc + min_cnt * 60 * 1000;
-        //time_msc = GetSystemTimeMsc();
+        long time_msc;
+        if (doLive)
+            time_msc = GetSystemTimeMsc();
+        else
+            time_msc = in_time_msc + min_cnt * 60 * 1000;
+
         ulong start = GetTickCount64();
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
@@ -177,14 +188,14 @@ void OnStart()
 
         // time_msc = tmp.time_msc;
         string msg = "OUT3";
-        string str = StringFormat("%s %s.%03d %s %3d | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
+        string str = StringFormat("%s %s.%03d %s %3d | %0.5f %6d %6d  %6d %6d | %s %7d %7d  %7.1f  %7.1f | %s %7d %7d  %7.1f  %7.1f | %s %7d %7d  %7.1f  %7.1f ", msg,
                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                   time_msc % 1000,
                                   tmp.sSym[0].symbol,
                                   (GetTickCount64() - start),
 
                                   tmp.sSym[0].sData[0].d.c0,
-                                  (int)(tmp.sSym[0].sData[0].d.c0-tmp.sSym[0].sData[0].d.c0_ref/point),
+                                  (int)((tmp.sSym[0].sData[0].d.c0 - tmp.sSym[0].sData[0].d.c0_ref) / point),
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
                                   (int)tmp.sSym[0].sData[0].d.SUM_POS,
                                   (int)tmp.sSym[0].sData[0].d.SUM_NEG,
@@ -192,21 +203,20 @@ void OnStart()
                                   tmp.sSym[0].sData[0].period,
                                   (int)tmp.sSym[0].sData[0].d.OC,
                                   (int)tmp.sSym[0].sData[0].d.HL,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
+                                  OCvsHL(tmp.sSym[0].sData[0].d.OC, tmp.sSym[0].sData[0].d.HL),
+                                  SumPosvsSumNeg(tmp.sSym[0].sData[0].d.SUM_POS, tmp.sSym[0].sData[0].d.SUM_NEG),
 
                                   tmp.sSym[0].sData[1].period,
                                   (int)tmp.sSym[0].sData[1].d.OC,
                                   (int)tmp.sSym[0].sData[1].d.HL,
-                                  (int)tmp.sSym[0].sData[1].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[1].d.SUM_NEG,
+                                  OCvsHL(tmp.sSym[0].sData[1].d.OC, tmp.sSym[0].sData[1].d.HL),
+                                  SumPosvsSumNeg(tmp.sSym[0].sData[1].d.SUM_POS, tmp.sSym[0].sData[1].d.SUM_NEG),
 
                                   tmp.sSym[0].sData[2].period,
                                   (int)tmp.sSym[0].sData[2].d.OC,
                                   (int)tmp.sSym[0].sData[2].d.HL,
-                                  (int)tmp.sSym[0].sData[2].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG);
-
+                                  OCvsHL(tmp.sSym[0].sData[2].d.OC, tmp.sSym[0].sData[2].d.HL),
+                                  SumPosvsSumNeg(tmp.sSym[0].sData[2].d.SUM_POS, tmp.sSym[0].sData[2].d.SUM_NEG));
         // FftCalc(time_msc, afc1);
         Print(str);
         Sleep(1000);
@@ -216,6 +226,45 @@ void OnStart()
     afc1.destroy();
 
 } // void OnStart()
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+double OCvsHL(double OC, double HL)
+{
+    double v = 0;
+    if (HL > 0)
+        v = OC / HL;
+    return v;
+}
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+double SumPosvsSumNeg(const double &sum_pos, const double &sum_neg)
+{
+    double v = 0;
+    double sp = sum_pos;
+    double sn = sum_neg;
+
+    if ((sum_pos == 0) && (sum_neg == 0))
+        return 0;
+    if (sum_pos == 0)
+        sp = 1;
+    if (sum_neg == 0)
+        sn = -1;
+
+    if (sp > MathAbs(sn))
+        v = sp / MathAbs(sn);
+    else if (sp < MathAbs(sn))
+        v = sn / sp;
+    else
+        v = 0;
+
+    return v;
+}
+//+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
 //|                                                                  |

@@ -28,7 +28,7 @@ enum ENUM_PERIOD_TYPE
 input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
 // input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-input string I_PERIODS = "S300:S900:S3600";
+input string I_PERIODS = "DAY:S300:S900:S3600";
 // input string I_PERIODS = "S300:S14400:S86400";
 //  input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
@@ -163,7 +163,21 @@ bool init_ticks_arr_g(
     if (ENUM_PERIOD_TYPE_DAY == in_period_type)
     {
 
-        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
+        MqlDateTime tm;
+        TimeToStruct(in_time_msc / 1000, tm);
+        tm.hour = 0;
+        tm.sec = 0;
+        tm.min = 0;
+        datetime start_time_day_msc = StructToTime(tm) * 1000;
+
+        // string str = StringFormat("%s.%03d | %s.%03d",
+        //                           TimeToString(start_time_day_msc / 1000, TIME_DATE | TIME_SECONDS),
+        //                           start_time_day_msc % 1000,
+        //                           TimeToString(in_time_msc / 1000, TIME_DATE | TIME_SECONDS),
+        //                           in_time_msc % 1000);
+        // Print(str);
+
+        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_day_msc, in_time_msc);
         if (0 < size1)
         {
 
