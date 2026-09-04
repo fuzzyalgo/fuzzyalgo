@@ -96,24 +96,12 @@ void OnStart()
 
     } // if( doLive )
 
-    int diag_x;
-    int diag_y;
-    int pos_x = 10;
-    int pos_y = 10;
-    int diag_width = 320;
-    int diag_height = 320;
-
-    string name1 = "FuzzyAlgo" + IntegerToString(50);
-    diag_x = pos_x + 0 * diag_width;
-    diag_y = pos_y + 0 * diag_height;
-    sFuzzyAlgoChart afc1(name1, diag_x, diag_y, diag_width, diag_height, 50);
-
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
     ArrayPrint(g.c.SYMBOLS_arr);
-    Print("symbols " + g.c.PERIODS + " | " + IntegerToString(g.c.PERIODS_num));
+    Print("periods " + g.c.PERIODS + " | " + IntegerToString(g.c.PERIODS_num));
     ArrayPrint(g.c.PERIODS_arr);
-    Print("symbols " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
+    Print("hosts   " + g.c.HOSTS + " | " + IntegerToString(g.c.HOSTS_num));
     ArrayPrint(g.c.HOSTS_arr);
 
     sRefPoint sr2(in_time_msc);
@@ -217,13 +205,10 @@ void OnStart()
                                   (int)tmp.sSym[0].sData[2].d.HL,
                                   OCvsHL(tmp.sSym[0].sData[2].d.OC, tmp.sSym[0].sData[2].d.HL),
                                   SumPosvsSumNeg(tmp.sSym[0].sData[2].d.SUM_POS, tmp.sSym[0].sData[2].d.SUM_NEG));
-        // FftCalc(time_msc, afc1);
         Print(str);
         Sleep(1000);
 
     } // while (!IsStopped())
-
-    afc1.destroy();
 
 } // void OnStart()
 
