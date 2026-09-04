@@ -87,16 +87,9 @@ bool init_data_from_ticks_arr_g(
     out_data.TT = 0.0;
     if (0.0 != out_data.VOLS)
         out_data.TT = int((out_data.TD * 1000) / out_data.VOLS);
-    out_data.OC_HL = 0.0;
-    if (0.0 != out_data.HL)
-        out_data.OC_HL = MathAbs((double)((double)out_data.OC / (double)out_data.HL));
     out_data.VOLS_TD = 0.0;
     if (0.0 != out_data.TD)
         out_data.VOLS_TD = (double)((double)out_data.VOLS / (double)out_data.TD);
-    out_data.HL_TD = 0.0;
-    if (0.0 != out_data.TD)
-        out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
-    out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
     out_data.SUM_POS = 0;
     out_data.SUM_NEG = 0;
 
@@ -135,6 +128,14 @@ bool init_data_from_ticks_arr_g(
 
     out_data.HL = (int)((high - low) / point);
     out_data.SPREAD = spread;
+
+    out_data.OC_HL = 0.0;
+    if (0.0 != out_data.HL)
+        out_data.OC_HL = MathAbs((double)((double)out_data.OC / (double)out_data.HL));
+    out_data.HL_TD = 0.0;
+    if (0.0 != out_data.TD)
+        out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
+    out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
 
     return ret;
     //+------------------------------------------------------------------+
