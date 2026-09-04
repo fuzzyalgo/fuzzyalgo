@@ -280,7 +280,7 @@ void CHistogramChart::DrawBar(const int x, const int y, const int w, const int h
 {
     //--- draw bar
     if (!m_gradient || ArraySize(m_fill_brush) < w)
-        FillRectangle(x + 1, y + 1, w - x - 2, h - y - 2, clr);
+        FillRectangle(x + 1, y + 1, x + w - 2, y + h - 2, clr);
     else
     {
         for (int i = 1; i < h; i++)
