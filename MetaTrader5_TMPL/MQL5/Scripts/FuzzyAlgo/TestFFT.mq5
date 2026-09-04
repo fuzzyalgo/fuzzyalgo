@@ -396,10 +396,13 @@ void FftCalc(const long &in_time_msc, sAlgoFftChart &afc)
             {
                 ArrayResize(CPU_input_disp, afc.fft_params.fft_min_size);
                 ArrayCopy(CPU_input_disp, CPU_input, 0, ArraySize(CPU_input) - afc.fft_params.fft_min_size, afc.fft_params.fft_min_size);
-                ArrayResize(CPU_real, afc.fft_params.fft_real_part_size_used);
-                ArrayResize(CPU_imag, afc.fft_params.fft_imag_part_size_used);
-                afc.chart.SeriesUpdate(0, CPU_real, "FFT-REAL");
-                afc.chart.SeriesUpdate(1, CPU_imag, "FFT-IMAG");
+                double CPU_real_disp[], CPU_imag_disp[];
+                ArrayResize(CPU_real_disp, afc.fft_params.fft_real_part_size_used);
+                ArrayCopy(CPU_real_disp, CPU_real, 0, afc.fft_params.fft_real_part_start_pos, afc.fft_params.fft_real_part_size_used);
+                ArrayResize(CPU_imag_disp, afc.fft_params.fft_imag_part_size_used);
+                ArrayCopy(CPU_imag_disp, CPU_imag, 0, afc.fft_params.fft_imag_part_start_pos, afc.fft_params.fft_imag_part_size_used);
+                afc.chart.SeriesUpdate(0, CPU_real_disp, "FFT-REAL");
+                afc.chart.SeriesUpdate(1, CPU_imag_disp, "FFT-IMAG");
                 //afc.chart.SeriesUpdate(2, CPU_input_disp, "INPUT");
             } // if( true == afc.created )
 
