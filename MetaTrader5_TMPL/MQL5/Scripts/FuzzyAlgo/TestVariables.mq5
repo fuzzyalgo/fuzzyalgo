@@ -151,7 +151,7 @@ void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const lon
                                     (int)d.OC,
                                     (int)d.HL,
                                     d.OC_HL,
-                                    SumPosvsSumNeg(d.SUM_POS, d.SUM_NEG),
+                                    d.NETFLOW,
                                     (int)d.SUM_POS,
                                     (int)d.SUM_NEG);
     }
@@ -163,24 +163,6 @@ void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const lon
 
     Print(head + periods_str + foot);
 } // void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx, const long latency_ms)
-//+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Bounded net-flow share in [-1, 1]: (pos + neg) / (pos - neg).    |
-//| +1 = all upward tick movement, -1 = all downward, 0 = balanced.  |
-//| Unlike a pos/neg ratio, this never blows up when one side is     |
-//| near zero - replaces the old unbounded SumPosvsSumNeg ratio.     |
-//+------------------------------------------------------------------+
-double SumPosvsSumNeg(const double &sum_pos, const double &sum_neg)
-{
-    double total = sum_pos - sum_neg; // sum_neg <= 0, so this is pos + |neg|
-    if (total == 0)
-        return 0;
-    return (sum_pos + sum_neg) / total;
-}
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
