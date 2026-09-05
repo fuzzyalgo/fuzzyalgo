@@ -119,7 +119,8 @@ void OnStart()
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
-        PrintSampleInfo("OUT2", tmp);
+        for (int symbol_idx = 0; symbol_idx < tmp.c.SYMBOLS_num; symbol_idx++)
+            PrintSampleInfo(tmp, symbol_idx);
     }
 
     sRefPoint sr3(in_time_msc);
@@ -140,7 +141,9 @@ void OnStart()
         res = ringbuf.TryGet(0, tmp);
         min_cnt++;
 
-        PrintSampleInfo("OUT3", tmp, 0, (long)(GetTickCount64() - start));
+        long latency_ms = (long)(GetTickCount64() - start);
+        for (int symbol_idx = 0; symbol_idx < tmp.c.SYMBOLS_num; symbol_idx++)
+            PrintSampleInfo(tmp, symbol_idx, latency_ms);
         Sleep(1000);
 
     } // while (!IsStopped())
@@ -148,46 +151,74 @@ void OnStart()
 } // void OnStart()
 
 //+------------------------------------------------------------------+
-//| Prints one debug line for symbol sSym[symbol_idx] of a sample.   |
-//| Loops over all configured periods. latency_ms < 0 omits the     |
-//| latency column (used for the ring-buffer dump); >= 0 includes   |
-//| it (used for the live loop).                                    |
+//| Prints a column-header line matching PrintSampleInfo's layout.   |
+//| Field widths here MUST stay in sync with the StringFormat calls  |
+//| in PrintSampleInfo below, or columns will drift out of alignment.|
 //+------------------------------------------------------------------+
-void PrintSampleInfo(const string &msg, const sGlobalVars &tmp, const int symbol_idx = 0, const long latency_ms = -1)
+void PrintSampleInfoHeader(const sGlobalVars &tmp, const int symbol_idx = 0)
 {
+    string head = StringFormat("%-19s.%-3s %-6s", "TIME", "MS", "SYM");
+
+    string periods_str = "";
+    int num_periods = tmp.sSym[symbol_idx].c.PERIODS_num;
+    for (int p = 0; p < num_periods; p++)
+    {
+        periods_str += StringFormat(" | %-5s %7s %7s %8s %8s %9s %9s",
+                                    tmp.sSym[symbol_idx].sData[p].period,
+                                    "OC", "HL", "OC/HL", "POS/NEG", "SUMPOS", "SUMNEG");
+    }
+
+    string foot = StringFormat(" | %10s %6s %6s", "C0", "REFDLT", "LAT_MS");
+
+    Print(head + periods_str + foot);
+} // void PrintSampleInfoHeader(const sGlobalVars &tmp, const int symbol_idx)
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Prints one debug line for symbol sSym[symbol_idx] of a sample.   |
+//| Loops over all configured periods. latency_ms defaults to -1     |
+//| for the ring-buffer dump (no real latency to report); the live  |
+//| loop passes the measured tick latency. Every 100th call reprints |
+//| the column header via PrintSampleInfoHeader.                    |
+//+------------------------------------------------------------------+
+void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const long latency_ms = -1)
+{
+    static int print_count = 0;
+    if (0 == print_count % 100)
+        PrintSampleInfoHeader(tmp, symbol_idx);
+    print_count++;
+
     double point = SymbolInfoDouble(tmp.sSym[symbol_idx].symbol, SYMBOL_POINT);
     long time_msc = tmp.time_msc;
+    sData d0 = tmp.sSym[symbol_idx].sData[0].d;
 
-    string head = StringFormat("%s %s.%03d %s", msg,
+    string head = StringFormat("%-19s.%03d %-6s",
                                TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                time_msc % 1000,
                                tmp.sSym[symbol_idx].symbol);
-    if (0 <= latency_ms)
-        head += StringFormat(" %3d", (int)latency_ms);
-
-    sData d0 = tmp.sSym[symbol_idx].sData[0].d;
-    string price_str = StringFormat(" | %0.5f %6d %6d %6d %6d",
-                                    d0.c0,
-                                    (int)((d0.c0 - d0.c0_ref) / point),
-                                    (int)d0.SUM_POS + (int)d0.SUM_NEG,
-                                    (int)d0.SUM_POS,
-                                    (int)d0.SUM_NEG);
 
     string periods_str = "";
     int num_periods = tmp.sSym[symbol_idx].c.PERIODS_num;
     for (int p = 0; p < num_periods; p++)
     {
         sData d = tmp.sSym[symbol_idx].sData[p].d;
-        periods_str += StringFormat(" | %s %7d %7d %8.1f %8.1f",
+        periods_str += StringFormat(" | %-5s %7d %7d %8.1f %8.1f %9d %9d",
                                     tmp.sSym[symbol_idx].sData[p].period,
                                     (int)d.OC,
                                     (int)d.HL,
                                     OCvsHL(d.OC, d.HL),
-                                    SumPosvsSumNeg(d.SUM_POS, d.SUM_NEG));
+                                    SumPosvsSumNeg(d.SUM_POS, d.SUM_NEG),
+                                    (int)d.SUM_POS,
+                                    (int)d.SUM_NEG);
     }
 
-    Print(head + price_str + periods_str);
-} // void PrintSampleInfo(const string &msg, const sGlobalVars &tmp, const int symbol_idx, const long latency_ms)
+    string foot = StringFormat(" | %10.5f %6d %6d",
+                               d0.c0,
+                               (int)((d0.c0 - d0.c0_ref) / point),
+                               (int)latency_ms);
+
+    Print(head + periods_str + foot);
+} // void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx, const long latency_ms)
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
