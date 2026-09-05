@@ -72,7 +72,7 @@ struct sFuzzyAlgoChart
 //+------------------------------------------------------------------+
 void OnStart()
 {
-    bool doLive = true;
+    bool doLive = false;
     long in_time_msc;
     int ring_buf_num = 10;
 
@@ -87,9 +87,9 @@ void OnStart()
     {
         MqlDateTime time_struct = {};
         time_struct.year = 2026;
-        time_struct.mon = 6;
-        time_struct.day = 26;
-        time_struct.hour = 13;
+        time_struct.mon = 9;
+        time_struct.day = 4;
+        time_struct.hour = 15;
         time_struct.min = 0;
         time_struct.sec = 0;
         in_time_msc = StructToTime(time_struct) * 1000;
@@ -119,39 +119,7 @@ void OnStart()
     {
         sGlobalVars tmp;
         res = ringbuf.TryGet(min_cnt, tmp);
-        double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
-
-        long time_msc = tmp.time_msc;
-        string msg = "OUT2";
-        string str = StringFormat("%s %s.%03d %s | %0.5f %6d %6d %6d %6d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d | %s %7d %7d %7d %7d", msg,
-                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
-                                  time_msc % 1000,
-                                  tmp.sSym[0].symbol,
-
-                                  tmp.sSym[0].sData[0].d.c0,
-                                  (int)((tmp.sSym[0].sData[0].d.c0 - tmp.sSym[0].sData[0].d.c0_ref) / point),
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
-
-                                  tmp.sSym[0].sData[0].period,
-                                  (int)tmp.sSym[0].sData[0].d.OC,
-                                  (int)tmp.sSym[0].sData[0].d.HL,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
-
-                                  tmp.sSym[0].sData[1].period,
-                                  (int)tmp.sSym[0].sData[1].d.OC,
-                                  (int)tmp.sSym[0].sData[1].d.HL,
-                                  (int)tmp.sSym[0].sData[1].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[1].d.SUM_NEG,
-
-                                  tmp.sSym[0].sData[2].period,
-                                  (int)tmp.sSym[0].sData[2].d.OC,
-                                  (int)tmp.sSym[0].sData[2].d.HL,
-                                  (int)tmp.sSym[0].sData[2].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[2].d.SUM_NEG);
-        Print(str);
+        PrintSampleInfo("OUT2", tmp);
     }
 
     sRefPoint sr3(in_time_msc);
@@ -172,45 +140,55 @@ void OnStart()
         res = ringbuf.TryGet(0, tmp);
         min_cnt++;
 
-        double point = SymbolInfoDouble(tmp.sSym[0].symbol, SYMBOL_POINT);
-
-        // time_msc = tmp.time_msc;
-        string msg = "OUT3";
-        string str = StringFormat("%s %s.%03d %s %3d | %0.5f %6d %6d  %6d %6d | %s %7d %7d  %7.1f  %7.1f | %s %7d %7d  %7.1f  %7.1f | %s %7d %7d  %7.1f  %7.1f ", msg,
-                                  TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
-                                  time_msc % 1000,
-                                  tmp.sSym[0].symbol,
-                                  (GetTickCount64() - start),
-
-                                  tmp.sSym[0].sData[0].d.c0,
-                                  (int)((tmp.sSym[0].sData[0].d.c0 - tmp.sSym[0].sData[0].d.c0_ref) / point),
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS + (int)tmp.sSym[0].sData[0].d.SUM_NEG,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_POS,
-                                  (int)tmp.sSym[0].sData[0].d.SUM_NEG,
-
-                                  tmp.sSym[0].sData[0].period,
-                                  (int)tmp.sSym[0].sData[0].d.OC,
-                                  (int)tmp.sSym[0].sData[0].d.HL,
-                                  OCvsHL(tmp.sSym[0].sData[0].d.OC, tmp.sSym[0].sData[0].d.HL),
-                                  SumPosvsSumNeg(tmp.sSym[0].sData[0].d.SUM_POS, tmp.sSym[0].sData[0].d.SUM_NEG),
-
-                                  tmp.sSym[0].sData[1].period,
-                                  (int)tmp.sSym[0].sData[1].d.OC,
-                                  (int)tmp.sSym[0].sData[1].d.HL,
-                                  OCvsHL(tmp.sSym[0].sData[1].d.OC, tmp.sSym[0].sData[1].d.HL),
-                                  SumPosvsSumNeg(tmp.sSym[0].sData[1].d.SUM_POS, tmp.sSym[0].sData[1].d.SUM_NEG),
-
-                                  tmp.sSym[0].sData[2].period,
-                                  (int)tmp.sSym[0].sData[2].d.OC,
-                                  (int)tmp.sSym[0].sData[2].d.HL,
-                                  OCvsHL(tmp.sSym[0].sData[2].d.OC, tmp.sSym[0].sData[2].d.HL),
-                                  SumPosvsSumNeg(tmp.sSym[0].sData[2].d.SUM_POS, tmp.sSym[0].sData[2].d.SUM_NEG));
-        Print(str);
+        PrintSampleInfo("OUT3", tmp, 0, (long)(GetTickCount64() - start));
         Sleep(1000);
 
     } // while (!IsStopped())
 
 } // void OnStart()
+
+//+------------------------------------------------------------------+
+//| Prints one debug line for symbol sSym[symbol_idx] of a sample.   |
+//| Loops over all configured periods. latency_ms < 0 omits the     |
+//| latency column (used for the ring-buffer dump); >= 0 includes   |
+//| it (used for the live loop).                                    |
+//+------------------------------------------------------------------+
+void PrintSampleInfo(const string &msg, const sGlobalVars &tmp, const int symbol_idx = 0, const long latency_ms = -1)
+{
+    double point = SymbolInfoDouble(tmp.sSym[symbol_idx].symbol, SYMBOL_POINT);
+    long time_msc = tmp.time_msc;
+
+    string head = StringFormat("%s %s.%03d %s", msg,
+                               TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                               time_msc % 1000,
+                               tmp.sSym[symbol_idx].symbol);
+    if (0 <= latency_ms)
+        head += StringFormat(" %3d", (int)latency_ms);
+
+    sData d0 = tmp.sSym[symbol_idx].sData[0].d;
+    string price_str = StringFormat(" | %0.5f %6d %6d %6d %6d",
+                                    d0.c0,
+                                    (int)((d0.c0 - d0.c0_ref) / point),
+                                    (int)d0.SUM_POS + (int)d0.SUM_NEG,
+                                    (int)d0.SUM_POS,
+                                    (int)d0.SUM_NEG);
+
+    string periods_str = "";
+    int num_periods = tmp.sSym[symbol_idx].c.PERIODS_num;
+    for (int p = 0; p < num_periods; p++)
+    {
+        sData d = tmp.sSym[symbol_idx].sData[p].d;
+        periods_str += StringFormat(" | %s %7d %7d %8.1f %8.1f",
+                                    tmp.sSym[symbol_idx].sData[p].period,
+                                    (int)d.OC,
+                                    (int)d.HL,
+                                    OCvsHL(d.OC, d.HL),
+                                    SumPosvsSumNeg(d.SUM_POS, d.SUM_NEG));
+    }
+
+    Print(head + price_str + periods_str);
+} // void PrintSampleInfo(const string &msg, const sGlobalVars &tmp, const int symbol_idx, const long latency_ms)
+//+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
 //|                                                                  |
