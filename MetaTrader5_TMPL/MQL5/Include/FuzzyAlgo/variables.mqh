@@ -30,7 +30,7 @@ input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD";
 // input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 //input string I_PERIODS = "REF:DAY:S300:S900:S3600";
-input string I_PERIODS = "REF:DAY:S3600";
+input string I_PERIODS = "PRO:REF:DAY:S3600";
 // input string I_PERIODS = "S300:S14400:S86400";
 //  input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
@@ -202,6 +202,74 @@ bool init_ticks_arr_g(
         }
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
+
+    else if (ENUM_PERIOD_TYPE_PRO == in_period_type)
+    {
+        // PRO mirrors REF's fixed-anchor/growing-window architecture, but
+        // the anchor is the currently open position's opening time/price
+        // instead of a fixed historical timestamp. Unlike REF's anchor
+        // (fetched once via sRefPoint and copied into every sample's
+        // sData.d before init_ticks_arr_g runs), a position can open or
+        // close between samples, so the anchor is looked up live here via
+        // PositionSelect(in_symbol) on every call rather than being
+        // threaded in from outside. Netting-account assumption: at most
+        // one open position per symbol, so PositionSelect(symbol) alone
+        // is enough to find it; a hedging account with multiple positions
+        // per symbol would need PositionsTotal()+PositionGetSymbol(i)
+        // enumeration instead, which is not implemented here.
+        //
+        // Same three states as REF:
+        //   1) no open position for in_symbol - handled in the `if` below,
+        //      everything stays 0 except c0, which still gets the current
+        //      price via a single-tick lookup.
+        //   2) position just opened, in_time_msc == open time: zero-width
+        //      window, PRODLT (if displayed) prints 0.
+        //   3) in_time_msc > open time: real window [open_time, in_time_msc],
+        //      OC/HL/SUM_POS/SUM_NEG/NETFLOW accumulate the same way REF's do.
+        datetime start_time_pro_msc = 0;
+        if (PositionSelect(in_symbol))
+        {
+            start_time_pro_msc = (datetime)PositionGetInteger(POSITION_TIME_MSC);
+            out_data.time_msc_pro = (long)start_time_pro_msc;
+            out_data.c0_pro = PositionGetDouble(POSITION_PRICE_OPEN);
+        }
+        else
+        {
+            out_data.time_msc_pro = 0;
+            out_data.c0_pro = 0.0;
+        }
+
+        if (0 >= start_time_pro_msc || in_time_msc <= start_time_pro_msc)
+        {
+            // No open position, or no time has elapsed since it opened -
+            // same reasoning as REF's skip branch: no window to sum over,
+            // and CopyTicksRange with from<=0 or from>=to risks corrupting
+            // subsequent tick fetches, so it's skipped. c0 still gets the
+            // current price via a single-tick lookup.
+            MqlTick tarr[];
+            int len = CopyTicks(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1);
+            if (0 < len)
+                out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
+            ret = true;
+        }
+        else
+        {
+            size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc);
+            if (0 < size1)
+            {
+
+                ret = init_data_from_ticks_arr_g(
+                    in_time_msc,
+                    in_symbol,
+                    in_period_num,
+                    in_period_type,
+                    in_array,
+                    out_ticks_arr,
+                    out_data);
+            }
+        }
+
+    } // if (ENUM_PERIOD_TYPE_PRO == in_period_type)
 
     else if (ENUM_PERIOD_TYPE_REF == in_period_type)
     {
@@ -484,15 +552,16 @@ struct sData
     long time_msc_ref;
     double c0_ref;
 
+    // pro (open position) anchor - looked up live via PositionSelect in
+    // init_ticks_arr_g's PRO branch, NOT pre-copied from a struct the way
+    // time_msc_ref/c0_ref are for REF (see that branch for why).
+    long time_msc_pro;
+    double c0_pro;
+
     // fft
     double SUM_POS;
     double SUM_NEG;
     double NETFLOW;
-
-    // daily openings
-    long daily_open_t0;
-    double daily_open_c0;
-    long id_pro_chart;
 
     sData()
     {
@@ -526,10 +595,9 @@ struct sData
         time_msc_ref = 0;
         c0_ref = 0;
 
-        // daily openings
-        daily_open_t0 = 0;
-        daily_open_c0 = 0.0;
-        id_pro_chart = 0;
+        // pro
+        time_msc_pro = 0;
+        c0_pro = 0.0;
     };
 };
 
@@ -714,7 +782,7 @@ struct sSymbolVars : sConfigVars
                                         "OC", "HL", "OC/HL", "NETFLOW", "SUMPOS", "SUMNEG");
         }
 
-        string foot = StringFormat(" | %10s %6s %6s", "C0", "REFDLT", "LAT_MS");
+        string foot = StringFormat(" | %10s %6s", "C0", "LAT_MS");
 
         Print(head + periods_str + foot);
     } // void PrintRowHeader()
@@ -753,19 +821,8 @@ struct sSymbolVars : sConfigVars
                                         (int)sData[p].d.SUM_NEG);
         }
 
-        int ref_idx = 0;
-        for (int p = 0; p < c.PERIODS_num; p++)
-        {
-            if (ENUM_PERIOD_TYPE_REF == sData[p].period_type)
-            {
-                ref_idx = p;
-                break;
-            }
-        }
-
-        string foot = StringFormat(" | %10.5f %6d %6d",
-                                   sData[ref_idx].d.c0,
-                                   (int)((sData[ref_idx].d.c0 - sData[ref_idx].d.c0_ref) / point),
+        string foot = StringFormat(" | %10.5f %6d",
+                                   sData[0].d.c0,
                                    (int)latency_ms);
 
         Print(head + periods_str + foot);
