@@ -82,7 +82,13 @@ void OnStart()
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
         sGlobalVars tmp;
-        res = ringbuf.TryGet(0, tmp);
+        // ringbuf was init'd with indexNewest=false (see line 54), so logical
+        // index 0 means "oldest buffered entry", not "the one just added" -
+        // TryGet(0, ...) would silently replay the seed-fill backlog one
+        // iteration late instead of showing the sample just pushed above.
+        // Count()-1 is the newest logical index under indexNewest=false
+        // (MapLogicalToPhysical maps it to head-1), so this fetches tmp1.
+        res = ringbuf.TryGet(ringbuf.Count() - 1, tmp);
         min_cnt++;
 
         long latency_ms = (long)(GetTickCount64() - start);

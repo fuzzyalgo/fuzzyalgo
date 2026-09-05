@@ -99,17 +99,14 @@ powershell.exe -file RUN.ps1
   rescans the entire day's ticks, so `CopyTicksRange` plus the summation loop get more
   expensive as the trading day progresses — worth accumulating incrementally instead of
   recomputing from scratch if this becomes a bottleneck.
-- **Live loop in `OnStart` prints a lagged ring-buffer entry, not the sample it just
-  added** — `ringbuf.init(ring_buf_num, false)` sets `indexNewest = false`, so the live
-  loop's `TryGet(0, tmp)` (`sRingBuf::MapLogicalToPhysical`, `variables.mqh`) returns the
-  OLDEST buffered entry (the tail), not the `tmp1` just pushed via `AddBuf`. The first
-  `ring_buf_num` (10) live-loop iterations therefore just drain the 10 one-second-apart
-  seed samples from the initial historical fill, one iteration late, before any freshly
-  computed live sample is ever shown. This is visible in the printed sample timestamps:
-  after the ring-buffer dump ends at `15:00:00.000`, the live loop reprints
-  `14:59:52.000` through `15:00:00.000` a second time before jumping straight to
-  `15:01:00.000` — a full simulated minute skipped — once the stale seed data is
-  exhausted. `LAT_MS` in that stretch measures the current iteration's `AddBuf`+`TryGet`
-  cost, but the printed sample itself is up to 10 iterations old, so latency and sample
-  are not actually in sync. Fix direction: pass `indexNewest = true` to `ringbuf.init`,
-  or read the just-added item directly instead of `TryGet(0, ...)`.
+- ~~**Live loop in `OnStart` prints a lagged ring-buffer entry, not the sample it just
+  added**~~ — **fixed.** `ringbuf.init(ring_buf_num, false)` sets `indexNewest = false`,
+  so logical index `0` means "oldest buffered entry", not "the one just added" —
+  `TryGet(0, tmp)` was replaying the seed-fill backlog one iteration late instead of
+  showing the sample `AddBuf` had just pushed. The live loop (`TestVariables.mq5`) now
+  calls `TryGet(ringbuf.Count() - 1, tmp)`, which is the newest logical index under
+  `indexNewest = false` (`sRingBuf::MapLogicalToPhysical` maps it to `head - 1`). Confirmed
+  live: after the ring-buffer dump ends at `15:00:00.000`, the loop's first iteration
+  reprints `15:00:00.000` once more (same instant, `LAT_MS 0` — expected, since
+  `min_cnt=0`'s simulated time equals `in_time_msc`), then advances cleanly to
+  `15:01:00.000`, `15:02:00.000`, etc. with no repeats or skipped minutes.
