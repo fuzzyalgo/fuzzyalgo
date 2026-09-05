@@ -78,7 +78,12 @@ void OnStart()
         else
             time_msc = in_time_msc + min_cnt * 60 * 1000;
 
-        ulong start = GetTickCount64();
+        // GetTickCount64() only has ~15.6ms resolution (the Windows system
+        // timer tick), so per-sample latency here - which is well under
+        // that - was quantizing to 0 or 16 instead of showing real
+        // variance. GetMicrosecondCount() is a free-running counter with
+        // microsecond resolution, not tied to that OS timer tick.
+        ulong start_us = GetMicrosecondCount();
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
         sGlobalVars tmp;
@@ -91,9 +96,9 @@ void OnStart()
         res = ringbuf.TryGet(ringbuf.Count() - 1, tmp);
         min_cnt++;
 
-        long latency_ms = (long)(GetTickCount64() - start);
+        long latency_us = (long)(GetMicrosecondCount() - start_us);
         for (int symbol_idx = 0; symbol_idx < tmp.c.SYMBOLS_num; symbol_idx++)
-            tmp.sSym[symbol_idx].PrintRow(latency_ms);
+            tmp.sSym[symbol_idx].PrintRow(latency_us);
         Sleep(1000);
 
     } // while (!IsStopped())

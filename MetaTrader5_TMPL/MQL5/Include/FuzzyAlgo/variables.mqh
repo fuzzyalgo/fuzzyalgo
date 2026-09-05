@@ -782,19 +782,21 @@ struct sSymbolVars : sConfigVars
                                         "OC", "HL", "OC/HL", "NETFLOW", "SUMPOS", "SUMNEG");
         }
 
-        string foot = StringFormat(" | %10s %6s", "C0", "LAT_MS");
+        string foot = StringFormat(" | %10s %8s", "C0", "LAT_US");
 
         Print(head + periods_str + foot);
     } // void PrintRowHeader()
 
     //+------------------------------------------------------------------+
     //| Prints one debug line for this symbol at time_msc. Loops over    |
-    //| all configured periods. latency_ms defaults to -1 for the        |
+    //| all configured periods. latency_us defaults to -1 for the        |
     //| ring-buffer dump (no real latency to report); the live loop      |
-    //| passes the measured tick latency. Every 100th call reprints the  |
-    //| column header via PrintRowHeader.                                |
+    //| passes the measured tick latency in microseconds (GetMicrosecond-|
+    //| Count(), not GetTickCount64() - see TestVariables.mq5's live     |
+    //| loop for why). Every 100th call reprints the column header via   |
+    //| PrintRowHeader.                                                  |
     //+------------------------------------------------------------------+
-    void PrintRow(const long latency_ms = -1)
+    void PrintRow(const long latency_us = -1)
     {
         static int print_count = 0;
         if (0 == print_count % 100)
@@ -821,12 +823,12 @@ struct sSymbolVars : sConfigVars
                                         (int)sData[p].d.SUM_NEG);
         }
 
-        string foot = StringFormat(" | %10.5f %6d",
+        string foot = StringFormat(" | %10.5f %8d",
                                    sData[0].d.c0,
-                                   (int)latency_ms);
+                                   (int)latency_us);
 
         Print(head + periods_str + foot);
-    } // void PrintRow(const long latency_ms)
+    } // void PrintRow(const long latency_us)
 
 }; // struct sSymbolVars
 
