@@ -163,9 +163,9 @@ void PrintSampleInfoHeader(const sGlobalVars &tmp, const int symbol_idx = 0)
     int num_periods = tmp.sSym[symbol_idx].c.PERIODS_num;
     for (int p = 0; p < num_periods; p++)
     {
-        periods_str += StringFormat(" | %-5s %7s %7s %8s %8s %9s %9s",
+        periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %9s %9s",
                                     tmp.sSym[symbol_idx].sData[p].period,
-                                    "OC", "HL", "OC/HL", "POS/NEG", "SUMPOS", "SUMNEG");
+                                    "OC", "HL", "OC/HL", "NETFLOW", "SUMPOS", "SUMNEG");
     }
 
     string foot = StringFormat(" | %10s %6s %6s", "C0", "REFDLT", "LAT_MS");
@@ -202,7 +202,7 @@ void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const lon
     for (int p = 0; p < num_periods; p++)
     {
         sData d = tmp.sSym[symbol_idx].sData[p].d;
-        periods_str += StringFormat(" | %-5s %7d %7d %8.1f %8.1f %9d %9d",
+        periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %9d %9d",
                                     tmp.sSym[symbol_idx].sData[p].period,
                                     (int)d.OC,
                                     (int)d.HL,
@@ -236,27 +236,18 @@ double OCvsHL(double OC, double HL)
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Bounded net-flow share in [-1, 1]: (pos + neg) / (pos - neg).    |
+//| +1 = all upward tick movement, -1 = all downward, 0 = balanced.  |
+//| Unlike a pos/neg ratio, this never blows up when one side is     |
+//| near zero - replaces the old unbounded SumPosvsSumNeg ratio.     |
+//+------------------------------------------------------------------+
 double SumPosvsSumNeg(const double &sum_pos, const double &sum_neg)
 {
-    double v = 0;
-    double sp = sum_pos;
-    double sn = sum_neg;
-
-    if ((sum_pos == 0) && (sum_neg == 0))
+    double total = sum_pos - sum_neg; // sum_neg <= 0, so this is pos + |neg|
+    if (total == 0)
         return 0;
-    if (sum_pos == 0)
-        sp = 1;
-    if (sum_neg == 0)
-        sn = -1;
-
-    if (sp > MathAbs(sn))
-        v = sp / MathAbs(sn);
-    else if (sp < MathAbs(sn))
-        v = sn / sp;
-    else
-        v = 0;
-
-    return v;
+    return (sum_pos + sum_neg) / total;
 }
 //+------------------------------------------------------------------+
 

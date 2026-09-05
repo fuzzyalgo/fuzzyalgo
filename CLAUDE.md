@@ -70,13 +70,6 @@ powershell.exe -file RUN.ps1
 
 ## Known open issues (TestVariables.mq5)
 
-- **`SumPosvsSumNeg` ratio spikes near zero-crossings** — e.g. `S900` showed `-2809.4`
-  in a live log. The function (in `TestVariables.mq5`) substitutes `1`/`-1` when a
-  denominator is exactly `0`, but doesn't guard against a *near*-zero denominator, so
-  the ratio can blow up. Not a bug introduced by the `PrintSampleInfo` refactor — it's
-  inherent to the formula and only became visible once all configured periods started
-  printing. If logic gets built on top of this ratio, consider clamping or a bounded
-  transform (e.g. a log-ratio) first.
 - **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
   `XX EURUSD ... price: 0.00000` while other symbols (EURGBP/GBPJPY/NZDUSD) succeeded
   (`OK ...`) in the same run; in other runs EURUSD came back `OK`, so it's intermittent,
@@ -92,3 +85,30 @@ powershell.exe -file RUN.ps1
   `REF` period type already stubbed in `ENUM_PERIOD_TYPE`) so the ref-delta gets its own
   period slot with its own `OC`, `HL`, `SUM_POS`, `SUM_NEG`, etc. computed relative to
   the ref point, instead of reusing whichever period happens to sit at index 0.
+- **`DAY` period's `SUM_POS`/`SUM_NEG` recompute from the full day's tick history on
+  every call, so a "frozen" value can look like a bug but usually isn't** —
+  `init_ticks_arr_g`'s `ENUM_PERIOD_TYPE_DAY` branch (`variables.mqh`) calls
+  `CopyTicksRange` from midnight (`start_time_day_msc`) through the current sample time
+  on every single call, and `init_data_from_ticks_arr_g` resets `SUM_POS`/`SUM_NEG` to
+  `0` and resums the whole window each time — nothing is accumulated incrementally. In
+  a live run GBPJPY's `DAY` row showed `SUM_NEG` pinned at `-2827809` from sample
+  `14:59:51.000` through `15:01:00.000` while `SUM_POS`/`OC` kept climbing; that's
+  consistent with no further down-ticks occurring in that window (an early sharp drop
+  followed by a sustained rally), not staleness. The real issue is cost: every sample
+  rescans the entire day's ticks, so `CopyTicksRange` plus the summation loop get more
+  expensive as the trading day progresses — worth accumulating incrementally instead of
+  recomputing from scratch if this becomes a bottleneck.
+- **Live loop in `OnStart` prints a lagged ring-buffer entry, not the sample it just
+  added** — `ringbuf.init(ring_buf_num, false)` sets `indexNewest = false`, so the live
+  loop's `TryGet(0, tmp)` (`sRingBuf::MapLogicalToPhysical`, `variables.mqh`) returns the
+  OLDEST buffered entry (the tail), not the `tmp1` just pushed via `AddBuf`. The first
+  `ring_buf_num` (10) live-loop iterations therefore just drain the 10 one-second-apart
+  seed samples from the initial historical fill, one iteration late, before any freshly
+  computed live sample is ever shown. This is visible in the printed sample timestamps:
+  after the ring-buffer dump ends at `15:00:00.000`, the live loop reprints
+  `14:59:52.000` through `15:00:00.000` a second time before jumping straight to
+  `15:01:00.000` — a full simulated minute skipped — once the stale seed data is
+  exhausted. `LAT_MS` in that stretch measures the current iteration's `AddBuf`+`TryGet`
+  cost, but the printed sample itself is up to 10 iterations old, so latency and sample
+  are not actually in sync. Fix direction: pass `indexNewest = true` to `ringbuf.init`,
+  or read the just-added item directly instead of `TryGet(0, ...)`.
