@@ -26,9 +26,11 @@ enum ENUM_PERIOD_TYPE
 // I N P U T S
 // dynamic inputs
 input string I_ACCOUNT = "RF5D03"; // forex account name
-input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
+//input string I_SYMBOLS = "EURUSD:EURGBP:GBPJPY:NZDUSD";
+input string I_SYMBOLS = "EURUSD";
 // input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
-input string I_PERIODS = "DAY:S300:S900:S3600";
+//input string I_PERIODS = "REF:DAY:S300:S900:S3600";
+input string I_PERIODS = "REF:DAY:S3600";
 // input string I_PERIODS = "S300:S14400:S86400";
 //  input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
@@ -200,6 +202,66 @@ bool init_ticks_arr_g(
         }
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
+
+    else if (ENUM_PERIOD_TYPE_REF == in_period_type)
+    {
+        // REF computes OC/HL/SUM_POS/SUM_NEG/NETFLOW relative to a fixed
+        // sRefPoint anchor instead of a fixed-duration window like DAY/S...:
+        // the window is [ref_point_time, in_time_msc], so it grows over
+        // time rather than sliding. Three states to expect in the printed
+        // output:
+        //   1) in_time_msc <= ref point (or ref point unset): no window has
+        //      elapsed yet - handled in the `if` branch below, everything
+        //      stays 0 except c0 (see comment there).
+        //   2) in_time_msc == ref point: zero-width window, REFDLT prints 0.
+        //   3) in_time_msc > ref point: real window, values accumulate
+        //      monotonically in magnitude (SUM_POS/SUM_NEG only grow) as
+        //      in_time_msc advances further from the anchor. A sustained
+        //      one-directional price move can make SUM_POS (or SUM_NEG)
+        //      freeze for many samples in a row while the other side keeps
+        //      moving - that's not staleness, it just means no ticks in
+        //      that direction occurred in the window; same characteristic
+        //      already documented for DAY's SUM_POS/SUM_NEG in CLAUDE.md.
+
+        // out_data.time_msc_ref is already set by sSymbolVars::init before
+        // sDataVars::init/init_ticks_arr_g runs, so it's valid here.
+        datetime start_time_ref_msc = (datetime)out_data.time_msc_ref;
+
+        if (0 >= start_time_ref_msc || in_time_msc <= start_time_ref_msc)
+        {
+            // No ref point established yet, or no time has elapsed since it -
+            // there's no window to sum OC/HL/SUM_POS/SUM_NEG/NETFLOW over, so
+            // those stay at their zero-initialized defaults. Calling
+            // CopyTicksRange here (from<=0 or from>=to) risks corrupting
+            // subsequent tick fetches for the rest of the run, so it's
+            // skipped - but c0 is still the current price regardless of
+            // whether any window has elapsed, so fetch it via a single-tick
+            // lookup (same pattern as sRefPoint's constructor) rather than
+            // leaving it at 0.
+            MqlTick tarr[];
+            int len = CopyTicks(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1);
+            if (0 < len)
+                out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
+            ret = true;
+        }
+        else
+        {
+            size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_ref_msc, in_time_msc);
+            if (0 < size1)
+            {
+
+                ret = init_data_from_ticks_arr_g(
+                    in_time_msc,
+                    in_symbol,
+                    in_period_num,
+                    in_period_type,
+                    in_array,
+                    out_ticks_arr,
+                    out_data);
+            }
+        }
+
+    } // if (ENUM_PERIOD_TYPE_REF == in_period_type)
 
     else if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
     {
@@ -543,6 +605,10 @@ struct sRefPoint : sConfigVars
     double c0_ref[];
     string str_ref[];
 
+    // Leaves time_msc_ref=0 and every c0_ref[]=0.0 - i.e. "no ref point
+    // established". Only meant for placeholder/uninitialized use (see
+    // sGlobalVars's single-arg constructor). Does NOT fetch any prices -
+    // use sRefPoint(tref) below to actually establish a reference point.
     sRefPoint() : time_msc_ref(0)
     {
         time_msc_ref_str = "";
@@ -687,9 +753,19 @@ struct sSymbolVars : sConfigVars
                                         (int)sData[p].d.SUM_NEG);
         }
 
+        int ref_idx = 0;
+        for (int p = 0; p < c.PERIODS_num; p++)
+        {
+            if (ENUM_PERIOD_TYPE_REF == sData[p].period_type)
+            {
+                ref_idx = p;
+                break;
+            }
+        }
+
         string foot = StringFormat(" | %10.5f %6d %6d",
-                                   sData[0].d.c0,
-                                   (int)((sData[0].d.c0 - sData[0].d.c0_ref) / point),
+                                   sData[ref_idx].d.c0,
+                                   (int)((sData[ref_idx].d.c0 - sData[ref_idx].d.c0_ref) / point),
                                    (int)latency_ms);
 
         Print(head + periods_str + foot);
@@ -710,6 +786,21 @@ struct sGlobalVars : sConfigVars
         // Print( " sGlobalVars(): ", time_msc);
     }
 
+    // CAUTION: ref_point() default-constructs with time_msc_ref=0 (see
+    // sRefPoint's default ctor below) - i.e. this sGlobalVars has NO real
+    // reference point. If I_PERIODS includes "REF", every sData slot's
+    // time_msc_ref ends up 0 too (sSymbolVars::init copies it straight from
+    // ref_point). Previously this made init_ticks_arr_g's REF branch call
+    // CopyTicksRange(symbol, arr, flag, 0, now) - an epoch-to-now range -
+    // which hung and corrupted subsequent tick fetches for the rest of the
+    // run (every period type, every symbol, failing with ticks: -1). The
+    // guard in init_ticks_arr_g's REF branch (0 >= start_time_ref_msc) now
+    // makes that safe, but this constructor still yields a REF period that
+    // is unconditionally zero forever - only use it where REF's value is
+    // genuinely irrelevant (e.g. TestVariables.mq5's throwaway `g` object,
+    // used solely to print the symbol/period/host lists). For anything that
+    // needs a working REF period, use the two-arg constructor below with a
+    // properly constructed sRefPoint(tref).
     sGlobalVars(const datetime &_tmsc) : time_msc(_tmsc), ref_point()
     {
         sGlobalVarsImpl();

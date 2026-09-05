@@ -76,15 +76,16 @@ powershell.exe -file RUN.ps1
   not constant. Corrupts the `c0_ref`-based delta column for EURUSD when it happens. If
   reported again, check `sRefPoint`'s `CopyTicks` call/retry logic in
   `MQL5/Include/FuzzyAlgo/variables.mqh` first.
-- **Ref-delta in `PrintSampleInfo` is period-0-only, not a real per-period metric** —
-  the price line prints `(int)((d0.c0 - d0.c0_ref) / point)` using `sData[0]`
-  (currently period `DAY`), but `sSymbolVars::init` (`variables.mqh`) copies the same
-  `ref_point.c0_ref[symbol_idx]`/`time_msc_ref` into every period's `sData[cnt].d`, so
-  the ref point itself is per-symbol, not per-period — grabbing it from `sData[0]` is
-  arbitrary, not "period 0's ref-delta". Plan is to add a dedicated `I_PERIOD` (e.g. a
-  `REF` period type already stubbed in `ENUM_PERIOD_TYPE`) so the ref-delta gets its own
-  period slot with its own `OC`, `HL`, `SUM_POS`, `SUM_NEG`, etc. computed relative to
-  the ref point, instead of reusing whichever period happens to sit at index 0.
+- ~~**Ref-delta in `PrintRow` (formerly `PrintSampleInfo`) is period-0-only, not a real per-period metric**~~
+  — **fixed.** A dedicated `ENUM_PERIOD_TYPE_REF` period type now computes its own
+  `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW` relative to the ref point (`init_ticks_arr_g`'s
+  REF branch, `variables.mqh`), and `PrintRow` locates the REF slot by `period_type`
+  (`sSymbolVars::PrintRow`, `variables.mqh`) instead of assuming `sData[0]`. Add `"REF"`
+  to `I_PERIODS` to enable it. Three states apply: before the ref point, REF's
+  OC/HL/SUM_POS/SUM_NEG/NETFLOW stay at 0 (no elapsed window) but `c0` is still the real
+  current price via a single-tick lookup; at the ref point, `REFDLT` is exactly 0; after
+  it, values accumulate monotonically in magnitude from the anchor. Live-tested and
+  confirmed correct in all three states.
 - **`DAY` period's `SUM_POS`/`SUM_NEG` recompute from the full day's tick history on
   every call, so a "frozen" value can look like a bug but usually isn't** —
   `init_ticks_arr_g`'s `ENUM_PERIOD_TYPE_DAY` branch (`variables.mqh`) calls
