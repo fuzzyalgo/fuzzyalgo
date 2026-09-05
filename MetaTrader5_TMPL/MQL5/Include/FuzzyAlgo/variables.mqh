@@ -131,11 +131,11 @@ bool init_data_from_ticks_arr_g(
 
     out_data.OC_HL = 0.0;
     if (0.0 != out_data.HL)
-        out_data.OC_HL = MathAbs((double)((double)out_data.OC / (double)out_data.HL));
+        out_data.OC_HL = (double)((double)out_data.OC / (double)out_data.HL);
     out_data.HL_TD = 0.0;
     if (0.0 != out_data.TD)
         out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
-    out_data.SUMCOL = out_data.OC_HL + out_data.VOLS_TD + out_data.HL_TD;
+    out_data.SUMCOL = MathAbs(out_data.OC_HL) + out_data.VOLS_TD + out_data.HL_TD;
 
     return ret;
     //+------------------------------------------------------------------+
