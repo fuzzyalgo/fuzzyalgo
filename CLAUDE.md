@@ -67,3 +67,19 @@ powershell.exe -file RUN.ps1
   explicitly asks to change credentials.
 - `config/common.ini` is gitignored (contains the password in plaintext) — never cat
   it out or commit it.
+
+## Known open issues (TestVariables.mq5)
+
+- **`SumPosvsSumNeg` ratio spikes near zero-crossings** — e.g. `S900` showed `-2809.4`
+  in a live log. The function (in `TestVariables.mq5`) substitutes `1`/`-1` when a
+  denominator is exactly `0`, but doesn't guard against a *near*-zero denominator, so
+  the ratio can blow up. Not a bug introduced by the `PrintSampleInfo` refactor — it's
+  inherent to the formula and only became visible once all configured periods started
+  printing. If logic gets built on top of this ratio, consider clamping or a bounded
+  transform (e.g. a log-ratio) first.
+- **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
+  `XX EURUSD ... price: 0.00000` while other symbols (EURGBP/GBPJPY/NZDUSD) succeeded
+  (`OK ...`) in the same run; in other runs EURUSD came back `OK`, so it's intermittent,
+  not constant. Corrupts the `c0_ref`-based delta column for EURUSD when it happens. If
+  reported again, check `sRefPoint`'s `CopyTicks` call/retry logic in
+  `MQL5/Include/FuzzyAlgo/variables.mqh` first.
