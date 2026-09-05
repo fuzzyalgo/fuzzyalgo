@@ -137,6 +137,13 @@ bool init_data_from_ticks_arr_g(
         out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
     out_data.SUMCOL = MathAbs(out_data.OC_HL) + out_data.VOLS_TD + out_data.HL_TD;
 
+    // bounded net-flow share in [-1, 1]: (pos + neg) / (pos - neg).
+    // sum_neg <= 0, so the denominator is pos + |neg| (total tick magnitude).
+    out_data.NETFLOW = 0.0;
+    double netflow_total = out_data.SUM_POS - out_data.SUM_NEG;
+    if (0.0 != netflow_total)
+        out_data.NETFLOW = (out_data.SUM_POS + out_data.SUM_NEG) / netflow_total;
+
     return ret;
     //+------------------------------------------------------------------+
     //|                                                                  |
@@ -418,6 +425,7 @@ struct sData
     // fft
     double SUM_POS;
     double SUM_NEG;
+    double NETFLOW;
 
     // daily openings
     long daily_open_t0;
@@ -450,6 +458,7 @@ struct sData
         // fft
         SUM_POS = 0.0;
         SUM_NEG = 0.0;
+        NETFLOW = 0.0;
 
         // ref_point
         time_msc_ref = 0;
