@@ -11,62 +11,6 @@
 #include <FuzzyAlgo/HistogramChart.mqh>
 #include <WinAPI/sysinfoapi.mqh>
 
-struct sFuzzyAlgoChart
-{
-    const string name;
-    const int x;
-    const int y;
-    const int width;
-    const int height;
-    const int vscale_size;
-    bool created;
-    CHistogramChart chart;
-
-    void create()
-    {
-        if (chart.CreateBitmapLabel(name, x, y, width, height))
-        {
-            created = true;
-            // chart.Accumulative();
-            chart.ShowValue(false);
-            chart.ShowScaleTop(false);
-            chart.ShowScaleBottom(false);
-            chart.ShowScaleRight(false);
-            chart.ShowLegend(false);
-            int size2 = 50;
-            chart.VScaleParams((int)vscale_size, -1 * vscale_size, 2);
-        }
-        else
-        {
-            created = false;
-            Print("Error creating histogram chart: ", GetLastError());
-            // @TODO raise exception here
-        }
-    }
-
-    void destroy()
-    {
-        chart.Destroy();
-        created = false;
-    }
-
-    sFuzzyAlgoChart() : name("FuzzyAlgoChart"),
-                        x(10), y(10), width(600), height(450), vscale_size(50), created(false) {};
-
-    sFuzzyAlgoChart(
-        const string &_name,
-        const int &_x,
-        const int &_y,
-        const int &_width,
-        const int &_height,
-        const int &_vscale_size) : name(_name),
-                                   x(_x), y(_y), width(_width), height(_height), vscale_size(_vscale_size), created(false)
-    {
-        create();
-    };
-
-}; // sAlgoFftChart
-
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
 //+------------------------------------------------------------------+
@@ -206,7 +150,7 @@ void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const lon
                                     tmp.sSym[symbol_idx].sData[p].period,
                                     (int)d.OC,
                                     (int)d.HL,
-                                    OCvsHL(d.OC, d.HL),
+                                    d.OC_HL,
                                     SumPosvsSumNeg(d.SUM_POS, d.SUM_NEG),
                                     (int)d.SUM_POS,
                                     (int)d.SUM_NEG);
@@ -219,18 +163,6 @@ void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx = 0, const lon
 
     Print(head + periods_str + foot);
 } // void PrintSampleInfo(const sGlobalVars &tmp, const int symbol_idx, const long latency_ms)
-//+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-double OCvsHL(double OC, double HL)
-{
-    double v = 0;
-    if (HL > 0)
-        v = OC / HL;
-    return v;
-}
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
