@@ -631,6 +631,70 @@ struct sSymbolVars : sConfigVars
         ArrayResize(sData, c.PERIODS_num);
     }
 
+    //+------------------------------------------------------------------+
+    //| Prints a column-header line matching PrintRow's layout. Field    |
+    //| widths here MUST stay in sync with the StringFormat calls in     |
+    //| PrintRow below, or columns will drift out of alignment.          |
+    //+------------------------------------------------------------------+
+    void PrintRowHeader()
+    {
+        string head = StringFormat("%-19s.%-3s %-6s", "TIME", "MS", "SYM");
+
+        string periods_str = "";
+        for (int p = 0; p < c.PERIODS_num; p++)
+        {
+            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %9s %9s",
+                                        sData[p].period,
+                                        "OC", "HL", "OC/HL", "NETFLOW", "SUMPOS", "SUMNEG");
+        }
+
+        string foot = StringFormat(" | %10s %6s %6s", "C0", "REFDLT", "LAT_MS");
+
+        Print(head + periods_str + foot);
+    } // void PrintRowHeader()
+
+    //+------------------------------------------------------------------+
+    //| Prints one debug line for this symbol at time_msc. Loops over    |
+    //| all configured periods. latency_ms defaults to -1 for the        |
+    //| ring-buffer dump (no real latency to report); the live loop      |
+    //| passes the measured tick latency. Every 100th call reprints the  |
+    //| column header via PrintRowHeader.                                |
+    //+------------------------------------------------------------------+
+    void PrintRow(const long latency_ms = -1)
+    {
+        static int print_count = 0;
+        if (0 == print_count % 100)
+            PrintRowHeader();
+        print_count++;
+
+        double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+        string head = StringFormat("%-19s.%03d %-6s",
+                                   TimeToString(time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                   time_msc % 1000,
+                                   symbol);
+
+        string periods_str = "";
+        for (int p = 0; p < c.PERIODS_num; p++)
+        {
+            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %9d %9d",
+                                        sData[p].period,
+                                        (int)sData[p].d.OC,
+                                        (int)sData[p].d.HL,
+                                        sData[p].d.OC_HL,
+                                        sData[p].d.NETFLOW,
+                                        (int)sData[p].d.SUM_POS,
+                                        (int)sData[p].d.SUM_NEG);
+        }
+
+        string foot = StringFormat(" | %10.5f %6d %6d",
+                                   sData[0].d.c0,
+                                   (int)((sData[0].d.c0 - sData[0].d.c0_ref) / point),
+                                   (int)latency_ms);
+
+        Print(head + periods_str + foot);
+    } // void PrintRow(const long latency_ms)
+
 }; // struct sSymbolVars
 
 struct sGlobalVars : sConfigVars
