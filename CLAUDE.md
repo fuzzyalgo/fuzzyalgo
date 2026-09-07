@@ -68,6 +68,150 @@ powershell.exe -file RUN.ps1
 - `config/common.ini` is gitignored (contains the password in plaintext) — never cat
   it out or commit it.
 
+## Tick cache for closed-market/backtest testing (TickCache.mqh)
+
+`MQL5/Include/FuzzyAlgo/TickCache.mqh` caches a full calendar day's ticks for a
+symbol to CSV under `MQL5/Files/FuzzyAlgo/ticks_cache/` so a closed-market/backtest
+run (`doLive=false` in `TestVariables.mq5`) can replay the same day's ticks without
+re-issuing `CopyTicksRange`/`CopyTicks` against the terminal's tick store on every
+sample. This is Phase 1 of a two-phase latency fix (`LAT_US` growing ~3x over a
+simulated run) — Phase 1 removes fetch cost only; Phase 2 (incremental
+accumulation to fix `init_data_from_ticks_arr_g`'s resum cost, see `DAY`'s open
+issue below) is deferred until Phase 1 is confirmed fully correct.
+
+- `variables.mqh` routes 7 call sites (DAY/PRO×2/REF×2/SECONDS_S/TICKS_T) through
+  `CopyTicksRange_g`/`CopyTicks_g`, gated by `input bool I_USE_TICK_CACHE` (via
+  `conf.c.USE_TICK_CACHE`). Cache-mode failures (window spans two calendar days,
+  load failure) return `-1` — **no native fallback** by design, so a cache bug
+  surfaces as a visible error rather than being silently masked. All existing
+  callers already gate on `if (0 < size1)`, so `-1` degrades identically to `0`
+  (skip resum, leave derived data untouched) — no caller-side changes were needed
+  when the fallback was removed.
+- CSV bid/ask/last precision **must** use the symbol's actual `SYMBOL_DIGITS`
+  (`WriteTicksToCsv_g`'s `digits` param, from `SymbolInfoInteger(symbol,
+  SYMBOL_DIGITS)`) — an earlier fixed 8-decimal format was insufficient to
+  round-trip a double exactly through CSV text, causing ~1-ULP native-vs-cache
+  differences that occasionally flipped tick up/down classification in
+  `OC`/`HL`/`SUM_POS`/`SUM_NEG`. Volume/volume_real use fixed 1-decimal precision.
+  Any diagnostic comparing a freshly-fetched native tick against a cache-reloaded
+  one must normalize the native value through the *same* round-trip
+  (`StringToDouble(DoubleToString(x, digits))`) — `NormalizeDouble` does
+  floating-point arithmetic rounding and does **not** reliably produce the same
+  bit pattern as a decimal-string round-trip, and will report false-positive
+  diffs.
+- `CopyTicksRange_g`/`CopyTicks_g` must slice/search the cached struct's `ticks[]`
+  array **by reference** (MQL5 function args are reference semantics already) —
+  do not stage an `ArrayCopy` of the whole day's cached ticks before searching it.
+  An earlier version did exactly that on every single call, which defeated the
+  point of caching (full ~72k-tick copy per sample instead of one cheap binary
+  search + a small output slice).
+- Diagnostic script `MQL5/Scripts/FuzzyAlgo/TestTickCacheDiff.mq5` exists for
+  exactly this kind of verification: it diffs raw tick arrays (no OC/HL
+  derivation) between native and cached fetches for a fixed set of windows, and
+  separately between two native-only fetches a few seconds apart
+  (`NativeVsNativeCheck`) to rule out the terminal's local tick store still
+  settling/mutating in the background. As of the last run, both native-vs-cache
+  and native-vs-native match exactly across all 8 tested windows — the tick
+  fetch/cache layer is confirmed stable and deterministic. Kept in the repo
+  intentionally as a standing regression tool, not a throwaway script — a future
+  refactor is planned to fold this comparison capability into `variables.mqh`
+  itself as a general-purpose "compare two ring buffers / tick arrays / value
+  sets" function, with `TestVariables.mq5` driving one cache=true and one
+  cache=false run and diffing the resulting ring buffers directly, instead of
+  a separate diagnostic script. Not done yet — deferred until after this Phase 1
+  commit.
+- **Observed 2026-09-07: a stale cache CSV can make cache=true and cache=false
+  `TestVariables.mq5` runs disagree on real `OC`/`HL` values (not just the
+  already-understood SUM_POS/SUM_NEG rounding noise above)** — a paired run
+  (cache=false at 16:45, cache=true at 16:49, both for `2026.09.04` EURUSD)
+  showed several whole-point mismatches in `S3600`/`REF`'s `OC`/`HL` (e.g.
+  15:04:00 REF HL 33 vs 34, 15:21:00 S3600 OC 10 vs 11, 15:30:00 REF HL 68 vs
+  69) — a real difference in the *tick set* fetched, not a display artifact.
+  The cache=true run's `[TickCache] ... existed=true` line confirmed it loaded
+  a **pre-existing** `EURUSD_20260904.csv`, built by some earlier run, while
+  cache=false's native `CopyTicksRange` reflects the broker's tick history
+  *as of the moment it ran*. Even though `2026.09.04` is a past date, the
+  broker feed can still revise/backfill historical tick data between when the
+  cache CSV was written and when a later native call re-fetches the same
+  window — so an old cache file and a fresh native fetch are not guaranteed to
+  agree, and a mismatch here does not necessarily indicate a bug in
+  `CopyTicksRange_g`'s slicing logic itself. This is the same class of risk
+  `TestTickCacheDiff.mq5`'s `NativeVsNativeCheck` was built to catch (see
+  above) — that script fetches native and cache *within one execution*, so
+  it's immune to this drift, and it has continued to show exact matches.
+  **Not yet root-caused as a pure `TickCache.mqh` bug vs. genuine upstream
+  data revision** — before the planned refactor (folding this comparison into
+  `variables.mqh`), rerun the comparison right after deleting the stale
+  `MQL5/Files/FuzzyAlgo/ticks_cache/EURUSD_20260904.csv` (forcing cache=true to
+  rebuild from a fresh native fetch in the same rough time window as the
+  cache=false run) to check whether the mismatches disappear; if they persist
+  even with a freshly-built cache, that would point at a real slicing bug
+  instead of feed drift.
+- **`sRefPoint`'s constructor (`variables.mqh`, ~line 705) calls native
+  `CopyTicks` directly, not `CopyTicks_g`** — it never routes through the cache
+  regardless of `I_USE_TICK_CACHE`. Since `sRefPoint` runs once per script
+  execution (not once per sample), this was a plausible suspect for run-to-run
+  differences between separate `TestVariables.mq5` executions — **ruled out**:
+  the actual root cause (below) was a display-layer rounding bug that affects
+  both cached and native runs identically, unrelated to `sRefPoint`. Left
+  uncached deliberately (single call per execution, not worth the cache
+  plumbing), but still worth remembering if a *different* future symptom is
+  anchor-timing-shaped.
+- **Root cause of the `SUM_POS`/`SUM_NEG` ±1 mismatch between
+  `I_USE_TICK_CACHE=true` and `=false` runs: found and fixed. It was a display
+  rounding bug, not a tick-cache bug.** `SUM_POS`/`SUM_NEG` are theoretically
+  always whole numbers (each tick contributes exactly one whole `point`-unit to
+  the running delta sum), but summing thousands of per-tick doubles accumulates
+  ~1e-8 of floating-point noise — harmless on its own, but `sSymbolVars::PrintRow`
+  displayed them with a **truncating** `(int)` cast. Native and cache-sliced
+  fetches accumulate that noise in a subtly different order (ticks sharing
+  identical/adjacent `time_msc` can be summed in a different sequence), so the
+  noise sometimes landed on the other side of a `.0`/`.5` boundary between the
+  two modes — truncation then displayed a different integer even though the
+  true (rounded) value was identical. Confirmed via a two-layer fingerprint
+  technique (kept permanently, see "RTFP diagnostics" below) and fixed by
+  changing `PrintRow`'s `(int)sData[p].d.SUM_POS` / `(int)sData[p].d.SUM_NEG` to
+  `(int)MathRound(...)`. **Verified end-to-end**: a paired cache=true/cache=false
+  run over `2026.09.04 14:59:51`–`15:46:00` (EURUSD) now matches exactly on
+  every previously-flagged mismatch (15:02:00 and 15:03:00 S3600) and on every
+  spot-checked value through the full run, including large swings (REF SUM_NEG
+  reaching `-1544671` by 15:46:00, S3600 SUM_POS jumping to `95487` at 15:43:00)
+  — all consistent with genuine price movement and REF/S3600 window semantics,
+  not bugs. `OC`/`HL` never needed this fix — they're single-arithmetic values,
+  not summed across the window, so they never accumulate this kind of noise.
+  Phase 1 plan step 4 (full non-`LAT_US` diff between a complete cache=true and
+  cache=false run) is now considered satisfied.
+- **RTFP diagnostics** (short for "real-time fingerprint") — two Print layers
+  added to `init_ticks_arr_g`'s REF and `SECONDS_S`/S`<n>` branches
+  (`variables.mqh`) while root-causing the bug above, kept permanently behind
+  `input int I_DEBUG >= 2` (0 is the default; 1 keeps the pre-existing
+  `sPeriodVars::print()` behavior only) rather than deleted, since the same
+  mismatch class could recur if the cache or native fetch path changes again:
+  - **Aggregate fingerprint** (`RTFP REF`/`RTFP S<n>`): `bid_sum`/`ask_sum`/
+    `time_sum`/`size`/`first_t`/`last_t` computed by iterating the raw
+    `MqlTick` array right after `CopyTicksRange_g` returns. Proves the tick
+    *set* fetched is identical between modes, but is insufficient on its own to
+    catch an accumulation-order difference — floating-point addition is
+    commutative to within ~1 ULP, so this layer can match exactly while
+    `SUM_POS`/`SUM_NEG` still differ.
+  - **Raw output fingerprint** (`RTFP REF RAW`/`RTFP S<n> RAW`): `SUM_POS`/
+    `SUM_NEG` printed at 12-decimal precision, with no `(int)` cast, immediately
+    after `init_data_from_ticks_arr_g` returns. This is what actually exposed
+    the noise (e.g. `-12182.999999998943` vs `-12183.000000001766` — the same
+    logical value, opposite sides of `-12183.0`) and proved it was a display
+    artifact rather than a real data difference.
+  - `TickCache.mqh`'s `FindOrLoadDayCache_g` also has a one-line `[TickCache]
+    ... existed=... loaded=...` Print (confirms whether a run loaded a
+    pre-existing CSV or built one fresh), gated behind its own
+    `g_tick_cache_debug_g` file-scope int (mirrors `I_DEBUG`, set from it in
+    `sConfigVars`'s constructor — `TickCache.mqh` can't reference `I_DEBUG`
+    directly since it's `#include`d before that input is declared).
+  - Any diagnostic comparing a freshly-fetched native tick/sum against a
+    cache-reloaded one must normalize through the same round-trip the cache
+    uses (`StringToDouble(DoubleToString(x, digits))`), never `NormalizeDouble`
+    — see the CSV precision bullet above. This bit twice during this
+    investigation before being written down here.
+
 ## Known open issues (TestVariables.mq5)
 
 - **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as

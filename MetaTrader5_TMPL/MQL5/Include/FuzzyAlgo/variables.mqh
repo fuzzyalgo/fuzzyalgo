@@ -7,6 +7,7 @@
 #property link "https://www.fuzzyalgo.com"
 
 // I N C L U D E S
+#include <FuzzyAlgo/TickCache.mqh>
 
 // T Y P E D E F S
 enum ENUM_PERIOD_TYPE
@@ -36,7 +37,14 @@ input string I_PERIODS = "PRO:REF:DAY:S3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
 // static inputs
 input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO COPY_TICKS_TRADE COPY_TICKS_ALL
-input int I_DEBUG = 0;                                        // enable debug output
+// Debug is a level, not a bool: 0 = off, 1 = existing sPeriodVars::print() period
+// debug line, 2 = also emit the RTFP (real-time fingerprint) tick-cache
+// diagnostic prints in init_ticks_arr_g's REF/S... branches (see comments at
+// those call sites and CLAUDE.md's Tick cache section for what RTFP is for).
+// Level 2 is chatty (one Print per tick-array sample) - fine for a short
+// closed-market comparison run, too noisy to leave on by default.
+input int I_DEBUG = 2;                                        // enable debug output (0=off, 1=period debug, 2=+tick-cache RTFP diagnostics)
+input bool I_USE_TICK_CACHE = true;                           // replay ticks from CSV cache instead of CopyTicks(Range) - closed-market/backtest use only, flip to false before live/EA use
 input int I_EVENT_TIMER_INTERVAL_MSC = 1000;                  // Event Timer Interval in milliseconds
 
 // input string PERIODS = "T60:T300:T900:T3600:T_AVG:S60:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
@@ -173,12 +181,8 @@ bool init_ticks_arr_g(
     if (ENUM_PERIOD_TYPE_DAY == in_period_type)
     {
 
-        MqlDateTime tm;
-        TimeToStruct(in_time_msc / 1000, tm);
-        tm.hour = 0;
-        tm.sec = 0;
-        tm.min = 0;
-        datetime start_time_day_msc = StructToTime(tm) * 1000;
+        long start_time_day_msc, end_time_day_msc;
+        GetDayBoundsMsc_g(in_time_msc, start_time_day_msc, end_time_day_msc);
 
         // string str = StringFormat("%s.%03d | %s.%03d",
         //                           TimeToString(start_time_day_msc / 1000, TIME_DATE | TIME_SECONDS),
@@ -187,7 +191,7 @@ bool init_ticks_arr_g(
         //                           in_time_msc % 1000);
         // Print(str);
 
-        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_day_msc, in_time_msc);
+        size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_day_msc, in_time_msc, conf.c.USE_TICK_CACHE);
         if (0 < size1)
         {
 
@@ -247,14 +251,14 @@ bool init_ticks_arr_g(
             // subsequent tick fetches, so it's skipped. c0 still gets the
             // current price via a single-tick lookup.
             MqlTick tarr[];
-            int len = CopyTicks(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1);
+            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, conf.c.USE_TICK_CACHE);
             if (0 < len)
                 out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
             ret = true;
         }
         else
         {
-            size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc);
+            size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc, conf.c.USE_TICK_CACHE);
             if (0 < size1)
             {
 
@@ -307,14 +311,45 @@ bool init_ticks_arr_g(
             // lookup (same pattern as sRefPoint's constructor) rather than
             // leaving it at 0.
             MqlTick tarr[];
-            int len = CopyTicks(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1);
+            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, conf.c.USE_TICK_CACHE);
             if (0 < len)
                 out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
             ret = true;
         }
         else
         {
-            size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_ref_msc, in_time_msc);
+            size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_ref_msc, in_time_msc, conf.c.USE_TICK_CACHE);
+
+            // RTFP ("real-time fingerprint") - diagnostic only, gated behind
+            // I_DEBUG>=2. Used to bisect a true/false-cache SUM_POS/SUM_NEG
+            // mismatch down to "same raw ticks in, same raw sums out" (this
+            // block) vs "different display of the same raw sums" (the RAW
+            // block after init_data_from_ticks_arr_g below). bid_sum/ask_sum/
+            // time_sum are order-independent (FP addition is commutative to
+            // within ~1 ULP), so a match here only proves the tick *set* is
+            // identical - it can't catch an order-dependent accumulation
+            // difference, which is why the RAW block below exists too. Kept
+            // permanently (not deleted after the bug was fixed) since the
+            // same mismatch class can recur if the cache or native fetch path
+            // changes again - see CLAUDE.md's Tick cache section.
+            if (1 < conf.c.DEBUG)
+            {
+                double fp_bid_sum = 0.0;
+                double fp_ask_sum = 0.0;
+                long fp_time_sum = 0;
+                for (int fp_i = 0; fp_i < size1; fp_i++)
+                {
+                    fp_bid_sum += in_array[fp_i].bid;
+                    fp_ask_sum += in_array[fp_i].ask;
+                    fp_time_sum += in_array[fp_i].time_msc;
+                }
+                Print("  RTFP REF cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                      " from=", (long)start_time_ref_msc, " to=", (long)in_time_msc, " size=", size1,
+                      " first_t=", (size1 > 0 ? in_array[0].time_msc : 0),
+                      " last_t=", (size1 > 0 ? in_array[size1 - 1].time_msc : 0),
+                      " time_sum=", fp_time_sum, " bid_sum=", DoubleToString(fp_bid_sum, 12),
+                      " ask_sum=", DoubleToString(fp_ask_sum, 12));
+            }
             if (0 < size1)
             {
 
@@ -326,6 +361,27 @@ bool init_ticks_arr_g(
                     in_array,
                     out_ticks_arr,
                     out_data);
+
+                // RTFP RAW - the undisplayed SUM_POS/SUM_NEG doubles, printed
+                // at full precision (12 decimals, no rounding) right after
+                // they're computed. SUM_POS/SUM_NEG are theoretically always
+                // whole numbers (each tick contributes one whole point-unit),
+                // but summing thousands of per-tick deltas accumulates ~1e-8
+                // of FP noise - normally harmless, but it previously flipped
+                // the *displayed* integer when it landed on the wrong side of
+                // a .0/.5 boundary combined with a truncating (int) cast in
+                // PrintRow. This print is what proved that: two runs whose
+                // RTFP (aggregate) fingerprint above matched exactly could
+                // still show a raw SUM_NEG of -12182.999999998943 vs
+                // -12183.000000001766 - same value, opposite side of -12183.0.
+                // Fixed by rounding instead of truncating in PrintRow (see
+                // comment there); this print is kept so the same class of
+                // mismatch is diagnosable again without re-deriving the
+                // technique from scratch.
+                if (1 < conf.c.DEBUG)
+                    Print("  RTFP REF RAW cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                          " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
+                          " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
             }
         }
 
@@ -334,7 +390,28 @@ bool init_ticks_arr_g(
     else if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
     {
 
-        size1 = CopyTicksRange(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc);
+        size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc, conf.c.USE_TICK_CACHE);
+
+        // RTFP - see the matching comment in the REF branch above for what
+        // this is and why it's kept behind I_DEBUG>=2 rather than deleted.
+        if (1 < conf.c.DEBUG)
+        {
+            double fp_bid_sum = 0.0;
+            double fp_ask_sum = 0.0;
+            long fp_time_sum = 0;
+            for (int fp_i = 0; fp_i < size1; fp_i++)
+            {
+                fp_bid_sum += in_array[fp_i].bid;
+                fp_ask_sum += in_array[fp_i].ask;
+                fp_time_sum += in_array[fp_i].time_msc;
+            }
+            Print("  RTFP S", in_period_num, " cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                  " from=", (long)(in_time_msc - in_period_num * 1000), " to=", (long)in_time_msc, " size=", size1,
+                  " first_t=", (size1 > 0 ? in_array[0].time_msc : 0),
+                  " last_t=", (size1 > 0 ? in_array[size1 - 1].time_msc : 0),
+                  " time_sum=", fp_time_sum, " bid_sum=", DoubleToString(fp_bid_sum, 12),
+                  " ask_sum=", DoubleToString(fp_ask_sum, 12));
+        }
         if (0 < size1)
         {
 
@@ -346,6 +423,12 @@ bool init_ticks_arr_g(
                 in_array,
                 out_ticks_arr,
                 out_data);
+
+            // RTFP RAW - see the matching comment in the REF branch above.
+            if (1 < conf.c.DEBUG)
+                Print("  RTFP S", in_period_num, " RAW cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                      " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
+                      " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
         }
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
@@ -357,7 +440,7 @@ bool init_ticks_arr_g(
         int src_size = 0;
         for (int inc_cnt = 5; inc_cnt < 15; inc_cnt++)
         {
-            src_size = CopyTicksRange(in_symbol, src_array, conf.c.COPY_TICKS_FLAG, in_time_msc - inc_cnt * in_period_num * 1000, in_time_msc);
+            src_size = CopyTicksRange_g(in_symbol, src_array, conf.c.COPY_TICKS_FLAG, in_time_msc - inc_cnt * in_period_num * 1000, in_time_msc, conf.c.USE_TICK_CACHE);
             if (src_size > in_period_num)
                 break;
         }
@@ -426,6 +509,7 @@ struct sConfigVars
         ENUM_COPY_TICKS COPY_TICKS_FLAG;
         int DEBUG;
         int EVENT_TIMER_INTERVAL_MSC;
+        bool USE_TICK_CACHE;
     } c; // sConfig c;
 
     void get_period_num_and_type(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
@@ -517,6 +601,8 @@ struct sConfigVars
         c.COPY_TICKS_FLAG = I_COPY_TICKS_FLAG;
         c.DEBUG = I_DEBUG;
         c.EVENT_TIMER_INTERVAL_MSC = I_EVENT_TIMER_INTERVAL_MSC;
+        c.USE_TICK_CACHE = I_USE_TICK_CACHE;
+        g_tick_cache_debug_g = I_DEBUG; // TickCache.mqh's own debug gate - see its declaration for why it can't read I_DEBUG directly
 
         c.SYMBOLS_num = string_split_g(c.SYMBOLS, ":", c.SYMBOLS_arr);
         c.PERIODS_num = string_split_g(c.PERIODS, ":", c.PERIODS_arr);
@@ -813,14 +899,31 @@ struct sSymbolVars : sConfigVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
+            // SUM_POS/SUM_NEG are theoretically always whole numbers (each
+            // tick contributes one whole point-unit to the running delta
+            // sum), but summing thousands of per-tick doubles accumulates
+            // ~1e-8 of FP noise. A plain (int) cast truncates, so noise
+            // landing on either side of a .0/.5 boundary displayed a
+            // different integer depending on summation order - this is what
+            // caused the intermittent +/-1 SUM_POS/SUM_NEG mismatch between
+            // I_USE_TICK_CACHE=true and =false runs (native fetch vs cache
+            // slice reconstruct ticks in a subtly different order for ticks
+            // sharing identical/adjacent time_msc). MathRound fixes the
+            // *display* only - the underlying noise is still there and
+            // harmless, since both sides round to the same integer. See
+            // CLAUDE.md's Tick cache section for the full root-cause writeup
+            // and the RTFP diagnostic (I_DEBUG>=2 in init_ticks_arr_g) that
+            // proved it. OC/HL don't need this - they're single-arithmetic
+            // values, not summed across the window, so they never accumulate
+            // this noise.
             periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %9d %9d",
                                         sData[p].period,
                                         (int)sData[p].d.OC,
                                         (int)sData[p].d.HL,
                                         sData[p].d.OC_HL,
                                         sData[p].d.NETFLOW,
-                                        (int)sData[p].d.SUM_POS,
-                                        (int)sData[p].d.SUM_NEG);
+                                        (int)MathRound(sData[p].d.SUM_POS),
+                                        (int)MathRound(sData[p].d.SUM_NEG));
         }
 
         string foot = StringFormat(" | %10.5f %8d",
