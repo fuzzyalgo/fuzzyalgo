@@ -53,6 +53,7 @@ input int I_EVENT_TIMER_INTERVAL_MSC = 1000;                  // Event Timer Int
 
 // G L O B A L S
 struct sData;
+struct sConfig;
 
 int string_split_g(const string &in_string_to_split, const string &in_seperator, string &out_split_array[])
 {
@@ -88,7 +89,20 @@ bool init_data_from_ticks_arr_g(
     out_data.t0 = in_array[size1 - 1].time_msc;
     out_data.c1 = (in_array[0].ask + in_array[0].bid) / 2;
     out_data.t1 = in_array[0].time_msc;
-    out_data.OC = (int)((out_data.c0 - out_data.c1) / point);
+    // (c0-c1)/point is a single arithmetic result, not an accumulated sum, but
+    // a native in-memory double and a CSV-round-tripped double (tick cache)
+    // can still differ by ~1 ULP, which the /point division amplifies ~10^5x
+    // (point ~0.00001 for 5-digit EURUSD) - enough to land on the opposite
+    // side of an integer/half-integer boundary. A plain (int) truncation cast
+    // flipped native-vs-cache OC by 1 in exactly this scenario; MathRound
+    // fixes the boundary-straddle cases where both sides' true values agree.
+    // A handful of survivors (raw values sitting almost exactly on a .5
+    // boundary) were NOT a rounding artifact but a genuine raw-value
+    // difference, root-caused to TickCache.mqh writing bid/ask/last at
+    // SYMBOL_DIGITS precision instead of a full round-trip precision - see
+    // TICK_CACHE_ROUNDTRIP_DIGITS_G in TickCache.mqh and CLAUDE.md's Tick
+    // cache section ("OC/HL had the same class of native-vs-cache mismatch").
+    out_data.OC = (int)MathRound((out_data.c0 - out_data.c1) / point);
     out_data.VOLS = size1;
     if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
         out_data.TD = in_period_num;
@@ -136,7 +150,11 @@ bool init_data_from_ticks_arr_g(
 
     } // for (int cnt = 0; cnt < size1; cnt++)
 
-    out_data.HL = (int)((high - low) / point);
+    // Same ULP-amplification-via-/point issue as OC above, and the same
+    // two-part fix: MathRound handles the boundary-straddle cases, full CSV
+    // round-trip precision (TickCache.mqh) handles the genuine raw-value
+    // differences that rounding alone can't paper over.
+    out_data.HL = (int)MathRound((high - low) / point);
     out_data.SPREAD = spread;
 
     out_data.OC_HL = 0.0;
@@ -164,16 +182,24 @@ bool init_data_from_ticks_arr_g(
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| in_conf is threaded in explicitly (not read off an inherited/    |
+//| locally-constructed sConfigVars) so a caller can build two       |
+//| independent sGlobalVars graphs in one script run that differ in  |
+//| a single sConfig field (e.g. USE_TICK_CACHE) - see sGlobalVars's |
+//| 3-arg constructor below and CLAUDE.md's "sConfig composition     |
+//| refactor" section for why this replaced inheritance.             |
+//+------------------------------------------------------------------+
 bool init_ticks_arr_g(
     const datetime &in_time_msc,
     const string &in_symbol,
     const int &in_period_num,
     const ENUM_PERIOD_TYPE &in_period_type,
     double &out_ticks_arr[],
-    sData &out_data)
+    sData &out_data,
+    const sConfig &in_conf)
 {
 
-    sConfigVars conf;
     bool ret = false;
     MqlTick in_array[];
     int size1 = 0;
@@ -191,7 +217,7 @@ bool init_ticks_arr_g(
         //                           in_time_msc % 1000);
         // Print(str);
 
-        size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_day_msc, in_time_msc, conf.c.USE_TICK_CACHE);
+        size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_day_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
         if (0 < size1)
         {
 
@@ -251,14 +277,14 @@ bool init_ticks_arr_g(
             // subsequent tick fetches, so it's skipped. c0 still gets the
             // current price via a single-tick lookup.
             MqlTick tarr[];
-            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, conf.c.USE_TICK_CACHE);
+            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
                 out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
             ret = true;
         }
         else
         {
-            size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc, conf.c.USE_TICK_CACHE);
+            size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < size1)
             {
 
@@ -311,14 +337,14 @@ bool init_ticks_arr_g(
             // lookup (same pattern as sRefPoint's constructor) rather than
             // leaving it at 0.
             MqlTick tarr[];
-            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, conf.c.USE_TICK_CACHE);
+            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
                 out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
             ret = true;
         }
         else
         {
-            size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, start_time_ref_msc, in_time_msc, conf.c.USE_TICK_CACHE);
+            size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_ref_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
 
             // RTFP ("real-time fingerprint") - diagnostic only, gated behind
             // I_DEBUG>=2. Used to bisect a true/false-cache SUM_POS/SUM_NEG
@@ -332,7 +358,7 @@ bool init_ticks_arr_g(
             // permanently (not deleted after the bug was fixed) since the
             // same mismatch class can recur if the cache or native fetch path
             // changes again - see CLAUDE.md's Tick cache section.
-            if (1 < conf.c.DEBUG)
+            if (1 < in_conf.DEBUG)
             {
                 double fp_bid_sum = 0.0;
                 double fp_ask_sum = 0.0;
@@ -343,7 +369,7 @@ bool init_ticks_arr_g(
                     fp_ask_sum += in_array[fp_i].ask;
                     fp_time_sum += in_array[fp_i].time_msc;
                 }
-                Print("  RTFP REF cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                Print("  RTFP REF cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
                       " from=", (long)start_time_ref_msc, " to=", (long)in_time_msc, " size=", size1,
                       " first_t=", (size1 > 0 ? in_array[0].time_msc : 0),
                       " last_t=", (size1 > 0 ? in_array[size1 - 1].time_msc : 0),
@@ -378,8 +404,8 @@ bool init_ticks_arr_g(
                 // comment there); this print is kept so the same class of
                 // mismatch is diagnosable again without re-deriving the
                 // technique from scratch.
-                if (1 < conf.c.DEBUG)
-                    Print("  RTFP REF RAW cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+                if (1 < in_conf.DEBUG)
+                    Print("  RTFP REF RAW cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
                           " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
                           " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
             }
@@ -390,11 +416,11 @@ bool init_ticks_arr_g(
     else if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
     {
 
-        size1 = CopyTicksRange_g(in_symbol, in_array, conf.c.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc, conf.c.USE_TICK_CACHE);
+        size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, in_time_msc - in_period_num * 1000, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
 
         // RTFP - see the matching comment in the REF branch above for what
         // this is and why it's kept behind I_DEBUG>=2 rather than deleted.
-        if (1 < conf.c.DEBUG)
+        if (1 < in_conf.DEBUG)
         {
             double fp_bid_sum = 0.0;
             double fp_ask_sum = 0.0;
@@ -405,7 +431,7 @@ bool init_ticks_arr_g(
                 fp_ask_sum += in_array[fp_i].ask;
                 fp_time_sum += in_array[fp_i].time_msc;
             }
-            Print("  RTFP S", in_period_num, " cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+            Print("  RTFP S", in_period_num, " cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
                   " from=", (long)(in_time_msc - in_period_num * 1000), " to=", (long)in_time_msc, " size=", size1,
                   " first_t=", (size1 > 0 ? in_array[0].time_msc : 0),
                   " last_t=", (size1 > 0 ? in_array[size1 - 1].time_msc : 0),
@@ -425,8 +451,8 @@ bool init_ticks_arr_g(
                 out_data);
 
             // RTFP RAW - see the matching comment in the REF branch above.
-            if (1 < conf.c.DEBUG)
-                Print("  RTFP S", in_period_num, " RAW cache=", conf.c.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
+            if (1 < in_conf.DEBUG)
+                Print("  RTFP S", in_period_num, " RAW cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
                       " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
                       " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
         }
@@ -440,7 +466,7 @@ bool init_ticks_arr_g(
         int src_size = 0;
         for (int inc_cnt = 5; inc_cnt < 15; inc_cnt++)
         {
-            src_size = CopyTicksRange_g(in_symbol, src_array, conf.c.COPY_TICKS_FLAG, in_time_msc - inc_cnt * in_period_num * 1000, in_time_msc, conf.c.USE_TICK_CACHE);
+            src_size = CopyTicksRange_g(in_symbol, src_array, in_conf.COPY_TICKS_FLAG, in_time_msc - inc_cnt * in_period_num * 1000, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (src_size > in_period_num)
                 break;
         }
@@ -486,131 +512,140 @@ bool init_ticks_arr_g(
 } // bool init_ticks_arr_g
 //+------------------------------------------------------------------+
 
-struct sConfigVars
+void get_period_num_and_type_g(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
 {
-    struct sConfig
+    // defaults
+    out_period_type = ENUM_PERIOD_TYPE_NONE;
+    out_period_num = 0;
+
+    // explicit fixed tokens
+    if (in_period_key == "PRO")
     {
-        // dynamic inputs
-        string ACCOUNT;
-
-        string SYMBOLS;
-        int SYMBOLS_num;
-        string SYMBOLS_arr[];
-
-        string PERIODS;
-        int PERIODS_num;
-        string PERIODS_arr[];
-
-        string HOSTS;
-        int HOSTS_num;
-        string HOSTS_arr[];
-
-        // static inputs
-        ENUM_COPY_TICKS COPY_TICKS_FLAG;
-        int DEBUG;
-        int EVENT_TIMER_INTERVAL_MSC;
-        bool USE_TICK_CACHE;
-    } c; // sConfig c;
-
-    void get_period_num_and_type(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
+        out_period_type = ENUM_PERIOD_TYPE_PRO;
+        return;
+    }
+    if (in_period_key == "DAY")
     {
-        // defaults
-        out_period_type = ENUM_PERIOD_TYPE_NONE;
-        out_period_num = 0;
-
-        // explicit fixed tokens
-        if (in_period_key == "PRO")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_PRO;
-            return;
-        }
-        if (in_period_key == "DAY")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_DAY;
-            return;
-        }
-        if (in_period_key == "REF")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_REF;
-            return;
-        }
-        if (in_period_key == "T_AVG")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_T;
-            return;
-        }
-        if (in_period_key == "S_AVG")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_S;
-            return;
-        }
-        if (in_period_key == "SUM_AVG")
-        {
-            out_period_type = ENUM_PERIOD_TYPE_AVERAGE_SUM;
-            return;
-        }
-
-        // generic T... and S... handling (case-insensitive first letter)
-        if (StringLen(in_period_key) >= 2)
-        {
-            string prefix = StringSubstr(in_period_key, 0, 1);
-            if (prefix == "t")
-                prefix = "T";
-            if (prefix == "s")
-                prefix = "S";
-
-            string rest = StringSubstr(in_period_key, 1);
-            bool digits_only = StringLen(rest) > 0;
-            int ch;
-            for (int i = 0; i < StringLen(rest) && digits_only; ++i)
-            {
-                ch = StringGetCharacter(rest, i);
-                if (ch < '0' || ch > '9')
-                    digits_only = false;
-            }
-
-            if (digits_only)
-            {
-                int num = (int)StringToInteger(rest);
-                if (prefix == "T")
-                {
-                    out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
-                    out_period_num = num;
-                    return;
-                }
-                if (prefix == "S")
-                {
-                    out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
-                    out_period_num = num;
-                    return;
-                }
-            }
-        }
-
-        // unknown token
-        PrintFormat("get_period_num_and_type_g: unknown period key '%s'", in_period_key);
+        out_period_type = ENUM_PERIOD_TYPE_DAY;
+        return;
+    }
+    if (in_period_key == "REF")
+    {
+        out_period_type = ENUM_PERIOD_TYPE_REF;
+        return;
+    }
+    if (in_period_key == "T_AVG")
+    {
+        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_T;
+        return;
+    }
+    if (in_period_key == "S_AVG")
+    {
+        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_S;
+        return;
+    }
+    if (in_period_key == "SUM_AVG")
+    {
+        out_period_type = ENUM_PERIOD_TYPE_AVERAGE_SUM;
+        return;
     }
 
-    sConfigVars()
+    // generic T... and S... handling (case-insensitive first letter)
+    if (StringLen(in_period_key) >= 2)
     {
-        c.ACCOUNT = I_ACCOUNT;
-        c.SYMBOLS = I_SYMBOLS;
-        c.PERIODS = I_PERIODS;
-        c.HOSTS = I_HOSTS;
+        string prefix = StringSubstr(in_period_key, 0, 1);
+        if (prefix == "t")
+            prefix = "T";
+        if (prefix == "s")
+            prefix = "S";
 
-        c.COPY_TICKS_FLAG = I_COPY_TICKS_FLAG;
-        c.DEBUG = I_DEBUG;
-        c.EVENT_TIMER_INTERVAL_MSC = I_EVENT_TIMER_INTERVAL_MSC;
-        c.USE_TICK_CACHE = I_USE_TICK_CACHE;
-        g_tick_cache_debug_g = I_DEBUG; // TickCache.mqh's own debug gate - see its declaration for why it can't read I_DEBUG directly
+        string rest = StringSubstr(in_period_key, 1);
+        bool digits_only = StringLen(rest) > 0;
+        int ch;
+        for (int i = 0; i < StringLen(rest) && digits_only; ++i)
+        {
+            ch = StringGetCharacter(rest, i);
+            if (ch < '0' || ch > '9')
+                digits_only = false;
+        }
 
-        c.SYMBOLS_num = string_split_g(c.SYMBOLS, ":", c.SYMBOLS_arr);
-        c.PERIODS_num = string_split_g(c.PERIODS, ":", c.PERIODS_arr);
-        c.HOSTS_num = string_split_g(c.HOSTS, ":", c.HOSTS_arr);
+        if (digits_only)
+        {
+            int num = (int)StringToInteger(rest);
+            if (prefix == "T")
+            {
+                out_period_type = ENUM_PERIOD_TYPE_TICKS_T;
+                out_period_num = num;
+                return;
+            }
+            if (prefix == "S")
+            {
+                out_period_type = ENUM_PERIOD_TYPE_SECONDS_S;
+                out_period_num = num;
+                return;
+            }
+        }
+    }
 
-    }; // sConfigVars() constructor
+    // unknown token
+    PrintFormat("get_period_num_and_type_g: unknown period key '%s'", in_period_key);
+}
 
-}; // struct sConfigVars
+// Top-level, self-contained config struct - each of sDataVars/sRefPoint/
+// sSymbolVars/sGlobalVars holds one as an explicit `sConfig c;` member
+// (composition), not as a base class (the old sConfigVars was inherited by
+// all four). Composition lets a caller build/copy/override a whole sConfig
+// value and hand it to any of those structs' constructors explicitly - the
+// cache-comparison harness (CLAUDE.md) needs exactly this: two sGlobalVars
+// graphs in one run whose sConfig differs only in USE_TICK_CACHE, which is
+// now just `sConfig cfg2 = cfg; cfg2.USE_TICK_CACHE = true;`. Inheritance
+// couldn't do this - every inherited sConfigVars unconditionally rebuilt
+// itself from the compiled-in I_* inputs on construction, so overriding a
+// single field for one instance would have meant threading a new raw
+// parameter through every layer (sDataVars::init -> sSymbolVars::init ->
+// init_ticks_arr_g), one new parameter per flag that ever needed varying.
+struct sConfig
+{
+    // dynamic inputs
+    string ACCOUNT;
+
+    string SYMBOLS;
+    int SYMBOLS_num;
+    string SYMBOLS_arr[];
+
+    string PERIODS;
+    int PERIODS_num;
+    string PERIODS_arr[];
+
+    string HOSTS;
+    int HOSTS_num;
+    string HOSTS_arr[];
+
+    // static inputs
+    ENUM_COPY_TICKS COPY_TICKS_FLAG;
+    int DEBUG;
+    int EVENT_TIMER_INTERVAL_MSC;
+    bool USE_TICK_CACHE;
+
+    sConfig()
+    {
+        ACCOUNT = I_ACCOUNT;
+        SYMBOLS = I_SYMBOLS;
+        PERIODS = I_PERIODS;
+        HOSTS = I_HOSTS;
+
+        COPY_TICKS_FLAG = I_COPY_TICKS_FLAG;
+        DEBUG = I_DEBUG;
+        EVENT_TIMER_INTERVAL_MSC = I_EVENT_TIMER_INTERVAL_MSC;
+        USE_TICK_CACHE = I_USE_TICK_CACHE;
+
+        SYMBOLS_num = string_split_g(SYMBOLS, ":", SYMBOLS_arr);
+        PERIODS_num = string_split_g(PERIODS, ":", PERIODS_arr);
+        HOSTS_num = string_split_g(HOSTS, ":", HOSTS_arr);
+
+    }; // sConfig() constructor
+
+}; // struct sConfig
 
 struct sData
 {
@@ -687,9 +722,10 @@ struct sData
     };
 };
 
-struct sDataVars : sConfigVars
+struct sDataVars
 {
 
+    sConfig c;
     datetime time_msc;
     sData d;
 
@@ -716,15 +752,17 @@ struct sDataVars : sConfigVars
               const string &_symbol,
               const int &_symbol_idx,
               const string &_period,
-              const int &_period_idx)
+              const int &_period_idx,
+              const sConfig &in_conf)
     {
 
+        c = in_conf;
         time_msc = _time_msc;
         symbol = _symbol;
         symbol_idx = _symbol_idx;
         period = _period;
         period_idx = _period_idx;
-        get_period_num_and_type(period, period_num, period_type);
+        get_period_num_and_type_g(period, period_num, period_type);
 
         str_txt = "";
 
@@ -734,7 +772,8 @@ struct sDataVars : sConfigVars
             period_num,
             period_type,
             ticks_arr,
-            d);
+            d,
+            in_conf);
         if (false == ret)
         {
             string str = StringFormat("@TODO throw exception here - init_ticks_arr_g %s.%03d  %s %5d %s",
@@ -752,8 +791,9 @@ struct sDataVars : sConfigVars
 
 }; // struct sDataVars
 
-struct sRefPoint : sConfigVars
+struct sRefPoint
 {
+    sConfig c;
     long time_msc_ref;
     string time_msc_ref_str;
     double c0_ref[];
@@ -819,9 +859,10 @@ struct sRefPoint : sConfigVars
 
 }; // struct sRefPoint
 
-struct sSymbolVars : sConfigVars
+struct sSymbolVars
 {
 
+    sConfig c;
     datetime time_msc;
 
     string symbol;
@@ -831,8 +872,10 @@ struct sSymbolVars : sConfigVars
     void init(const datetime &_time_msc,
               const string &_symbol,
               const int &_symbol_idx,
-              const sRefPoint &ref_point)
+              const sRefPoint &ref_point,
+              const sConfig &in_conf)
     {
+        c = in_conf;
         time_msc = _time_msc;
 
         symbol = _symbol;
@@ -842,7 +885,7 @@ struct sSymbolVars : sConfigVars
         {
             sData[cnt].d.time_msc_ref = ref_point.time_msc_ref;
             sData[cnt].d.c0_ref = ref_point.c0_ref[symbol_idx];
-            sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt);
+            sData[cnt].init(time_msc, symbol, symbol_idx, c.PERIODS_arr[cnt], cnt, in_conf);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
     }
 
@@ -935,9 +978,10 @@ struct sSymbolVars : sConfigVars
 
 }; // struct sSymbolVars
 
-struct sGlobalVars : sConfigVars
+struct sGlobalVars
 {
 
+    sConfig c;
     datetime time_msc;
     sRefPoint ref_point;
     sSymbolVars sSym[];
@@ -973,13 +1017,24 @@ struct sGlobalVars : sConfigVars
         sGlobalVarsImpl();
     }
 
+    // Explicit-config overload - lets a caller build a fully independent
+    // sGlobalVars graph whose sConfig differs from the compiled-in I_*
+    // inputs (e.g. a cache=true vs cache=false comparison harness building
+    // two graphs in one OnStart() run). The 0/1/2-arg constructors above
+    // are unaffected - they still default-construct c from I_* every time.
+    sGlobalVars(const datetime &_tmsc, const sRefPoint &_ref_point, const sConfig &_conf) : time_msc(_tmsc), ref_point(_ref_point)
+    {
+        c = _conf;
+        sGlobalVarsImpl();
+    }
+
     void sGlobalVarsImpl()
     {
 
         ArrayResize(sSym, c.SYMBOLS_num);
         for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
         {
-            sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point);
+            sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point, c);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
     }
 
