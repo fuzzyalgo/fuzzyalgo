@@ -334,6 +334,151 @@ window logic (old full-resum path kept as fallback + new incremental path) —
 a refactor to consolidate/share logic between them is planned first, before
 Phase 2 lands.
 
+## TestVariables.mq5: cache=false vs cache=true validation harness (drafted 2026-09-09, not yet implemented)
+
+### Context
+
+Phase 1 (tick cache, `TickCache.mqh`) is shipped and confirmed correct at the
+raw-tick level via `TestTickCacheDiff.mq5`. Before starting the bigger planned
+refactor (unifying `TickCache.mqh`'s data structures into `variables.mqh` and
+bundling helper functions into a struct/class that shares `sConfigVars`'s `c`
+so globals like `I_DEBUG` stop being "loose"), the user wants a stronger,
+standing correctness harness built directly into `TestVariables.mq5`: run the
+whole `sGlobalVars` object graph twice — once with the tick cache off, once
+with it on — over the same 60 one-minute samples, and diff the results. This
+proves "we haven't lost any ticks and all the calculations are right" at the
+level that actually matters (the per-tick delta array each period's
+OC/HL/SUM_POS/SUM_NEG/NETFLOW are derived from), not just at the raw
+`MqlTick[]` level `TestTickCacheDiff.mq5` already covers.
+
+Key correction from the user during planning: `sDataVars` (defined in
+`variables.mqh`) already stores `double ticks_arr[]` — the full per-tick delta
+series for that (symbol, period) window, populated by
+`init_data_from_ticks_arr_g`. Every `sGlobalVars` snapshot in a ring buffer
+already carries this via `sSym[s].sData[p].ticks_arr`, so no new plumbing is
+needed to expose it — the harness should diff it directly between the two runs,
+per (symbol, period, sample), using `TestTickCacheDiff.mq5`'s diff-reporting
+style (first-N `DIFF[i]` lines, then a count, then a final MATCH/MISMATCH
+summary line), plus a secondary check on the derived `sData` aggregate fields.
+
+### Problem: `I_USE_TICK_CACHE` is a fixed `input`
+
+`input bool I_USE_TICK_CACHE` cannot change value within one script execution,
+and every level of the object graph (`init_ticks_arr_g` via a local
+`sConfigVars conf` reading `conf.c.USE_TICK_CACHE`) reads it independently.
+Running one cache=false and one cache=true `sGlobalVars` build in the same
+`OnStart()` therefore requires threading an explicit override through the call
+chain, bypassing `conf.c.USE_TICK_CACHE` for this call. This is additive only
+— new parameter, new constructor overload — nothing existing changes shape or
+behavior when the new parameter isn't supplied.
+
+### Design
+
+#### 1. Thread a `use_cache` override through `variables.mqh`
+
+- `init_ticks_arr_g(...)`: add `const bool in_use_cache` parameter. Replace
+  all 7 internal reads of `conf.c.USE_TICK_CACHE` (lines ~194, 254, 261, 314,
+  321, 393, 443 — the `CopyTicksRange_g`/`CopyTicks_g` calls and the two RTFP
+  `Print` labels) with `in_use_cache`. `conf` (the local `sConfigVars`) is
+  still constructed for `conf.c.COPY_TICKS_FLAG`/`conf.c.DEBUG` — only the
+  cache flag itself is overridden.
+- `sDataVars::init(...)`: add `const bool _use_cache` parameter, pass through
+  to `init_ticks_arr_g`.
+- `sSymbolVars::init(...)`: add `const bool _use_cache` parameter, pass
+  through to `sData[cnt].init(...)`.
+- `sGlobalVars`: add a `bool use_cache` member. Keep the existing 1-arg and
+  2-arg constructors unchanged in signature, defaulting `use_cache` to
+  `I_USE_TICK_CACHE` in their member-init lists (so every existing call site in
+  `TestVariables.mq5`/`TestFFT.mq5` keeps compiling with identical behavior).
+  Add one new 3-arg overload `sGlobalVars(const datetime &_tmsc, const
+  sRefPoint &_ref_point, const bool &_use_cache)` that sets `use_cache`
+  explicitly. `sGlobalVarsImpl()` passes `use_cache` into
+  `sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point, use_cache)`.
+
+No changes to `sRefPoint` — it deliberately never uses the cache (documented,
+single native `CopyTicks` call per run) and stays that way.
+
+#### 2. New comparison functions in `variables.mqh`
+
+Placed near the bottom, after `sGlobalVars`, following `TestTickCacheDiff.mq5`'s
+existing diff-reporting shape:
+
+- `int CompareDataVars_g(const sDataVars &a, const sDataVars &b, const string &context)`
+  - Compares `ArraySize(a.ticks_arr)` vs `ArraySize(b.ticks_arr)`; prints a
+    SIZE MISMATCH line and returns early (with a nonzero mismatch count) if
+    they differ.
+  - Loops index-by-index comparing `a.ticks_arr[i] == b.ticks_arr[i]` (exact
+    double equality — expected to hold exactly given Phase 1 already proved
+    the underlying tick sets match after digits-normalization, and each
+    `ticks_arr[i]` is computed once, independently, with no iterative
+    accumulation noise). Prints the first 5 `DIFF[i]` lines
+    (`a.ticks_arr[i]` vs `b.ticks_arr[i]`), then a total diff count.
+  - Also compares the derived `sData` fields: exact-int equality for
+    `OC`/`HL`/`VOLS`/`TD`/`SPREAD`; `MathRound`-to-int equality for
+    `SUM_POS`/`SUM_NEG` (matching `PrintRow`'s established display-equivalence
+    contract) — if the rounded values match but the raw doubles don't, print
+    an RTFP-style raw-value note (informational, not a failure); small-epsilon
+    (1e-9) equality for `NETFLOW`/`OC_HL`/`VOLS_TD`/`HL_TD`/`SUMCOL`; exact
+    equality for `c0`/`c1`/`t0`/`t1`.
+  - Prints one final line per (symbol, period, sample): "MATCH exactly (N
+    ticks)" or "MISMATCH (n diffs)", mirroring
+    `TestTickCacheDiff.mq5`'s per-window summary line.
+  - Returns the total mismatch count (ticks_arr diffs + sData field diffs).
+
+- `int CompareGlobalVars_g(const sGlobalVars &a, const sGlobalVars &b, const string &context)`
+  - Loops every symbol × every period (`a.sSym[s].sData[p]` vs
+    `b.sSym[s].sData[p]`), calling `CompareDataVars_g` for each, summing
+    mismatch counts.
+  - Prints one overall line for this sample: total mismatches across all
+    symbol×period combinations (0 = full match).
+  - Returns the total.
+
+If a real mismatch surfaces, whether it's a genuine bug or a same-millisecond
+tie-order difference between native and cached fetches (a known possibility,
+per this file's RTFP writeup above) is a drill-down for that moment — no
+speculative tie-detection logic is being pre-built now, consistent with how
+the RTFP diagnostics were added only after an actual mismatch was found.
+
+#### 3. Wire up the harness in `TestVariables.mq5`
+
+Add a new function (e.g. `RunCacheComparisonHarness_g(const long in_time_msc,
+const sRefPoint &sr)`) called near the top of `OnStart()`, before the existing
+ring-buffer demo/live loop (which stay untouched):
+
+- `sRingBuf<sGlobalVars> ring_native, ring_cached;` both `init(60, false)`.
+- Loop `min_cnt` from 59 down to 0 (oldest to newest, matching the existing
+  seed-fill pattern): `time_msc = in_time_msc - min_cnt * 60 * 1000`; build
+  `sGlobalVars g_native(time_msc, sr, false)` and `sGlobalVars g_cached(time_msc,
+  sr, true)`; `AddBuf` each into its ring.
+- Loop `i` from 0 to 59: `TryGet` both rings at `i`, call
+  `CompareGlobalVars_g(native, cached, label)` where `label` includes the
+  sample's timestamp.
+- After the loop, print a final grand-total mismatch count across all 60
+  samples ("ALL 60 SAMPLES MATCH EXACTLY" or "N total mismatches across 60
+  samples — see above").
+
+### Files touched
+
+- `MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/variables.mqh` — thread `use_cache`
+  through `init_ticks_arr_g`/`sDataVars::init`/`sSymbolVars::init`/new
+  `sGlobalVars` 3-arg constructor; add `CompareDataVars_g`/`CompareGlobalVars_g`.
+- `MetaTrader5_TMPL/MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — add
+  `RunCacheComparisonHarness_g`, call it from `OnStart()` before the existing
+  demo/live-loop code (which is left as-is).
+
+### Verification
+
+1. Compile both files per this file's documented `MetaEditor64.exe /compile`
+   command (once for `TestVariables.mq5`), check the `.log` for `0 errors`.
+2. Run the script in the terminal (or via script execution in MetaEditor) with
+   `doLive=false` against the existing 2026.09.04 EURUSD/GBPJPY/etc. window
+   already used for Phase 1 validation, confirm the harness prints "ALL 60
+   SAMPLES MATCH EXACTLY" (or investigate any reported `DIFF`/`MISMATCH` lines
+   before proceeding — do not paper over a real mismatch).
+3. Confirm the existing ring-buffer demo and live loop still behave exactly as
+   before (unchanged output), proving the new 3-arg `sGlobalVars` overload and
+   parameter threading didn't disturb existing call sites.
+
 ## Known open issues (TestVariables.mq5)
 
 - **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
