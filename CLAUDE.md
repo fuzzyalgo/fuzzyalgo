@@ -146,17 +146,19 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
   callers already gate on `if (0 < size1)`, so `-1` degrades identically to `0`
   (skip resum, leave derived data untouched) — no caller-side changes were needed
   when the fallback was removed.
-- CSV bid/ask/last precision **must** use the symbol's actual `SYMBOL_DIGITS`
-  (`WriteTicksToCsv_g`'s `digits` param, from `SymbolInfoInteger(symbol,
-  SYMBOL_DIGITS)`) — an earlier fixed 8-decimal format was insufficient to
-  round-trip a double exactly through CSV text, causing ~1-ULP native-vs-cache
-  differences that occasionally flipped tick up/down classification in
-  `OC`/`HL`/`SUM_POS`/`SUM_NEG`. Volume/volume_real use fixed 1-decimal precision.
-  Any diagnostic comparing a freshly-fetched native tick against a cache-reloaded
-  one must normalize the native value through the *same* round-trip
-  (`StringToDouble(DoubleToString(x, digits))`) — `NormalizeDouble` does
-  floating-point arithmetic rounding and does **not** reliably produce the same
-  bit pattern as a decimal-string round-trip, and will report false-positive
+- **CSV bid/ask/last precision (superseded 2026-09-09, see the full-precision
+  fix below) originally used the symbol's `SYMBOL_DIGITS`** (`WriteTicksToCsv_g`'s
+  `digits` param, from `SymbolInfoInteger(symbol, SYMBOL_DIGITS)`) — an earlier
+  fixed 8-decimal format was insufficient to round-trip a double exactly through
+  CSV text, causing ~1-ULP native-vs-cache differences that occasionally flipped
+  tick up/down classification in `OC`/`HL`/`SUM_POS`/`SUM_NEG`. Volume/volume_real
+  still use fixed 1-decimal precision (unaffected — never fed into the
+  point-division that amplifies ULP noise, see below). Any diagnostic comparing
+  a freshly-fetched native tick against a cache-reloaded one must normalize
+  through the *same* round-trip currently in use (see the full-precision fix
+  below — no `digits`-rounding normalization is needed anymore) — `NormalizeDouble`
+  does floating-point arithmetic rounding and does **not** reliably produce the
+  same bit pattern as a decimal-string round-trip, and will report false-positive
   diffs.
 - `CopyTicksRange_g`/`CopyTicks_g` must slice/search the cached struct's `ticks[]`
   array **by reference** (MQL5 function args are reference semantics already) —
@@ -198,14 +200,14 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
   `TestTickCacheDiff.mq5`'s `NativeVsNativeCheck` was built to catch (see
   above) — that script fetches native and cache *within one execution*, so
   it's immune to this drift, and it has continued to show exact matches.
-  **Not yet root-caused as a pure `TickCache.mqh` bug vs. genuine upstream
-  data revision** — before the planned refactor (folding this comparison into
-  `variables.mqh`), rerun the comparison right after deleting the stale
-  `MQL5/Files/FuzzyAlgo/ticks_cache/EURUSD_20260904.csv` (forcing cache=true to
-  rebuild from a fresh native fetch in the same rough time window as the
-  cache=false run) to check whether the mismatches disappear; if they persist
-  even with a freshly-built cache, that would point at a real slicing bug
-  instead of feed drift.
+  **Root-caused 2026-09-09, not a slicing bug or feed drift**: the user
+  performed exactly this isolation test (fresh native run, delete the stale
+  CSV, rebuild cache immediately after) and the ±1 mismatches persisted
+  regardless — ruling out cross-run cache staleness. The actual cause was the
+  CSV round-trip precision issue documented in the `OC`/`HL` follow-up bullet
+  above (fixed by writing bid/ask/last at full round-trip precision instead of
+  `SYMBOL_DIGITS`) — unrelated to whether the CSV was freshly built or
+  pre-existing.
 - **`sRefPoint`'s constructor (`variables.mqh`, ~line 705) calls native
   `CopyTicks` directly, not `CopyTicks_g`** — it never routes through the cache
   regardless of `I_USE_TICK_CACHE`. Since `sRefPoint` runs once per script
@@ -236,10 +238,75 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
   spot-checked value through the full run, including large swings (REF SUM_NEG
   reaching `-1544671` by 15:46:00, S3600 SUM_POS jumping to `95487` at 15:43:00)
   — all consistent with genuine price movement and REF/S3600 window semantics,
-  not bugs. `OC`/`HL` never needed this fix — they're single-arithmetic values,
-  not summed across the window, so they never accumulate this kind of noise.
+  not bugs. **Update 2026-09-09: `OC`/`HL` turned out to need analogous
+  treatment after all** — see below; the "never needed this fix" conclusion
+  here held only for the display-rounding half of the fix, not the later
+  discovery that `OC`/`HL`'s *raw* division-derived doubles can themselves
+  straddle a truncation/rounding boundary.
   Phase 1 plan step 4 (full non-`LAT_US` diff between a complete cache=true and
   cache=false run) is now considered satisfied.
+- **Follow-up 2026-09-09: `OC`/`HL` had the same class of native-vs-cache ±1
+  mismatch as `SUM_POS`/`SUM_NEG` above, for a related but distinct reason —
+  found and fully fixed in two steps.** `TestVariables.mq5` cache=false vs
+  cache=true runs over `2026.09.04` disagreed on several whole-point `OC`/`HL`
+  values (e.g. 15:04:00 REF HL 33 vs 34, 15:21:00 S3600 OC 10 vs 11) even after
+  confirming (per the user's own isolation test — fresh native run, delete the
+  stale CSV, rebuild cache immediately after) that stale cross-run cache data
+  was not the cause.
+  - **Step 1 — `MathRound`**: unlike `SUM_POS`/`SUM_NEG`, `OC`/`HL` are each a
+    single arithmetic result (`(c0-c1)/point`, `(high-low)/point`), not an
+    accumulated sum, so they don't pick up *order-of-summation* noise — but
+    they can still land within ~1e-11 of an integer/half-integer boundary due
+    to ULP-level bit-pattern differences between a native in-memory double and
+    a CSV-round-tripped one, then get amplified ~10^5x by the division by
+    `point` (~0.00001 for 5-digit EURUSD). `init_data_from_ticks_arr_g`'s `OC`/
+    `HL` assignments (`variables.mqh`) were truncating (`(int)(...)`) instead of
+    rounding, exactly like the pre-fix `PrintRow` truncation above — changed to
+    `(int)MathRound(...)`. This fixed most, but not all, of the observed
+    mismatches — a new diagnostic (`ComputeOcHlRaw_g`/`CompareOcHlDerivation` in
+    `TestTickCacheDiff.mq5`, see below) proved the 3 survivors' underlying raw
+    `OC` values genuinely differed *before* rounding too (e.g.
+    `OC_raw(native=32.499999999991 cache=32.500000000013)`), sitting almost
+    exactly on a `.5` boundary — not fixable by changing which rounding
+    function is applied, since the two sides' true inputs actually differed.
+  - **Step 2 — full CSV round-trip precision (the real fix for the 3
+    survivors)**: `WriteTicksToCsv_g` (`TickCache.mqh`) was writing bid/ask/last
+    at `SYMBOL_DIGITS` (5 for EURUSD) instead of a precision sufficient to
+    round-trip the double's exact bit pattern. Changed to a fixed
+    `TICK_CACHE_ROUNDTRIP_DIGITS_G = 16` (a double has ~17 significant decimal
+    digits total; 16 fractional digits is comfortably enough for any FX price
+    with a single-digit integer part) for bid/ask/last specifically —
+    volume/volume_real remain at 1-decimal precision, since they never feed the
+    point-division that amplifies this noise. **Verified fully fixed**: rerunning
+    `TestTickCacheDiff.mq5` after this change showed `OC_raw`/`HL_raw` identical
+    to 12 decimals between native and cache in *every* tested window (not just
+    matching after rounding) — including the 3 that survived Step 1 alone. This
+    also retroactively obsoleted the CSV-precision bullet above (moved the cache
+    from "`SYMBOL_DIGITS`, must digits-normalize before comparing" to "full
+    round-trip precision, no normalization needed").
+  - **Diagnostic tooling added during this investigation, kept permanently in
+    `TestTickCacheDiff.mq5`**: `ComputeOcHlRaw_g` mirrors
+    `init_data_from_ticks_arr_g`'s `c0`/`c1`/`OC` and `high`/`low`/`HL`
+    derivation exactly, returning the raw undivided doubles plus the array
+    index of whichever tick produced the high/low extreme.
+    `CompareOcHlDerivation` runs it on both native and cache tick arrays for a
+    window and prints `OC_raw`/`OC_trunc`/`OC_round` and `HL_raw`/`HL_trunc`/
+    `HL_round` for both sides, flags a `>>> TRUNCATION FLIP` when only the
+    truncated ints differ, flags `>>> STILL DIFFERS AFTER ROUNDING` when even
+    the rounded ints differ (a real, non-artifact difference), and — when HL's
+    extreme-tick index differs between native and cache — prints the specific
+    candidate tick from each side so a "different tick selected" scenario is
+    distinguishable from "same tick, precision wobble." The test window set in
+    `OnStart()` was also extended from 8 to 10 timestamps (added 15:14:00,
+    15:16:00) to include two more windows a clean-cache comparison had flagged.
+  - **Also fixed as part of Step 2**: `TestTickCacheDiff.mq5`'s existing
+    `DIFF[...]` check (distinct from `RAWDIFF[...]`) was left over from when the
+    cache stored `SYMBOL_DIGITS`-precision values — it rounded only the native
+    side to `digits` before comparing against the cache side, which after Step
+    2 compares a deliberately-rounded value against a full-precision one and
+    manufactures a false mismatch. Fixed to round *both* sides through the same
+    `digits` round-trip before comparing (matches `RAWDIFF`'s already-correct,
+    unrounded-both-sides comparison, just at display precision instead of raw).
 - **RTFP diagnostics** (short for "real-time fingerprint") — two Print layers
   added to `init_ticks_arr_g`'s REF and `SECONDS_S`/S`<n>` branches
   (`variables.mqh`) while root-causing the bug above, kept permanently behind
@@ -341,7 +408,55 @@ window logic (old full-resum path kept as fallback + new incremental path) —
 a refactor to consolidate/share logic between them is planned first, before
 Phase 2 lands.
 
-## TestVariables.mq5: cache=false vs cache=true validation harness (drafted 2026-09-09, not yet implemented)
+## `sConfig` composition refactor (implemented 2026-09-09 — foundation for the cache-comparison harness below)
+
+`sConfigVars` was inherited by `sDataVars`, `sRefPoint`, `sSymbolVars`, and
+`sGlobalVars`, and its constructor unconditionally rebuilt `c` straight from
+the compiled-in `input I_*` globals every time one of these structs was
+constructed — there was no way to hand a struct a config value that differed
+from those inputs. This blocked the harness design below, which needs two
+`sGlobalVars` object graphs in one script run differing only in
+`USE_TICK_CACHE`. Threading a single `bool in_use_cache` override through the
+call chain would have solved that one flag but not generalized — the next
+flag needing per-instance variation would mean threading a second raw
+parameter through the same layers again.
+
+Fixed by replacing inheritance with composition, so any future flag is a field
+flip on a copied struct, not a new parameter thread:
+
+- `sConfig` (`variables.mqh`) is now a top-level struct with its own
+  constructor (reading `I_ACCOUNT`/`I_SYMBOLS`/`I_PERIODS`/`I_HOSTS`/
+  `I_COPY_TICKS_FLAG`/`I_DEBUG`/`I_EVENT_TIMER_INTERVAL_MSC`/`I_USE_TICK_CACHE`
+  — unchanged behavior from the old `sConfigVars()`). `struct sConfigVars` no
+  longer exists.
+- `get_period_num_and_type_g` (renamed from the old inherited
+  `get_period_num_and_type`) is a free function at file scope — it never read
+  `c`, so it never belonged on a config struct.
+- `sDataVars`/`sRefPoint`/`sSymbolVars`/`sGlobalVars` each hold an explicit
+  `sConfig c;` member instead of inheriting — `g.c.SYMBOLS`-style external
+  reads (`TestVariables.mq5`, `TestFFT.mq5`) are unchanged, since that syntax
+  is identical whether `c` comes from inheritance or plain composition.
+- `init_ticks_arr_g`, `sDataVars::init`, and `sSymbolVars::init` each take an
+  explicit `const sConfig &in_conf` parameter now (no more implicit `conf.c.*`
+  via inheritance). `sGlobalVars` keeps its existing 0/1/2-arg constructors'
+  signatures and behavior unchanged (each still default-constructs its own
+  `c`), plus a new 3-arg overload —
+  `sGlobalVars(const datetime &_tmsc, const sRefPoint &_ref_point, const sConfig &_conf)`
+  — that sets `c = _conf` explicitly and threads it through
+  `sGlobalVarsImpl()`. `sRefPoint` is unaffected (its own default-constructed
+  `c`, never overridden — it deliberately never uses the cache, per the
+  already-documented decision below).
+- Building a differently-configured `sGlobalVars` is now a plain struct copy:
+  `sConfig cfg_cached = cfg; cfg_cached.USE_TICK_CACHE = true;` then
+  `sGlobalVars g_cached(time_msc, sr, cfg_cached);` — no bool-threading
+  plumbing needed.
+
+Verified: this was a pure internal restructuring with zero output changes for
+any existing call site — confirmed by compiling and running `TestVariables.mq5`
+and `TestFFT.mq5` (0 errors/0 warnings on both) with output unchanged from
+pre-refactor.
+
+## TestVariables.mq5: cache=false vs cache=true validation harness (drafted 2026-09-09 — `sConfig` refactor prerequisite now done, harness itself not yet implemented)
 
 ### Context
 
@@ -368,42 +483,43 @@ per (symbol, period, sample), using `TestTickCacheDiff.mq5`'s diff-reporting
 style (first-N `DIFF[i]` lines, then a count, then a final MATCH/MISMATCH
 summary line), plus a secondary check on the derived `sData` aggregate fields.
 
-### Problem: `I_USE_TICK_CACHE` is a fixed `input`
+### Problem: `I_USE_TICK_CACHE` is a fixed `input` — solved by the `sConfig` refactor above
 
 `input bool I_USE_TICK_CACHE` cannot change value within one script execution,
-and every level of the object graph (`init_ticks_arr_g` via a local
-`sConfigVars conf` reading `conf.c.USE_TICK_CACHE`) reads it independently.
+and every level of the object graph read it independently via inheritance.
 Running one cache=false and one cache=true `sGlobalVars` build in the same
-`OnStart()` therefore requires threading an explicit override through the call
-chain, bypassing `conf.c.USE_TICK_CACHE` for this call. This is additive only
-— new parameter, new constructor overload — nothing existing changes shape or
-behavior when the new parameter isn't supplied.
+`OnStart()` therefore needed an explicit override threaded through the call
+chain. Rather than threading a single raw `bool`, the `sConfig` composition
+refactor documented above (implemented 2026-09-09) solves this generally: any
+`sGlobalVars` graph can now be built from an explicitly-supplied, possibly
+overridden `sConfig` value.
 
 ### Design
 
-#### 1. Thread a `use_cache` override through `variables.mqh`
+#### 1. `sConfig`-threading — already implemented (see the composition refactor above)
 
-- `init_ticks_arr_g(...)`: add `const bool in_use_cache` parameter. Replace
-  all 7 internal reads of `conf.c.USE_TICK_CACHE` (lines ~194, 254, 261, 314,
-  321, 393, 443 — the `CopyTicksRange_g`/`CopyTicks_g` calls and the two RTFP
-  `Print` labels) with `in_use_cache`. `conf` (the local `sConfigVars`) is
-  still constructed for `conf.c.COPY_TICKS_FLAG`/`conf.c.DEBUG` — only the
-  cache flag itself is overridden.
-- `sDataVars::init(...)`: add `const bool _use_cache` parameter, pass through
-  to `init_ticks_arr_g`.
-- `sSymbolVars::init(...)`: add `const bool _use_cache` parameter, pass
-  through to `sData[cnt].init(...)`.
-- `sGlobalVars`: add a `bool use_cache` member. Keep the existing 1-arg and
-  2-arg constructors unchanged in signature, defaulting `use_cache` to
-  `I_USE_TICK_CACHE` in their member-init lists (so every existing call site in
-  `TestVariables.mq5`/`TestFFT.mq5` keeps compiling with identical behavior).
-  Add one new 3-arg overload `sGlobalVars(const datetime &_tmsc, const
-  sRefPoint &_ref_point, const bool &_use_cache)` that sets `use_cache`
-  explicitly. `sGlobalVarsImpl()` passes `use_cache` into
-  `sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point, use_cache)`.
+- `init_ticks_arr_g(...)`, `sDataVars::init(...)`, and `sSymbolVars::init(...)`
+  each already take an explicit `const sConfig &in_conf` parameter — done as
+  part of the composition refactor above, not as a separate bool-threading
+  step.
+- `sGlobalVars` already has the new 3-arg overload
+  `sGlobalVars(const datetime &_tmsc, const sRefPoint &_ref_point, const sConfig &_conf)`
+  that sets `c = _conf` explicitly and threads it through `sGlobalVarsImpl()`.
+  The existing 0/1/2-arg constructors are unchanged.
+- What step 5 below still needs to add (not yet done) is just the harness's
+  own call-site usage of this — building two `sConfig` copies that differ
+  only in `USE_TICK_CACHE`:
+  ```mql5
+  sConfig cfg;                    // real inputs, built once
+  sConfig cfg_native = cfg; cfg_native.USE_TICK_CACHE = false;
+  sConfig cfg_cached = cfg; cfg_cached.USE_TICK_CACHE = true;
+  ...
+  sGlobalVars g_native(time_msc, sr, cfg_native);
+  sGlobalVars g_cached(time_msc, sr, cfg_cached);
+  ```
 
-No changes to `sRefPoint` — it deliberately never uses the cache (documented,
-single native `CopyTicks` call per run) and stays that way.
+No changes needed to `sRefPoint` — it deliberately never uses the cache
+(documented, single native `CopyTicks` call per run) and stays that way.
 
 #### 2. New comparison functions in `variables.mqh`
 
@@ -455,8 +571,10 @@ ring-buffer demo/live loop (which stay untouched):
 - `sRingBuf<sGlobalVars> ring_native, ring_cached;` both `init(60, false)`.
 - Loop `min_cnt` from 59 down to 0 (oldest to newest, matching the existing
   seed-fill pattern): `time_msc = in_time_msc - min_cnt * 60 * 1000`; build
-  `sGlobalVars g_native(time_msc, sr, false)` and `sGlobalVars g_cached(time_msc,
-  sr, true)`; `AddBuf` each into its ring.
+  `sConfig cfg_native = cfg; cfg_native.USE_TICK_CACHE = false;` and
+  `sConfig cfg_cached = cfg; cfg_cached.USE_TICK_CACHE = true;`, then
+  `sGlobalVars g_native(time_msc, sr, cfg_native)` and
+  `sGlobalVars g_cached(time_msc, sr, cfg_cached)`; `AddBuf` each into its ring.
 - Loop `i` from 0 to 59: `TryGet` both rings at `i`, call
   `CompareGlobalVars_g(native, cached, label)` where `label` includes the
   sample's timestamp.
@@ -466,9 +584,10 @@ ring-buffer demo/live loop (which stay untouched):
 
 ### Files touched
 
-- `MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/variables.mqh` — thread `use_cache`
-  through `init_ticks_arr_g`/`sDataVars::init`/`sSymbolVars::init`/new
-  `sGlobalVars` 3-arg constructor; add `CompareDataVars_g`/`CompareGlobalVars_g`.
+- `MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/variables.mqh` — `sConfig`-threading
+  through `init_ticks_arr_g`/`sDataVars::init`/`sSymbolVars::init`/the
+  `sGlobalVars` 3-arg constructor is already done (see the composition
+  refactor above); this step only adds `CompareDataVars_g`/`CompareGlobalVars_g`.
 - `MetaTrader5_TMPL/MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — add
   `RunCacheComparisonHarness_g`, call it from `OnStart()` before the existing
   demo/live-loop code (which is left as-is).

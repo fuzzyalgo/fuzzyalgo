@@ -42,15 +42,6 @@ struct sTickDayCache
 // survives across runs)
 sTickDayCache g_tick_day_caches[];
 
-// Mirrors variables.mqh's I_DEBUG (sConfigVars's constructor sets this from
-// I_DEBUG since TickCache.mqh has no direct access to that input - it's
-// #included before I_DEBUG is declared). 0=off, >=1 enables the
-// FindOrLoadDayCache_g load Print below. Declared here (not read from
-// I_DEBUG directly) because #include textually inserts this file's contents
-// before I_DEBUG's declaration in variables.mqh, so a direct reference from
-// this file would be "used before declared".
-int g_tick_cache_debug_g = 0;
-
 //+------------------------------------------------------------------+
 //| Single source of truth for the cache file path, so write/exists/ |
 //| read all agree on where a given symbol+day lives.                |
@@ -71,10 +62,25 @@ bool TickCacheFileExists_g(const string symbol, const long day_start_msc)
     return FileIsExist(TickCacheFilePath_g(symbol, day_start_msc));
 } // bool TickCacheFileExists_g
 
+// A double has at most ~17 significant decimal digits; 16 digits after the
+// decimal point is far more than enough for any FX price (single-digit
+// integer part) to round-trip through DoubleToString/StringToDouble with
+// the exact same bit pattern it started with. Writing bid/ask/last at the
+// symbol's display precision (SYMBOL_DIGITS, e.g. 5) instead lost bits below
+// that precision - invisible directly, but amplified ~10^5x by later
+// division by `point` in OC/HL, occasionally flipping which integer a
+// native-vs-cache value rounds to (see CLAUDE.md's OC/HL ULP writeup).
+#define TICK_CACHE_ROUNDTRIP_DIGITS_G 16
+
 //+------------------------------------------------------------------+
 //| Writes arr[] to filename as CSV (header + one row per tick),     |
 //| following the FileOpen(FILE_WRITE|FILE_CSV|FILE_ANSI) pattern    |
-//| already used for CSV output in Ticks.mq5.                       |
+//| already used for CSV output in Ticks.mq5. bid/ask/last are       |
+//| written at full round-trip precision (see                       |
+//| TICK_CACHE_ROUNDTRIP_DIGITS_G above), not the symbol's display   |
+//| digits - this file's caller-supplied `digits` is only used for   |
+//| the (unrelated) volume/volume_real-adjacent Print/diagnostic     |
+//| call sites elsewhere, not for what actually gets written here.   |
 //+------------------------------------------------------------------+
 int WriteTicksToCsv_g(const string filename, const MqlTick &arr[], const int digits)
 {
@@ -90,9 +96,9 @@ int WriteTicksToCsv_g(const string filename, const MqlTick &arr[], const int dig
     {
         string row = StringFormat("%I64d,%s,%s,%s,%s,%u,%s\n",
                                   arr[cnt].time_msc,
-                                  DoubleToString(arr[cnt].bid, digits),
-                                  DoubleToString(arr[cnt].ask, digits),
-                                  DoubleToString(arr[cnt].last, digits),
+                                  DoubleToString(arr[cnt].bid, TICK_CACHE_ROUNDTRIP_DIGITS_G),
+                                  DoubleToString(arr[cnt].ask, TICK_CACHE_ROUNDTRIP_DIGITS_G),
+                                  DoubleToString(arr[cnt].last, TICK_CACHE_ROUNDTRIP_DIGITS_G),
                                   DoubleToString((double)arr[cnt].volume, 1),
                                   arr[cnt].flags,
                                   DoubleToString(arr[cnt].volume_real, 1));
@@ -188,7 +194,7 @@ int LoadTickCacheFile_g(const string symbol, const long day_start_msc, MqlTick &
 //| loads it from CSV (creating the CSV first if it doesn't exist    |
 //| yet), appends a new sTickDayCache slot, and returns its index.   |
 //+------------------------------------------------------------------+
-int FindOrLoadDayCache_g(const string symbol, const long in_time_msc, const ENUM_COPY_TICKS flags)
+int FindOrLoadDayCache_g(const string symbol, const long in_time_msc, const ENUM_COPY_TICKS flags, const int debug)
 {
     long day_start_msc, day_end_msc;
     GetDayBoundsMsc_g(in_time_msc, day_start_msc, day_end_msc);
@@ -212,10 +218,11 @@ int FindOrLoadDayCache_g(const string symbol, const long in_time_msc, const ENUM
     // (existed=true, a frozen snapshot possibly from a much earlier run) vs
     // freshly fetched+written this call (existed=false) - useful when
     // diagnosing cross-run staleness, e.g. distinguishing "cache never
-    // refreshed" from "cache correctly rebuilt". Gated behind g_tick_cache_debug_g
-    // (mirrors I_DEBUG) since this fires once per symbol+day per script
-    // execution - cheap, but still noise once the cache layer is trusted.
-    if (0 < g_tick_cache_debug_g)
+    // refreshed" from "cache correctly rebuilt". Gated behind the caller's
+    // debug level (variables.mqh's sConfig.DEBUG, threaded in explicitly)
+    // since this fires once per symbol+day per script execution - cheap, but
+    // still noise once the cache layer is trusted.
+    if (0 < debug)
         Print("[TickCache] ", symbol, " day_start=", day_start_msc, " existed=", existed, " loaded=", loaded, " ticks");
 
     ArrayResize(g_tick_day_caches, num_caches + 1);
@@ -255,7 +262,7 @@ int TickCacheLowerBound_g(const MqlTick &cache_ticks[], const long target_msc)
 //| calendar days, load failure) is surfaced as a negative return     |
 //| rather than silently masked.                                     |
 //+------------------------------------------------------------------+
-int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const long to_msc, const bool use_cache)
+int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const long to_msc, const bool use_cache, const int debug)
 {
     if (!use_cache)
         return CopyTicksRange(symbol, out, flags, from_msc, to_msc);
@@ -265,7 +272,7 @@ int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS 
     if (to_msc > day_end_msc)
         return -1;
 
-    int idx = FindOrLoadDayCache_g(symbol, from_msc, flags);
+    int idx = FindOrLoadDayCache_g(symbol, from_msc, flags, debug);
     if (0 > idx)
         return -1;
 
@@ -285,7 +292,7 @@ int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS 
 //| a window outside the cached day, or a cache load failure is       |
 //| surfaced as a negative return - no native fallback.              |
 //+------------------------------------------------------------------+
-int CopyTicks_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const int count, const bool use_cache)
+int CopyTicks_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const int count, const bool use_cache, const int debug)
 {
     if (!use_cache)
         return CopyTicks(symbol, out, flags, from_msc, count);
@@ -298,7 +305,7 @@ int CopyTicks_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags
     if (from_msc > day_end_msc || from_msc < day_start_msc)
         return -1;
 
-    int idx = FindOrLoadDayCache_g(symbol, from_msc, flags);
+    int idx = FindOrLoadDayCache_g(symbol, from_msc, flags, debug);
     if (0 > idx)
         return -1;
 
