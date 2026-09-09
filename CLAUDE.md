@@ -1,6 +1,58 @@
 # CLAUDE.md
 
-Instructions for Claude Code when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository overview
+
+Two largely independent implementations of the same fuzzy-logic FX trading strategy live
+side by side in this repo:
+
+- **Python** (`Lib/algotrader/`) — a research/live-trading library driven from Jupyter/Spyder
+  or ad-hoc scripts, using the `MetaTrader5` Python API, `scikit-fuzzy`, `filterpy` (Kalman
+  filtering), and a vendored `mplfinance` for charting.
+- **MQL5** (`MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/`, `.../Scripts/FuzzyAlgo/`) — an
+  in-terminal script (`TestVariables.mq5`) that computes the same kind of per-symbol,
+  per-period tick features (OC/HL/SUM_POS/SUM_NEG/NETFLOW) natively inside MetaTrader 5.
+
+There is no code sharing between the two — treat them as separate subsystems. Most existing
+hard-won knowledge in this file is about the MQL5 side; read the Python section below before
+assuming otherwise.
+
+## Python side (`Lib/algotrader/`)
+
+- `Lib/algotrader/__init__.py` re-exports three algorithm classes, each a large, mostly
+  self-contained module: `Algotrader` (`algotrader.py`), `Algotrader2` (`algotrader2.py`),
+  `Algotrader3` (`algotrader3.py`). These are successive rewrites, not layers that call into
+  each other — check git history/imports before assuming one supersedes the others.
+- `AlgoConfig.py` loads a per-account config from a `cf_accounts.json` (JSON keyed by account
+  name, e.g. `RF5D01`..`RF5D04`) and sets up per-account file+stdout logging under
+  `<home>/code/dbg/img/<ACCOUNT>/`. Instantiate it with an account name plus a path to
+  `cf_accounts.json`, not by hand-building config.
+- `Lib/mplfinance/` is a vendored copy of the `mplfinance` charting library (not the pip
+  package) — `algotrader/_mpf.py` wraps it for multi-symbol/multi-period subplot figures.
+- `test/` holds exploratory/scratch scripts (`ticks_get_v2.py` .. `v8.py`, `playpen.py`,
+  `fuzzy_rules_get.py`, etc.) — these are dated experiments, not a pytest suite. There is no
+  automated test runner in this repo; "testing" a Python change means running the relevant
+  script directly against a live/demo MT5 terminal.
+
+### Environment setup
+
+Full instructions are in `README.md`. Summary: create a conda env (miniforge, e.g.
+`fuzzyalgo-py313`) with `numpy scipy pandas matplotlib sympy cython`, install
+`filterpy scikit-fuzzy networkx pynput MetaTrader5` via pip and TA-Lib from the wheel in
+`install/`, then run `python setup.py` **as Administrator, from the repo root, with the conda
+env active**.
+
+`setup.py` provisions one isolated MT5 terminal install per account under
+`%APPDATA%\MetaTrader5_<ACCOUNT>\`, copying the terminal/editor/tester binaries and
+**symlinking** `Experts|Files|Images|Include|Indicators|Libraries|Presets|Profiles|Scripts`
+back into `MetaTrader5_TMPL/MQL5/` — editing an `.mq5`/`.mqh` file in this repo therefore
+changes it for every provisioned account's terminal simultaneously; they are the same file on
+disk, not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the conda env's
+`site-packages`. Requires admin privileges (for `CreateSymbolicLinkW`) and must be re-run
+whenever `config_RoboForex-ECN/cf_accounts.tmpl`-derived per-user JSON files are missing.
+Per-user account credentials live in `cf_accounts_<user>@<host>.json` (gitignored) — never cat
+or commit these.
 
 ## Compiling MQL5 scripts (FuzzyAlgo)
 
@@ -211,6 +263,76 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
     uses (`StringToDouble(DoubleToString(x, digits))`), never `NormalizeDouble`
     — see the CSV precision bullet above. This bit twice during this
     investigation before being written down here.
+
+## Phase 2 plan: incremental accumulation for DAY/REF/PRO (drafted 2026-09-09, not yet implemented — refactoring first)
+
+Phase 1 (above) removed the cost of re-*fetching* a growing window's ticks on
+every sample. It did not remove the cost of re-*summing* that window:
+`init_ticks_arr_g`'s `DAY`/`REF`/`PRO` branches (`variables.mqh`) each refetch
+from their fixed anchor (midnight / ref-point / position-open-time) through
+`in_time_msc` every sample, and `init_data_from_ticks_arr_g` resums the entire
+window from scratch every time — this is the cost behind the "DAY period...
+recompute from the full day's tick history on every call" open issue below,
+and the reason `LAT_US` grows over a simulated run.
+
+`DAY`/`REF`/`PRO` share a "growing window from a fixed anchor" shape (window
+only extends, never shrinks/slides), making them incrementally accumulable.
+`SECONDS_S`/`TICKS_T` are sliding windows (both ends move) and are explicitly
+**out of scope** for this phase — eviction on the trailing edge is a much
+harder problem (risks dropping the current max/min needed for `HL`).
+
+Confirmed during planning: nothing outside `variables.mqh` reads the full
+per-tick `ticks_arr` array `init_data_from_ticks_arr_g` populates for
+DAY/REF/PRO (grepped `ticks_arr` across all of `MetaTrader5_TMPL/MQL5`), so an
+incremental design that only maintains running aggregates (not a full
+reconstructed per-tick array) is safe for these three period types.
+
+**Correctness risk identified**: two consecutive samples' fetch windows must
+overlap at exactly the previous sample's `in_time_msc`, or same-millisecond
+boundary ticks can be lost (non-overlapping `from = last+1`) or double-counted
+(naive overlapping `from = last`). Planned mitigation: fetch
+`[last_time_msc, in_time_msc]` inclusive, then skip exactly the leading ticks
+that structurally match (bid/ask/last/volume/flags/volume_real) the tie-set
+already consumed at `last_time_msc` on the previous call. This only needs to
+hold *within one script execution* — the tick-revision risk documented above
+is a cross-run phenomenon; `TestTickCacheDiff.mq5`'s `NativeVsNativeCheck`
+already proved repeated native fetches of the same window are byte-identical
+within a single run, which is exactly the property this depends on. A backward
+time seek, or a failed tie-check, forces a full rebuild rather than trusting
+stale state (self-healing, logged via `I_DEBUG`, not silently masked).
+
+**Design sketch**:
+- New `sIncrAccum` struct (new file `IncrAccum.mqh`, included the way
+  `TickCache.mqh` is): `symbol`, `period_type`, `anchor_msc`, `last_time_msc`,
+  `tie_ticks[]` (boundary dedup), plus the running aggregate fields
+  `init_data_from_ticks_arr_g` currently derives (`c0`/`t0`/`sum_pos`/
+  `sum_neg`/`hi`/`lo`/etc.).
+- File-scope registry `g_incr_accums_g[]` keyed by `(symbol, period_type)`
+  (sufficient since DAY/REF/PRO each occur at most once per symbol), with a
+  `FindOrCreateIncrAccum_g` lookup-or-create function mirroring
+  `TickCache.mqh`'s `FindOrLoadDayCache_g` pattern.
+- `UpdateIncrAccum_g`: full reset (reuse today's existing resum logic
+  verbatim) when invalid, anchor changed (DAY's midnight rollover, PRO's
+  position closed/reopened at a different `POSITION_TIME_MSC`), or time went
+  backward; otherwise incremental fold-in via the tie-boundary dedup above.
+  `REF`'s anchor is fixed for the script's lifetime (same lifetime as the
+  registry), so it never resets within a run.
+- Gated by new `input bool I_USE_INCR_ACCUM = false;` (via
+  `conf.c.USE_INCR_ACCUM`), following `I_USE_TICK_CACHE`'s exact precedent —
+  the existing full-resum path stays untouched as the fallback/reference until
+  proven correct.
+- Validation follows Phase 1's pattern exactly: extend
+  `TestTickCacheDiff.mq5` (or add `TestIncrAccumDiff.mq5`) to run both
+  `I_USE_INCR_ACCUM=false` and `=true` across the same simulated time range and
+  assert `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW`/`c0`/`t0` match exactly on
+  every sample, including across a midnight boundary and a position
+  close/reopen. Only flip the default to `true` once that passes cleanly.
+
+**Deliberately deferred**: implementing this directly on top of the current
+code would leave two parallel, easily-diverging implementations of DAY/REF/PRO
+window logic (old full-resum path kept as fallback + new incremental path) —
+a refactor to consolidate/share logic between them is planned first, before
+Phase 2 lands.
 
 ## Known open issues (TestVariables.mq5)
 
