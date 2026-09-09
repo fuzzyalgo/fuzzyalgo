@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**This file is long and grows over time.** The copy auto-injected into context via
+`<system-reminder>` at session start can be silently truncated (look for a
+`[N lines truncated]` marker). Before answering any "recap" / "what's the state of X" /
+"summarize the project" request, `Read` this file directly (and check `git log`) rather
+than trusting the auto-injected excerpt — otherwise a whole section can be missed with
+no visible sign anything is wrong.
+
 ## Repository overview
 
 Two largely independent implementations of the same fuzzy-logic FX trading strategy live
