@@ -456,7 +456,7 @@ any existing call site — confirmed by compiling and running `TestVariables.mq5
 and `TestFFT.mq5` (0 errors/0 warnings on both) with output unchanged from
 pre-refactor.
 
-## TestVariables.mq5: cache=false vs cache=true validation harness (drafted 2026-09-09 — `sConfig` refactor prerequisite now done, harness itself not yet implemented)
+## TestVariables.mq5: cache=false vs cache=true validation harness (implemented and verified 2026-09-10 — 60/60 samples match exactly)
 
 ### Context
 
@@ -506,9 +506,8 @@ overridden `sConfig` value.
   `sGlobalVars(const datetime &_tmsc, const sRefPoint &_ref_point, const sConfig &_conf)`
   that sets `c = _conf` explicitly and threads it through `sGlobalVarsImpl()`.
   The existing 0/1/2-arg constructors are unchanged.
-- What step 5 below still needs to add (not yet done) is just the harness's
-  own call-site usage of this — building two `sConfig` copies that differ
-  only in `USE_TICK_CACHE`:
+- Step 5 below is the harness's own call-site usage of this — building two
+  `sConfig` copies that differ only in `USE_TICK_CACHE`:
   ```mql5
   sConfig cfg;                    // real inputs, built once
   sConfig cfg_native = cfg; cfg_native.USE_TICK_CACHE = false;
@@ -586,24 +585,31 @@ ring-buffer demo/live loop (which stay untouched):
 
 - `MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/variables.mqh` — `sConfig`-threading
   through `init_ticks_arr_g`/`sDataVars::init`/`sSymbolVars::init`/the
-  `sGlobalVars` 3-arg constructor is already done (see the composition
-  refactor above); this step only adds `CompareDataVars_g`/`CompareGlobalVars_g`.
-- `MetaTrader5_TMPL/MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — add
-  `RunCacheComparisonHarness_g`, call it from `OnStart()` before the existing
-  demo/live-loop code (which is left as-is).
+  `sGlobalVars` 3-arg constructor (see the composition refactor above), plus
+  `CompareDataVars_g`/`CompareGlobalVars_g`.
+- `MetaTrader5_TMPL/MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` —
+  `RunCacheComparisonHarness_g`, called from `OnStart()` before the existing
+  demo/live-loop code (left as-is).
 
-### Verification
+### Verification — passed 2026-09-10
 
-1. Compile both files per this file's documented `MetaEditor64.exe /compile`
-   command (once for `TestVariables.mq5`), check the `.log` for `0 errors`.
-2. Run the script in the terminal (or via script execution in MetaEditor) with
-   `doLive=false` against the existing 2026.09.04 EURUSD/GBPJPY/etc. window
-   already used for Phase 1 validation, confirm the harness prints "ALL 60
-   SAMPLES MATCH EXACTLY" (or investigate any reported `DIFF`/`MISMATCH` lines
-   before proceeding — do not paper over a real mismatch).
-3. Confirm the existing ring-buffer demo and live loop still behave exactly as
-   before (unchanged output), proving the new 3-arg `sGlobalVars` overload and
-   parameter threading didn't disturb existing call sites.
+Compiled clean (0 errors) and run with `doLive=false` against the
+2026.09.04 15:00:00 EURUSD window, walking `sr_harness`'s REF anchor forward
+through 60 one-minute samples (15:00:00→15:59:00). REF's tick count grew
+monotonically every sample (91 → 11,641 ticks), confirming REF was actually
+exercised rather than stuck at its zero-window guard — this required the
+harness to sample *forward* from the anchor, not backward (see the
+`RunCacheComparisonHarness_g` header comment in `TestVariables.mq5` for why
+backward samples never leave the zero-window guard). PRO stayed at "0 ticks"
+throughout every sample, expected since the test account has no open
+position (`c0` still resolves via the no-position branch; everything else
+stays 0 — not a bug).
+
+Every symbol×period combination (PRO/REF/DAY/S3600) reported zero mismatches
+at every sample, and the harness printed `ALL 60 SAMPLES MATCH EXACTLY`. The
+pre-existing ring-buffer dump and live loop ran unchanged afterward,
+confirming the new 3-arg `sGlobalVars` overload and `sConfig` threading
+didn't disturb any existing call site.
 
 ## Known open issues (TestVariables.mq5)
 

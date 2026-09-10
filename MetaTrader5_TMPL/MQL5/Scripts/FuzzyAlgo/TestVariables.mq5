@@ -12,6 +12,67 @@
 #include <WinAPI/sysinfoapi.mqh>
 
 //+------------------------------------------------------------------+
+//| Standing correctness harness (CLAUDE.md's "cache=false vs        |
+//| cache=true validation harness"): builds 60 one-minute samples    |
+//| twice - once with the tick cache off, once with it on - as two   |
+//| independent sGlobalVars object graphs sharing the same sConfig    |
+//| except for USE_TICK_CACHE, then diffs every sample via            |
+//| CompareGlobalVars_g (variables.mqh). Proves the tick cache never  |
+//| loses/reorders ticks and every derived OC/HL/SUM_POS/SUM_NEG/     |
+//| NETFLOW value agrees, at the level that actually matters (the     |
+//| per-tick delta array each period's stats are derived from) - not  |
+//| just the raw MqlTick[] level TestTickCacheDiff.mq5 already        |
+//| covers.                                                            |
+//+------------------------------------------------------------------+
+void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
+{
+    int ring_buf_num = 60;
+
+    sConfig cfg; // real inputs, built once
+    sConfig cfg_native = cfg;
+    cfg_native.USE_TICK_CACHE = false;
+    sConfig cfg_cached = cfg;
+    cfg_cached.USE_TICK_CACHE = true;
+
+    sRingBuf<sGlobalVars> ring_native, ring_cached;
+    ring_native.init(ring_buf_num, false);
+    ring_cached.init(ring_buf_num, false);
+
+    // sr's ref point is anchored at in_time_msc (see OnStart's sr_harness
+    // construction), and REF's window is [ref_point_time, sample_time] - so
+    // samples must run FORWARD from in_time_msc (e.g. 15:00->16:00), not
+    // backward from it. Backward samples are all <= the anchor, which never
+    // leaves init_ticks_arr_g's REF zero-window guard, so REF would stay
+    // permanently unset and the harness couldn't exercise it at all.
+    for (int min_cnt = 0; min_cnt < ring_buf_num; min_cnt++)
+    {
+        long time_msc = in_time_msc + min_cnt * 60 * 1000;
+        sGlobalVars g_native(time_msc, sr, cfg_native);
+        sGlobalVars g_cached(time_msc, sr, cfg_cached);
+        ring_native.AddBuf(g_native);
+        ring_cached.AddBuf(g_cached);
+    }
+
+    int total = 0;
+    for (int i = 0; i < ring_buf_num; i++)
+    {
+        sGlobalVars native, cached;
+        ring_native.TryGet(i, native);
+        ring_cached.TryGet(i, cached);
+
+        string label = StringFormat("%s.%03d",
+                                    TimeToString(native.time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                                    native.time_msc % 1000);
+        total += CompareGlobalVars_g(native, cached, label);
+    }
+
+    if (0 == total)
+        Print("ALL ", ring_buf_num, " SAMPLES MATCH EXACTLY");
+    else
+        Print(total, " total mismatches across ", ring_buf_num, " samples - see above");
+} // void RunCacheComparisonHarness_g
+
+//+------------------------------------------------------------------+
 //| Script program start function                                    |
 //+------------------------------------------------------------------+
 void OnStart()
@@ -39,6 +100,9 @@ void OnStart()
         in_time_msc = StructToTime(time_struct) * 1000;
 
     } // if( doLive )
+
+    sRefPoint sr_harness(in_time_msc);
+    RunCacheComparisonHarness_g(in_time_msc, sr_harness);
 
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
