@@ -512,6 +512,12 @@ bool init_ticks_arr_g(
 } // bool init_ticks_arr_g
 //+------------------------------------------------------------------+
 
+// Free function, not a method on sConfig - it never reads `c` (only its own
+// parameters), so it doesn't belong on the config struct. Left over from
+// when sConfig's predecessor (sConfigVars) was inherited by every struct in
+// this hierarchy and this was just an inherited method; the composition
+// refactor (CLAUDE.md) pulled it out to file scope along with everything
+// else that didn't actually need config state.
 void get_period_num_and_type_g(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
 {
     // defaults
@@ -748,6 +754,9 @@ struct sDataVars
         }
     }; // void print()
 
+    // in_conf is threaded in explicitly, not read off an inherited config -
+    // see init_ticks_arr_g's comment above for why (sConfig composition
+    // refactor, CLAUDE.md).
     void init(const datetime &_time_msc,
               const string &_symbol,
               const int &_symbol_idx,
@@ -869,6 +878,8 @@ struct sSymbolVars
     int symbol_idx;
     sDataVars sData[];
 
+    // in_conf threaded through to each sData[cnt].init below - same
+    // explicit-override rationale as sDataVars::init above.
     void init(const datetime &_time_msc,
               const string &_symbol,
               const int &_symbol_idx,
@@ -1039,6 +1050,187 @@ struct sGlobalVars
     }
 
 }; // struct sGlobalVars;
+
+//+------------------------------------------------------------------+
+//| Cache-comparison harness (CLAUDE.md's "TestVariables.mq5:        |
+//| cache=false vs cache=true validation harness"). Diffs one        |
+//| (symbol, period) slot's derived data between a native-fetch      |
+//| sGlobalVars graph and a cache-fetch one, following                |
+//| TestTickCacheDiff.mq5's diff-reporting shape (first-N DIFF[i]     |
+//| lines, a count, then a final MATCH/MISMATCH line) - but at the    |
+//| level that actually matters for correctness: the per-tick delta   |
+//| array (ticks_arr) and the derived sData fields, not just the raw  |
+//| MqlTick[] TestTickCacheDiff.mq5 already covers.                   |
+//+------------------------------------------------------------------+
+int CompareDataVars_g(const sDataVars &a, const sDataVars &b, const string &context)
+{
+    int mismatches = 0;
+
+    int size_a = ArraySize(a.ticks_arr);
+    int size_b = ArraySize(b.ticks_arr);
+    if (size_a != size_b)
+    {
+        Print("  ", context, " SIZE MISMATCH ticks_arr native=", size_a, " cached=", size_b);
+        return 1;
+    }
+
+    int diff_count = 0;
+    for (int i = 0; i < size_a; i++)
+    {
+        if (a.ticks_arr[i] != b.ticks_arr[i])
+        {
+            diff_count++;
+            if (diff_count <= 5)
+                Print("  ", context, " DIFF[", i, "] ticks_arr native=", DoubleToString(a.ticks_arr[i], 12),
+                      " cached=", DoubleToString(b.ticks_arr[i], 12));
+        }
+    }
+    if (0 < diff_count)
+    {
+        Print("  ", context, " ticks_arr DIFF COUNT: ", diff_count, " / ", size_a);
+        mismatches += diff_count;
+    }
+
+    // exact-int fields - single arithmetic/count results, no accumulation
+    // noise, so native and cache must agree bit-for-bit.
+    if (a.d.OC != b.d.OC)
+    {
+        Print("  ", context, " OC MISMATCH native=", a.d.OC, " cached=", b.d.OC);
+        mismatches++;
+    }
+    if (a.d.HL != b.d.HL)
+    {
+        Print("  ", context, " HL MISMATCH native=", a.d.HL, " cached=", b.d.HL);
+        mismatches++;
+    }
+    if (a.d.VOLS != b.d.VOLS)
+    {
+        Print("  ", context, " VOLS MISMATCH native=", a.d.VOLS, " cached=", b.d.VOLS);
+        mismatches++;
+    }
+    if (a.d.TD != b.d.TD)
+    {
+        Print("  ", context, " TD MISMATCH native=", a.d.TD, " cached=", b.d.TD);
+        mismatches++;
+    }
+    if (a.d.SPREAD != b.d.SPREAD)
+    {
+        Print("  ", context, " SPREAD MISMATCH native=", a.d.SPREAD, " cached=", b.d.SPREAD);
+        mismatches++;
+    }
+
+    // SUM_POS/SUM_NEG: MathRound-to-int equality, matching PrintRow's
+    // established display-equivalence contract (see PrintRow's comment on
+    // why raw doubles can differ by ~1e-8 while still rounding identically).
+    int sum_pos_native = (int)MathRound(a.d.SUM_POS);
+    int sum_pos_cached = (int)MathRound(b.d.SUM_POS);
+    if (sum_pos_native != sum_pos_cached)
+    {
+        Print("  ", context, " SUM_POS MISMATCH native=", sum_pos_native, " cached=", sum_pos_cached,
+              " (raw native=", DoubleToString(a.d.SUM_POS, 12), " cached=", DoubleToString(b.d.SUM_POS, 12), ")");
+        mismatches++;
+    }
+    else if (a.d.SUM_POS != b.d.SUM_POS)
+    {
+        // RTFP-style informational note, not a failure - rounded values agree.
+        Print("  ", context, " SUM_POS raw differs but rounds equal: native=", DoubleToString(a.d.SUM_POS, 12),
+              " cached=", DoubleToString(b.d.SUM_POS, 12));
+    }
+
+    int sum_neg_native = (int)MathRound(a.d.SUM_NEG);
+    int sum_neg_cached = (int)MathRound(b.d.SUM_NEG);
+    if (sum_neg_native != sum_neg_cached)
+    {
+        Print("  ", context, " SUM_NEG MISMATCH native=", sum_neg_native, " cached=", sum_neg_cached,
+              " (raw native=", DoubleToString(a.d.SUM_NEG, 12), " cached=", DoubleToString(b.d.SUM_NEG, 12), ")");
+        mismatches++;
+    }
+    else if (a.d.SUM_NEG != b.d.SUM_NEG)
+    {
+        Print("  ", context, " SUM_NEG raw differs but rounds equal: native=", DoubleToString(a.d.SUM_NEG, 12),
+              " cached=", DoubleToString(b.d.SUM_NEG, 12));
+    }
+
+    // small-epsilon equality for ratios/sums derived from the fields above
+    double eps = 1e-9;
+    if (eps < MathAbs(a.d.NETFLOW - b.d.NETFLOW))
+    {
+        Print("  ", context, " NETFLOW MISMATCH native=", DoubleToString(a.d.NETFLOW, 12), " cached=", DoubleToString(b.d.NETFLOW, 12));
+        mismatches++;
+    }
+    if (eps < MathAbs(a.d.OC_HL - b.d.OC_HL))
+    {
+        Print("  ", context, " OC_HL MISMATCH native=", DoubleToString(a.d.OC_HL, 12), " cached=", DoubleToString(b.d.OC_HL, 12));
+        mismatches++;
+    }
+    if (eps < MathAbs(a.d.VOLS_TD - b.d.VOLS_TD))
+    {
+        Print("  ", context, " VOLS_TD MISMATCH native=", DoubleToString(a.d.VOLS_TD, 12), " cached=", DoubleToString(b.d.VOLS_TD, 12));
+        mismatches++;
+    }
+    if (eps < MathAbs(a.d.HL_TD - b.d.HL_TD))
+    {
+        Print("  ", context, " HL_TD MISMATCH native=", DoubleToString(a.d.HL_TD, 12), " cached=", DoubleToString(b.d.HL_TD, 12));
+        mismatches++;
+    }
+    if (eps < MathAbs(a.d.SUMCOL - b.d.SUMCOL))
+    {
+        Print("  ", context, " SUMCOL MISMATCH native=", DoubleToString(a.d.SUMCOL, 12), " cached=", DoubleToString(b.d.SUMCOL, 12));
+        mismatches++;
+    }
+
+    // exact equality - endpoint prices/times, no accumulation involved
+    if (a.d.c0 != b.d.c0)
+    {
+        Print("  ", context, " c0 MISMATCH native=", DoubleToString(a.d.c0, 12), " cached=", DoubleToString(b.d.c0, 12));
+        mismatches++;
+    }
+    if (a.d.c1 != b.d.c1)
+    {
+        Print("  ", context, " c1 MISMATCH native=", DoubleToString(a.d.c1, 12), " cached=", DoubleToString(b.d.c1, 12));
+        mismatches++;
+    }
+    if (a.d.t0 != b.d.t0)
+    {
+        Print("  ", context, " t0 MISMATCH native=", a.d.t0, " cached=", b.d.t0);
+        mismatches++;
+    }
+    if (a.d.t1 != b.d.t1)
+    {
+        Print("  ", context, " t1 MISMATCH native=", a.d.t1, " cached=", b.d.t1);
+        mismatches++;
+    }
+
+    if (0 == mismatches)
+        Print("  ", context, " MATCH exactly (", size_a, " ticks)");
+    else
+        Print("  ", context, " MISMATCH (", mismatches, " diffs)");
+
+    return mismatches;
+} // int CompareDataVars_g
+
+//+------------------------------------------------------------------+
+//| Loops every symbol x every period in two sGlobalVars graphs,     |
+//| diffing each (symbol, period) slot via CompareDataVars_g and     |
+//| summing the mismatch count. Prints one overall line for this     |
+//| sample (0 = full match) and returns the total.                   |
+//+------------------------------------------------------------------+
+int CompareGlobalVars_g(const sGlobalVars &a, const sGlobalVars &b, const string &context)
+{
+    int total = 0;
+    int num_symbols = ArraySize(a.sSym);
+    for (int s = 0; s < num_symbols; s++)
+    {
+        int num_periods = ArraySize(a.sSym[s].sData);
+        for (int p = 0; p < num_periods; p++)
+        {
+            string ctx = StringFormat("%s %s %s", context, a.sSym[s].symbol, a.sSym[s].sData[p].period);
+            total += CompareDataVars_g(a.sSym[s].sData[p], b.sSym[s].sData[p], ctx);
+        }
+    }
+    Print(context, " TOTAL mismatches across all symbol x period: ", total);
+    return total;
+} // int CompareGlobalVars_g
 
 //+------------------------------------------------------------------+
 //| sRingBuf.mqh                                                     |
