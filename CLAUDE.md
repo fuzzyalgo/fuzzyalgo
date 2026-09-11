@@ -611,6 +611,88 @@ pre-existing ring-buffer dump and live loop ran unchanged afterward,
 confirming the new 3-arg `sGlobalVars` overload and `sConfig` threading
 didn't disturb any existing call site.
 
+## `GetSystemTime` (DLL import) vs native alternatives — findings 2026-09-11, staying on the DLL for now
+
+`TestVariables.mq5`/`TestFFT.mq5`/`Ticks.mq5` each define their own
+`GetSystemTimeMsc()` wrapper around the `kernel32.dll` `GetSystemTime`
+import (`WinAPI/sysinfoapi.mqh`), used only in `doLive=true` branches to get
+wall-clock time at millisecond resolution. This requires "Allow DLL imports"
+to be enabled for the terminal/script, which the user would prefer to avoid
+if a native (non-DLL) equivalent existed. Investigated three alternatives;
+none is a real substitute — decision is to keep `GetSystemTime` and allow
+DLL imports for now.
+
+- **`SymbolInfoTick(symbol, tick)` → `tick.time_msc`**: rejected outright by
+  the user, correctly — this is the time of the *last received tick*, not
+  current wall-clock time. In a slow/quiet market it can be many seconds
+  stale (the user's example: 15s old) while still being reported as "the
+  time," with no indication anything is off. It's also symbol-specific
+  (every symbol has its own last-tick time) and not routed through
+  `TickCache.mqh` at all — there is no cached-tick equivalent of this call,
+  so using it in `doLive` mode wouldn't interact with the Phase 1 tick cache
+  one way or the other (cache is for closed-market/backtest replay only,
+  `doLive=false`). Not going to be used for "what time is it" — see the
+  deferred idea below for a legitimate *different* use of it.
+- **`TimeCurrent()*1000 + (GetTickCount64() % 1000)`**: rejected.
+  `TimeCurrent()` is server/broker time — defined as the time of the last
+  quote received, i.e. it inherits the *exact same staleness problem* as
+  `SymbolInfoTick`, just hidden one layer down (whole-second broker time
+  instead of per-symbol tick time). Grafting live millisecond ticks from
+  `GetTickCount64() % 1000` on top makes this actively worse, not better: the
+  ms digits keep advancing smoothly every millisecond regardless of whether
+  the underlying second is fresh or stale, so the composite value *looks*
+  live and precise while silently being wrong — a worse failure mode than an
+  honestly-stale timestamp, since there's no visible sign anything is off.
+- **`TimeLocal()*1000 + (GetTickCount64() % 1000)`**: rejected for a
+  different reason. `TimeLocal()` is real OS local time, not tick-gated, so
+  it doesn't have the staleness problem above. But `GetTickCount64()` is
+  milliseconds since boot — a completely separate clock with no defined
+  phase relationship to wall-clock second boundaries. `% 1000` gives "how far
+  into the boot-uptime clock's current second," not "how far into *this*
+  wall-clock second" — those only coincide if the machine happened to boot at
+  an exact whole-second boundary, which is arbitrary. So the ms component
+  isn't noise around the right answer, it's a fixed-but-wrong offset (0-999ms)
+  for the entire run, and it can't be calibrated away without reading real
+  wall-clock time from somewhere — i.e. `GetSystemTime` itself. There's also
+  a non-atomicity race: the two calls aren't taken together, so a wall-clock
+  second rollover between the `TimeLocal()` read and the `GetTickCount64()`
+  read can produce a spurious ~1-second glitch right at the boundary.
+  `GetSystemTime()` avoids all of this because it's one atomic call returning
+  year/month/day/hour/min/sec/ms together from a single live read —
+  self-consistent by construction.
+- **Conclusion**: no DLL-free way to get true OS wall-clock milliseconds was
+  found in native MQL5. Decision (2026-09-11): keep `GetSystemTime` via the
+  DLL import, accept "Allow DLL imports" as a requirement for `doLive=true`
+  runs. Revisit later if a native option surfaces.
+
+### Deferred idea: `GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal
+
+Not `SymbolInfoTick` as a *replacement* for `GetSystemTime` (rejected above),
+but as a second, complementary reading: `delta_msc = GetSystemTimeMsc() -
+tick.time_msc` (per symbol) is "how old is this symbol's last tick, right
+now." Ideally near zero; a large delta means either a technical problem
+(broken connection, trade server down) or a genuinely quiet/illiquid moment
+for that symbol specifically. Sketched (not implemented) uses for a future
+live-mode refinement:
+
+- **All symbols' deltas > ~30s simultaneously** → likely a connectivity/feed
+  problem (broken internet, trade server temporarily down) rather than a
+  market condition — a cross-symbol signal, not a per-symbol one.
+- **One symbol's delta is a few seconds while others are fresh** → that
+  symbol simply hasn't ticked; skip updating its ring buffer/`sSymbolVars`
+  slot for this cycle rather than resampling a window that hasn't changed.
+  Relevant given the live loop currently updates every second
+  (`TestVariables.mq5`'s `Sleep(1000)` loop) — most of that cadence is wasted
+  work for a symbol sitting idle.
+  - **One symbol's delta is very small (e.g. ~32ms) and spread (ask − bid) is
+  elevated** → market entering volatile territory for that symbol; sample
+  faster (sub-second) and watch spread, instead of the fixed 1s cadence.
+
+This is explicitly a `doLive=true`-only idea — `SymbolInfoTick` has no cached
+equivalent in `TickCache.mqh`, so it doesn't apply to closed-market/backtest
+runs. Not scheduled; revisit when live-loop cadence/volatility-adaptive
+sampling becomes an active piece of work.
+
 ## Known open issues (TestVariables.mq5)
 
 - **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
