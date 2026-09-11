@@ -25,6 +25,12 @@ There is no code sharing between the two — treat them as separate subsystems. 
 hard-won knowledge in this file is about the MQL5 side; read the Python section below before
 assuming otherwise.
 
+There is no automated test suite (no pytest, no MQL5 unit-test harness) — "testing" a
+change means either running a Python script directly against a live/demo MT5 terminal, or
+compiling + running an `.mq5` script in the terminal and inspecting its printed output
+(see the cache-comparison harness below for the closest thing to a regression test that
+exists in this repo).
+
 ## Python side (`Lib/algotrader/`)
 
 - `Lib/algotrader/__init__.py` re-exports three algorithm classes, each a large, mostly
@@ -60,6 +66,35 @@ disk, not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into th
 whenever `config_RoboForex-ECN/cf_accounts.tmpl`-derived per-user JSON files are missing.
 Per-user account credentials live in `cf_accounts_<user>@<host>.json` (gitignored) — never cat
 or commit these.
+
+## MQL5 side (`MetaTrader5_TMPL/MQL5/.../FuzzyAlgo/`)
+
+- `MQL5/Include/FuzzyAlgo/variables.mqh` (~1,440 lines) is the core data model: `sConfig`
+  (per-run config, composed into every other struct below), `sData`/`sDataVars` (per-symbol,
+  per-period derived tick features — `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW`/etc., plus the
+  raw per-tick delta series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
+  `CopyTicks` only, never cached), `sSymbolVars` (all periods for one symbol), `sGlobalVars`
+  (all symbols for one sample), and `sRingBuf<T>` (a fixed-size ring buffer used to hold
+  recent `sGlobalVars` snapshots). `ENUM_PERIOD_TYPE` (DAY/PRO/REF/SECONDS_S/TICKS_T) selects
+  how each period's tick window is anchored. `CompareDataVars_g`/`CompareGlobalVars_g` at the
+  bottom of this file are the cache-comparison harness's diffing functions (see below).
+- `MQL5/Include/FuzzyAlgo/TickCache.mqh` caches a full day's ticks per symbol to CSV so a
+  closed-market/backtest run can replay ticks without re-hitting the terminal's tick store on
+  every sample. Gated by `input bool I_USE_TICK_CACHE` / `conf.c.USE_TICK_CACHE`. See the
+  historical notes below for the precision bugs this surfaced and how they were fixed.
+- `MQL5/Include/FuzzyAlgo/HistogramChart.mqh` — charting helper, not otherwise load-bearing to
+  the data model above.
+- `MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — the main script; builds the object graph above
+  per sample (live loop or closed-market/backtest via `doLive`), and (as of 2026-09-10) runs
+  the cache=false vs cache=true comparison harness before the existing demo/live loop.
+- `MQL5/Scripts/FuzzyAlgo/TestTickCacheDiff.mq5` — standing diagnostic/regression script that
+  diffs raw tick arrays between native and cached fetches, and native-vs-native a few seconds
+  apart, to catch cache- or feed-related discrepancies. Not a throwaway script — kept
+  intentionally as a regression tool.
+- `MQL5/Scripts/FuzzyAlgo/TestFFT.mq5` — separate FFT-based script, uses the same `variables.mqh`
+  object graph but is not part of the tick-cache investigation below.
+- `MQL5/Files/FuzzyAlgo/ticks_cache/` — where `TickCache.mqh` writes/reads per-symbol,
+  per-day CSV tick caches (gitignored).
 
 ## Compiling MQL5 scripts (FuzzyAlgo)
 
@@ -127,7 +162,46 @@ powershell.exe -file RUN.ps1
 - `config/common.ini` is gitignored (contains the password in plaintext) — never cat
   it out or commit it.
 
-## Tick cache for closed-market/backtest testing (TickCache.mqh)
+## Known open issues (TestVariables.mq5)
+
+- **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
+  `XX EURUSD ... price: 0.00000` while other symbols (EURGBP/GBPJPY/NZDUSD) succeeded
+  (`OK ...`) in the same run; in other runs EURUSD came back `OK`, so it's intermittent,
+  not constant. Corrupts the `c0_ref`-based delta column for EURUSD when it happens. If
+  reported again, check `sRefPoint`'s `CopyTicks` call/retry logic in
+  `MQL5/Include/FuzzyAlgo/variables.mqh` first.
+- **`DAY` period's `SUM_POS`/`SUM_NEG` recompute from the full day's tick history on
+  every call, so a "frozen" value can look like a bug but usually isn't** —
+  `init_ticks_arr_g`'s `ENUM_PERIOD_TYPE_DAY` branch (`variables.mqh`) calls
+  `CopyTicksRange` from midnight (`start_time_day_msc`) through the current sample time
+  on every single call, and `init_data_from_ticks_arr_g` resets `SUM_POS`/`SUM_NEG` to
+  `0` and resums the whole window each time — nothing is accumulated incrementally. In
+  a live run GBPJPY's `DAY` row showed `SUM_NEG` pinned at `-2827809` from sample
+  `14:59:51.000` through `15:01:00.000` while `SUM_POS`/`OC` kept climbing; that's
+  consistent with no further down-ticks occurring in that window (an early sharp drop
+  followed by a sustained rally), not staleness. The real issue is cost: every sample
+  rescans the entire day's ticks, so `CopyTicksRange` plus the summation loop get more
+  expensive as the trading day progresses — worth accumulating incrementally instead of
+  recomputing from scratch if this becomes a bottleneck (see the Phase 2 plan below,
+  which addresses exactly this).
+
+Two issues from earlier investigations have already been fixed and are kept here only
+as pointers into the historical notes below, in case similar symptoms recur:
+- Ref-delta being period-0-only instead of a real per-period REF metric — fixed via a
+  dedicated `ENUM_PERIOD_TYPE_REF` period type.
+- The live loop printing a lagged ring-buffer entry instead of the sample it just
+  added — fixed by reading `ringbuf.Count() - 1` instead of index `0`.
+
+## Historical investigation notes (MQL5 tick cache)
+
+This section is a chronological record of the tick-cache work: what was built, what broke,
+how it was root-caused, and how it was fixed. It's kept in full (not summarized) because the
+root-cause reasoning — especially the floating-point/rounding traps — is exactly the kind of
+thing that's cheap to re-read and expensive to re-derive if a similar symptom resurfaces.
+Skip this section unless you're touching `TickCache.mqh`, the cache-related parts of
+`variables.mqh`, or debugging a native-vs-cache mismatch.
+
+### Tick cache for closed-market/backtest testing (TickCache.mqh)
 
 `MQL5/Include/FuzzyAlgo/TickCache.mqh` caches a full calendar day's ticks for a
 symbol to CSV under `MQL5/Files/FuzzyAlgo/ticks_cache/` so a closed-market/backtest
@@ -136,7 +210,7 @@ re-issuing `CopyTicksRange`/`CopyTicks` against the terminal's tick store on eve
 sample. This is Phase 1 of a two-phase latency fix (`LAT_US` growing ~3x over a
 simulated run) — Phase 1 removes fetch cost only; Phase 2 (incremental
 accumulation to fix `init_data_from_ticks_arr_g`'s resum cost, see `DAY`'s open
-issue below) is deferred until Phase 1 is confirmed fully correct.
+issue above) is deferred until Phase 1 is confirmed fully correct.
 
 - `variables.mqh` routes 7 call sites (DAY/PRO×2/REF×2/SECONDS_S/TICKS_T) through
   `CopyTicksRange_g`/`CopyTicks_g`, gated by `input bool I_USE_TICK_CACHE` (via
@@ -205,7 +279,7 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
   CSV, rebuild cache immediately after) and the ±1 mismatches persisted
   regardless — ruling out cross-run cache staleness. The actual cause was the
   CSV round-trip precision issue documented in the `OC`/`HL` follow-up bullet
-  above (fixed by writing bid/ask/last at full round-trip precision instead of
+  below (fixed by writing bid/ask/last at full round-trip precision instead of
   `SYMBOL_DIGITS`) — unrelated to whether the CSV was freshly built or
   pre-existing.
 - **`sRefPoint`'s constructor (`variables.mqh`, ~line 705) calls native
@@ -338,7 +412,7 @@ issue below) is deferred until Phase 1 is confirmed fully correct.
     — see the CSV precision bullet above. This bit twice during this
     investigation before being written down here.
 
-## Phase 2 plan: incremental accumulation for DAY/REF/PRO (drafted 2026-09-09, not yet implemented — refactoring first)
+### Phase 2 plan: incremental accumulation for DAY/REF/PRO (drafted 2026-09-09, not yet implemented — refactoring first)
 
 Phase 1 (above) removed the cost of re-*fetching* a growing window's ticks on
 every sample. It did not remove the cost of re-*summing* that window:
@@ -346,7 +420,7 @@ every sample. It did not remove the cost of re-*summing* that window:
 from their fixed anchor (midnight / ref-point / position-open-time) through
 `in_time_msc` every sample, and `init_data_from_ticks_arr_g` resums the entire
 window from scratch every time — this is the cost behind the "DAY period...
-recompute from the full day's tick history on every call" open issue below,
+recompute from the full day's tick history on every call" open issue above,
 and the reason `LAT_US` grows over a simulated run.
 
 `DAY`/`REF`/`PRO` share a "growing window from a fixed anchor" shape (window
@@ -408,7 +482,7 @@ window logic (old full-resum path kept as fallback + new incremental path) —
 a refactor to consolidate/share logic between them is planned first, before
 Phase 2 lands.
 
-## `sConfig` composition refactor (implemented 2026-09-09 — foundation for the cache-comparison harness below)
+### `sConfig` composition refactor (implemented 2026-09-09 — foundation for the cache-comparison harness below)
 
 `sConfigVars` was inherited by `sDataVars`, `sRefPoint`, `sSymbolVars`, and
 `sGlobalVars`, and its constructor unconditionally rebuilt `c` straight from
@@ -445,7 +519,7 @@ flip on a copied struct, not a new parameter thread:
   — that sets `c = _conf` explicitly and threads it through
   `sGlobalVarsImpl()`. `sRefPoint` is unaffected (its own default-constructed
   `c`, never overridden — it deliberately never uses the cache, per the
-  already-documented decision below).
+  already-documented decision above).
 - Building a differently-configured `sGlobalVars` is now a plain struct copy:
   `sConfig cfg_cached = cfg; cfg_cached.USE_TICK_CACHE = true;` then
   `sGlobalVars g_cached(time_msc, sr, cfg_cached);` — no bool-threading
@@ -456,9 +530,9 @@ any existing call site — confirmed by compiling and running `TestVariables.mq5
 and `TestFFT.mq5` (0 errors/0 warnings on both) with output unchanged from
 pre-refactor.
 
-## TestVariables.mq5: cache=false vs cache=true validation harness (implemented and verified 2026-09-10 — 60/60 samples match exactly)
+### TestVariables.mq5: cache=false vs cache=true validation harness (implemented and verified 2026-09-10 — 60/60 samples match exactly)
 
-### Context
+#### Context
 
 Phase 1 (tick cache, `TickCache.mqh`) is shipped and confirmed correct at the
 raw-tick level via `TestTickCacheDiff.mq5`. Before starting the bigger planned
@@ -483,7 +557,7 @@ per (symbol, period, sample), using `TestTickCacheDiff.mq5`'s diff-reporting
 style (first-N `DIFF[i]` lines, then a count, then a final MATCH/MISMATCH
 summary line), plus a secondary check on the derived `sData` aggregate fields.
 
-### Problem: `I_USE_TICK_CACHE` is a fixed `input` — solved by the `sConfig` refactor above
+#### Problem: `I_USE_TICK_CACHE` is a fixed `input` — solved by the `sConfig` refactor above
 
 `input bool I_USE_TICK_CACHE` cannot change value within one script execution,
 and every level of the object graph read it independently via inheritance.
@@ -494,9 +568,9 @@ refactor documented above (implemented 2026-09-09) solves this generally: any
 `sGlobalVars` graph can now be built from an explicitly-supplied, possibly
 overridden `sConfig` value.
 
-### Design
+#### Design
 
-#### 1. `sConfig`-threading — already implemented (see the composition refactor above)
+##### 1. `sConfig`-threading — already implemented (see the composition refactor above)
 
 - `init_ticks_arr_g(...)`, `sDataVars::init(...)`, and `sSymbolVars::init(...)`
   each already take an explicit `const sConfig &in_conf` parameter — done as
@@ -520,7 +594,7 @@ overridden `sConfig` value.
 No changes needed to `sRefPoint` — it deliberately never uses the cache
 (documented, single native `CopyTicks` call per run) and stays that way.
 
-#### 2. New comparison functions in `variables.mqh`
+##### 2. New comparison functions in `variables.mqh`
 
 Placed near the bottom, after `sGlobalVars`, following `TestTickCacheDiff.mq5`'s
 existing diff-reporting shape:
@@ -561,7 +635,7 @@ per this file's RTFP writeup above) is a drill-down for that moment — no
 speculative tie-detection logic is being pre-built now, consistent with how
 the RTFP diagnostics were added only after an actual mismatch was found.
 
-#### 3. Wire up the harness in `TestVariables.mq5`
+##### 3. Wire up the harness in `TestVariables.mq5`
 
 Add a new function (e.g. `RunCacheComparisonHarness_g(const long in_time_msc,
 const sRefPoint &sr)`) called near the top of `OnStart()`, before the existing
@@ -581,7 +655,7 @@ ring-buffer demo/live loop (which stay untouched):
   samples ("ALL 60 SAMPLES MATCH EXACTLY" or "N total mismatches across 60
   samples — see above").
 
-### Files touched
+#### Files touched
 
 - `MetaTrader5_TMPL/MQL5/Include/FuzzyAlgo/variables.mqh` — `sConfig`-threading
   through `init_ticks_arr_g`/`sDataVars::init`/`sSymbolVars::init`/the
@@ -591,7 +665,7 @@ ring-buffer demo/live loop (which stay untouched):
   `RunCacheComparisonHarness_g`, called from `OnStart()` before the existing
   demo/live-loop code (left as-is).
 
-### Verification — passed 2026-09-10
+#### Verification — passed 2026-09-10
 
 Compiled clean (0 errors) and run with `doLive=false` against the
 2026.09.04 15:00:00 EURUSD window, walking `sr_harness`'s REF anchor forward
@@ -611,7 +685,7 @@ pre-existing ring-buffer dump and live loop ran unchanged afterward,
 confirming the new 3-arg `sGlobalVars` overload and `sConfig` threading
 didn't disturb any existing call site.
 
-## `GetSystemTime` (DLL import) vs native alternatives — findings 2026-09-11, staying on the DLL for now
+### `GetSystemTime` (DLL import) vs native alternatives — findings 2026-09-11, staying on the DLL for now
 
 `TestVariables.mq5`/`TestFFT.mq5`/`Ticks.mq5` each define their own
 `GetSystemTimeMsc()` wrapper around the `kernel32.dll` `GetSystemTime`
@@ -665,7 +739,7 @@ DLL imports for now.
   DLL import, accept "Allow DLL imports" as a requirement for `doLive=true`
   runs. Revisit later if a native option surfaces.
 
-### Deferred idea: `GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal
+#### Deferred idea: `GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal
 
 Not `SymbolInfoTick` as a *replacement* for `GetSystemTime` (rejected above),
 but as a second, complementary reading: `delta_msc = GetSystemTimeMsc() -
@@ -692,46 +766,3 @@ This is explicitly a `doLive=true`-only idea — `SymbolInfoTick` has no cached
 equivalent in `TickCache.mqh`, so it doesn't apply to closed-market/backtest
 runs. Not scheduled; revisit when live-loop cadence/volatility-adaptive
 sampling becomes an active piece of work.
-
-## Known open issues (TestVariables.mq5)
-
-- **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
-  `XX EURUSD ... price: 0.00000` while other symbols (EURGBP/GBPJPY/NZDUSD) succeeded
-  (`OK ...`) in the same run; in other runs EURUSD came back `OK`, so it's intermittent,
-  not constant. Corrupts the `c0_ref`-based delta column for EURUSD when it happens. If
-  reported again, check `sRefPoint`'s `CopyTicks` call/retry logic in
-  `MQL5/Include/FuzzyAlgo/variables.mqh` first.
-- ~~**Ref-delta in `PrintRow` (formerly `PrintSampleInfo`) is period-0-only, not a real per-period metric**~~
-  — **fixed.** A dedicated `ENUM_PERIOD_TYPE_REF` period type now computes its own
-  `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW` relative to the ref point (`init_ticks_arr_g`'s
-  REF branch, `variables.mqh`), and `PrintRow` locates the REF slot by `period_type`
-  (`sSymbolVars::PrintRow`, `variables.mqh`) instead of assuming `sData[0]`. Add `"REF"`
-  to `I_PERIODS` to enable it. Three states apply: before the ref point, REF's
-  OC/HL/SUM_POS/SUM_NEG/NETFLOW stay at 0 (no elapsed window) but `c0` is still the real
-  current price via a single-tick lookup; at the ref point, `REFDLT` is exactly 0; after
-  it, values accumulate monotonically in magnitude from the anchor. Live-tested and
-  confirmed correct in all three states.
-- **`DAY` period's `SUM_POS`/`SUM_NEG` recompute from the full day's tick history on
-  every call, so a "frozen" value can look like a bug but usually isn't** —
-  `init_ticks_arr_g`'s `ENUM_PERIOD_TYPE_DAY` branch (`variables.mqh`) calls
-  `CopyTicksRange` from midnight (`start_time_day_msc`) through the current sample time
-  on every single call, and `init_data_from_ticks_arr_g` resets `SUM_POS`/`SUM_NEG` to
-  `0` and resums the whole window each time — nothing is accumulated incrementally. In
-  a live run GBPJPY's `DAY` row showed `SUM_NEG` pinned at `-2827809` from sample
-  `14:59:51.000` through `15:01:00.000` while `SUM_POS`/`OC` kept climbing; that's
-  consistent with no further down-ticks occurring in that window (an early sharp drop
-  followed by a sustained rally), not staleness. The real issue is cost: every sample
-  rescans the entire day's ticks, so `CopyTicksRange` plus the summation loop get more
-  expensive as the trading day progresses — worth accumulating incrementally instead of
-  recomputing from scratch if this becomes a bottleneck.
-- ~~**Live loop in `OnStart` prints a lagged ring-buffer entry, not the sample it just
-  added**~~ — **fixed.** `ringbuf.init(ring_buf_num, false)` sets `indexNewest = false`,
-  so logical index `0` means "oldest buffered entry", not "the one just added" —
-  `TryGet(0, tmp)` was replaying the seed-fill backlog one iteration late instead of
-  showing the sample `AddBuf` had just pushed. The live loop (`TestVariables.mq5`) now
-  calls `TryGet(ringbuf.Count() - 1, tmp)`, which is the newest logical index under
-  `indexNewest = false` (`sRingBuf::MapLogicalToPhysical` maps it to `head - 1`). Confirmed
-  live: after the ring-buffer dump ends at `15:00:00.000`, the loop's first iteration
-  reprints `15:00:00.000` once more (same instant, `LAT_MS 0` — expected, since
-  `min_cnt=0`'s simulated time equals `in_time_msc`), then advances cleanly to
-  `15:01:00.000`, `15:02:00.000`, etc. with no repeats or skipped minutes.
