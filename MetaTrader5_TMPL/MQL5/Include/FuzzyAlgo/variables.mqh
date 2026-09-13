@@ -40,7 +40,7 @@ input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO
 // Debug is a level, not a bool: 0 = off, 1 = existing sPeriodVars::print() period
 // debug line, 2 = also emit the RTFP (real-time fingerprint) tick-cache
 // diagnostic prints in init_ticks_arr_g's REF/S... branches (see comments at
-// those call sites and CLAUDE.md's Tick cache section for what RTFP is for).
+// those call sites and docs/repository-notes.md's Tick cache section for what RTFP is for).
 // Level 2 is chatty (one Print per tick-array sample) - fine for a short
 // closed-market comparison run, too noisy to leave on by default.
 input int I_DEBUG = 0;                                        // enable debug output (0=off, 1=period debug, 2=+tick-cache RTFP diagnostics)
@@ -100,8 +100,8 @@ bool init_data_from_ticks_arr_g(
     // boundary) were NOT a rounding artifact but a genuine raw-value
     // difference, root-caused to TickCache.mqh writing bid/ask/last at
     // SYMBOL_DIGITS precision instead of a full round-trip precision - see
-    // TICK_CACHE_ROUNDTRIP_DIGITS_G in TickCache.mqh and CLAUDE.md's Tick
-    // cache section ("OC/HL had the same class of native-vs-cache mismatch").
+    // TICK_CACHE_ROUNDTRIP_DIGITS_G in TickCache.mqh and docs/repository-notes.md's
+    // Tick cache section ("OC/HL had the same class of native-vs-cache mismatch").
     out_data.OC = (int)MathRound((out_data.c0 - out_data.c1) / point);
     out_data.VOLS = size1;
     if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
@@ -187,8 +187,9 @@ bool init_data_from_ticks_arr_g(
 //| locally-constructed sConfigVars) so a caller can build two       |
 //| independent sGlobalVars graphs in one script run that differ in  |
 //| a single sConfig field (e.g. USE_TICK_CACHE) - see sGlobalVars's |
-//| 3-arg constructor below and CLAUDE.md's "sConfig composition     |
-//| refactor" section for why this replaced inheritance.             |
+//| 3-arg constructor below and docs/design-decisions.md's "sConfig  |
+//| composition over inheritance" section for why this replaced      |
+//| inheritance.                                                      |
 //+------------------------------------------------------------------+
 bool init_ticks_arr_g(
     const datetime &in_time_msc,
@@ -319,7 +320,7 @@ bool init_ticks_arr_g(
         //      freeze for many samples in a row while the other side keeps
         //      moving - that's not staleness, it just means no ticks in
         //      that direction occurred in the window; same characteristic
-        //      already documented for DAY's SUM_POS/SUM_NEG in CLAUDE.md.
+        //      already documented for DAY's SUM_POS/SUM_NEG in docs/known-issues.md.
 
         // out_data.time_msc_ref is already set by sSymbolVars::init before
         // sDataVars::init/init_ticks_arr_g runs, so it's valid here.
@@ -357,7 +358,7 @@ bool init_ticks_arr_g(
             // difference, which is why the RAW block below exists too. Kept
             // permanently (not deleted after the bug was fixed) since the
             // same mismatch class can recur if the cache or native fetch path
-            // changes again - see CLAUDE.md's Tick cache section.
+            // changes again - see docs/repository-notes.md's Tick cache section.
             if (1 < in_conf.DEBUG)
             {
                 double fp_bid_sum = 0.0;
@@ -516,7 +517,7 @@ bool init_ticks_arr_g(
 // parameters), so it doesn't belong on the config struct. Left over from
 // when sConfig's predecessor (sConfigVars) was inherited by every struct in
 // this hierarchy and this was just an inherited method; the composition
-// refactor (CLAUDE.md) pulled it out to file scope along with everything
+// refactor (docs/design-decisions.md) pulled it out to file scope along with everything
 // else that didn't actually need config state.
 void get_period_num_and_type_g(const string &in_period_key, int &out_period_num, ENUM_PERIOD_TYPE &out_period_type)
 {
@@ -602,7 +603,7 @@ void get_period_num_and_type_g(const string &in_period_key, int &out_period_num,
 // (composition), not as a base class (the old sConfigVars was inherited by
 // all four). Composition lets a caller build/copy/override a whole sConfig
 // value and hand it to any of those structs' constructors explicitly - the
-// cache-comparison harness (CLAUDE.md) needs exactly this: two sGlobalVars
+// cache-comparison harness (docs/design-decisions.md) needs exactly this: two sGlobalVars
 // graphs in one run whose sConfig differs only in USE_TICK_CACHE, which is
 // now just `sConfig cfg2 = cfg; cfg2.USE_TICK_CACHE = true;`. Inheritance
 // couldn't do this - every inherited sConfigVars unconditionally rebuilt
@@ -756,7 +757,7 @@ struct sDataVars
 
     // in_conf is threaded in explicitly, not read off an inherited config -
     // see init_ticks_arr_g's comment above for why (sConfig composition
-    // refactor, CLAUDE.md).
+    // refactor, docs/design-decisions.md).
     void init(const datetime &_time_msc,
               const string &_symbol,
               const int &_symbol_idx,
@@ -965,7 +966,7 @@ struct sSymbolVars
             // sharing identical/adjacent time_msc). MathRound fixes the
             // *display* only - the underlying noise is still there and
             // harmless, since both sides round to the same integer. See
-            // CLAUDE.md's Tick cache section for the full root-cause writeup
+            // docs/repository-notes.md's Tick cache section for the full root-cause writeup
             // and the RTFP diagnostic (I_DEBUG>=2 in init_ticks_arr_g) that
             // proved it. OC/HL don't need this - they're single-arithmetic
             // values, not summed across the window, so they never accumulate
@@ -1052,10 +1053,10 @@ struct sGlobalVars
 }; // struct sGlobalVars;
 
 //+------------------------------------------------------------------+
-//| Cache-comparison harness (CLAUDE.md's "TestVariables.mq5:        |
-//| cache=false vs cache=true validation harness"). Diffs one        |
-//| (symbol, period) slot's derived data between a native-fetch      |
-//| sGlobalVars graph and a cache-fetch one, following                |
+//| Cache-comparison harness (docs/design-decisions.md's "Cache=false|
+//| vs cache=true validation harness"). Diffs one (symbol, period)   |
+//| slot's derived data between a native-fetch sGlobalVars graph and |
+//| a cache-fetch one, following                                     |
 //| TestTickCacheDiff.mq5's diff-reporting shape (first-N DIFF[i]     |
 //| lines, a count, then a final MATCH/MISMATCH line) - but at the    |
 //| level that actually matters for correctness: the per-tick delta   |

@@ -69,7 +69,7 @@ bool TickCacheFileExists_g(const string symbol, const long day_start_msc)
 // symbol's display precision (SYMBOL_DIGITS, e.g. 5) instead lost bits below
 // that precision - invisible directly, but amplified ~10^5x by later
 // division by `point` in OC/HL, occasionally flipping which integer a
-// native-vs-cache value rounds to (see CLAUDE.md's OC/HL ULP writeup).
+// native-vs-cache value rounds to (see docs/repository-notes.md's OC/HL ULP writeup).
 #define TICK_CACHE_ROUNDTRIP_DIGITS_G 16
 
 //+------------------------------------------------------------------+
