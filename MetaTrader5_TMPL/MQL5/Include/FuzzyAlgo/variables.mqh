@@ -189,7 +189,7 @@ bool init_data_from_ticks_arr_g(
 //| a single sConfig field (e.g. USE_TICK_CACHE) - see sGlobalVars's |
 //| 3-arg constructor below and docs/design-decisions.md's "sConfig  |
 //| composition over inheritance" section for why this replaced      |
-//| inheritance.                                                      |
+//| inheritance.                                                     |
 //+------------------------------------------------------------------+
 bool init_ticks_arr_g(
     const datetime &in_time_msc,
