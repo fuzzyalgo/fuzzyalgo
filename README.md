@@ -143,6 +143,7 @@ $ conda deactivate
 (fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> pip install .\install\ta_lib-0.6.3-cp313-cp313-win_amd64.whl
 (fuzzyalgo-py313) \<your-source-path>\fuzzyalgo> python setup.py
 	Run: win-64bit in conda env:  fuzzyalgo-py313
+	dir_appdata: %APPDATA%
 	dir_py_lib:  \<your-miniforge3-path>\miniforge3\envs\fuzzyalgo-py313\Lib
 	dir_cwd:     \<your-source-path>\fuzzyalgo
 	dir_script:  \<your-source-path>\fuzzyalgo
@@ -174,6 +175,12 @@ $ conda deactivate
 ```
 
 - note: config\*.json are excluded from git
+
+- note: `setup.py` auto-generates three more per-user files the same way
+  (`cf_periods_<your-username>@<your-hostname>.json`,
+  `cf_symbols_...json`, `cf_pid_params_...json`, from the matching `.tmpl`
+  files in the same `config_RoboForex-ECN` directory) — those don't contain
+  secrets and don't need manual editing like `cf_accounts` does.
 
 ```JSON
 {

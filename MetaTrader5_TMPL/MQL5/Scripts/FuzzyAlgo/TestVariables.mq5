@@ -12,9 +12,10 @@
 #include <WinAPI/sysinfoapi.mqh>
 
 //+------------------------------------------------------------------+
-//| Standing correctness harness (CLAUDE.md's "cache=false vs        |
-//| cache=true validation harness"): builds 60 one-minute samples    |
-//| twice - once with the tick cache off, once with it on - as two   |
+//| Standing correctness harness (docs/design-decisions.md's         |
+//| "cache=false vs cache=true validation harness"): builds 60       |
+//| one-minute samples twice - once with the tick cache off, once    |
+//| with it on - as two                                               |
 //| independent sGlobalVars object graphs sharing the same sConfig    |
 //| except for USE_TICK_CACHE, then diffs every sample via            |
 //| CompareGlobalVars_g (variables.mqh). Proves the tick cache never  |

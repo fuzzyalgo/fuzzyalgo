@@ -142,7 +142,9 @@ def setup():
         for cf in cf_files:
             tp_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\" + cf + ".tmpl"
             cf_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\" + cf + "_" + name_user + "@" + name_host + ".json"
-            if not os.path.exists( cf_fn ): 
+            # copied once only - editing the .tmpl later has no effect on an
+            # already-provisioned user; delete cf_fn to pick up the change
+            if not os.path.exists( cf_fn ):
                 shutil.copy(tp_fn, cf_fn)
         # for cf in cf_files:
         
@@ -152,13 +154,16 @@ def setup():
         cf_accounts = {}
         tp_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\cf_accounts.tmpl"
         cf_fn = dir_script + "\\MetaTrader5_TMPL\\config_" + srv + "\\cf_accounts_" + name_user + "@" + name_host + ".json"
-        if not os.path.exists( cf_fn ): 
+        # same only-if-missing semantics as cf_files above: to rotate a
+        # password, edit cf_fn directly - re-running setup.py won't re-copy
+        # from cf_accounts.tmpl once cf_fn exists
+        if not os.path.exists( cf_fn ):
             with open( tp_fn, 'r') as f: cf_accounts = json.load(f)
             for account in cf_accounts:
                 print( account, cf_accounts[account] )
             with open(cf_fn, 'w') as f: json.dump(cf_accounts, f, indent=4)
             print( tp_fn, cf_accounts )
-        # if not os.path.exists( cf_fn ): 
+        # if not os.path.exists( cf_fn ):
 
         #
         # create mt5 env from existing or freshly created cf_accounts file
@@ -178,7 +183,9 @@ def setup():
                 os.rmdir( anaconda_fn )
             symlink( fuz_org_fn, anaconda_fn )
             
-        # create cf_accounts file if not exists
+        # cf_accounts local var above is still {} if cf_fn already existed
+        # (the if-block was skipped) - re-read from disk so it reflects the
+        # actual on-disk accounts either way
         with open( cf_fn, 'r') as f: cf_accounts = json.load(f)
 
         # create MetaTrader5 python libraries
@@ -222,8 +229,12 @@ def setup():
             #path_mt5_user =  os.getenv('USERNAME') + '@' + os.getenv('COMPUTERNAME')
             #path_mt5_config = path_mt5 + "\\config\\cf_accounts_" + path_mt5_user + ".json"
             path = path_mt5
+            # full wipe-and-rebuild on every run: MQL5/Logs, Services and
+            # Shared Project are real dirs (not symlinked back to git, see
+            # os.makedirs below), so re-running setup.py silently discards
+            # any log history/terminal-local state from previous runs
             if os.path.exists( path ):
-                shutil.rmtree(path)      
+                shutil.rmtree(path)
             mql5_path = path + "\\MQL5"
             os.makedirs( mql5_path )
             conf_path = path + "\\config"
