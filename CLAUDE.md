@@ -19,6 +19,10 @@ This file is intentionally short — a map, not the content. Details live in `do
   sketches, rejected alternatives) behind everything condensed in the docs above. Read this
   for anything not fully covered by the focused docs.
 
+**Any of these files can grow long enough to be silently truncated** by the
+`<system-reminder>` auto-injection (look for a `[N lines truncated]` marker). If you see one,
+`Read` the real file directly before answering — don't answer from a truncated excerpt.
+
 ## Guardrails
 
 - **Never expose or commit** credentials, `config/common.ini`, per-user account JSON files
@@ -35,10 +39,6 @@ A fresh session has no memory of what was discussed last time. For any "recap" /
 state of X" / "summarize the project" request: check `docs/changelog.md` for recent
 milestones and `git log` for anything not yet documented there — don't rely on the doc map
 alone being current.
-
-**Any of these files can grow long enough to be silently truncated** by the
-`<system-reminder>` auto-injection (look for a `[N lines truncated]` marker). If you see one,
-`Read` the real file directly before answering — don't answer from a truncated excerpt.
 
 ## Maintaining this documentation
 
