@@ -13,9 +13,11 @@ Read the relevant document before working:
 - `docs/changelog.md` for dated, one-line implementation milestones, newest first.
 - `docs/repository-notes.md` for full historical detail behind everything condensed in the other docs (root-cause investigations, design sketches, rejected alternatives — not just tick-cache).
 
+If a documentation file appears truncated or incomplete, read the file directly before relying on it.
+
 Never expose or commit credentials, `config/common.ini`, per-user account JSON files, terminal binaries, or compiler logs. Write compiler logs to `C:\fuzzyalgo\logs\`. MQL5 source edits affect all provisioned MT5 accounts because their MQL5 directories are symlinked to this repository.
 
-Keep changes focused, preserve existing behavior unless the task requires otherwise, and validate Python changes with the relevant script or MQL5 changes by compiling the relevant script and inspecting its output.
+Keep changes focused, preserve existing behavior unless the task requires otherwise, and validate Python changes with the relevant script or MQL5 changes by compiling the relevant script and inspecting the compile log's `Result:` line.
 
 Keep the documentation current as you work, rather than leaving new information only in conversation/PR history:
 
