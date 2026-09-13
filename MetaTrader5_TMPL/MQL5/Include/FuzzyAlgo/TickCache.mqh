@@ -16,7 +16,7 @@
 //+------------------------------------------------------------------+
 //| Midnight-to-next-midnight bounds (ms) for in_time_msc's calendar |
 //| day. Shared by variables.mqh's DAY branch and this file's cache  |
-//| keying, so both agree on what "a day" means.                    |
+//| keying, so both agree on what "a day" means.                     |
 //+------------------------------------------------------------------+
 void GetDayBoundsMsc_g(const long in_time_msc, long &out_start_msc, long &out_end_msc)
 {
@@ -76,7 +76,7 @@ bool TickCacheFileExists_g(const string symbol, const long day_start_msc)
 //| Writes arr[] to filename as CSV (header + one row per tick),     |
 //| following the FileOpen(FILE_WRITE|FILE_CSV|FILE_ANSI) pattern    |
 //| already used for CSV output in Ticks.mq5. bid/ask/last are       |
-//| written at full round-trip precision (see                       |
+//| written at full round-trip precision (see                        |
 //| TICK_CACHE_ROUNDTRIP_DIGITS_G above), not the symbol's display   |
 //| digits - this file's caller-supplied `digits` is only used for   |
 //| the (unrelated) volume/volume_real-adjacent Print/diagnostic     |
@@ -259,7 +259,7 @@ int TickCacheLowerBound_g(const MqlTick &cache_ticks[], const long target_msc)
 //| use_cache is true, slices from the symbol+day's cached tick      |
 //| array instead of hitting the terminal's tick store - never falls |
 //| back to native, so any cache problem (window spanning two        |
-//| calendar days, load failure) is surfaced as a negative return     |
+//| calendar days, load failure) is surfaced as a negative return    |
 //| rather than silently masked.                                     |
 //+------------------------------------------------------------------+
 int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const long to_msc, const bool use_cache, const int debug)
@@ -289,7 +289,7 @@ int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS 
 //| Drop-in replacement for the native CopyTicks. Only ever called   |
 //| with count==1 in this codebase (single latest-tick-at-or-after   |
 //| lookups for c0). When use_cache is true, any count other than 1, |
-//| a window outside the cached day, or a cache load failure is       |
+//| a window outside the cached day, or a cache load failure is      |
 //| surfaced as a negative return - no native fallback.              |
 //+------------------------------------------------------------------+
 int CopyTicks_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const int count, const bool use_cache, const int debug)
