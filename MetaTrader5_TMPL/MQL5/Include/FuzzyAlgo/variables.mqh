@@ -997,9 +997,10 @@ struct sGlobalVars
     datetime time_msc;
     sRefPoint ref_point;
     sSymbolVars sSym[];
+    long elapsed_us; // wall time (us) of the most recent sGlobalVarsImpl() call (tick fetch/resum) - 0 if never built (default ctor)
 
     // empty default constructor - used for ArrayResize with non initialised sGlobalVars
-    sGlobalVars() : time_msc(0)
+    sGlobalVars() : time_msc(0), elapsed_us(0)
     {
         // Print( " sGlobalVars(): ", time_msc);
     }
@@ -1042,12 +1043,15 @@ struct sGlobalVars
 
     void sGlobalVarsImpl()
     {
+        ulong start_us = GetMicrosecondCount();
 
         ArrayResize(sSym, c.SYMBOLS_num);
         for (int cnt = 0; cnt < c.SYMBOLS_num; cnt++)
         {
             sSym[cnt].init(time_msc, c.SYMBOLS_arr[cnt], cnt, ref_point, c);
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
+
+        elapsed_us = (long)(GetMicrosecondCount() - start_us);
     }
 
 }; // struct sGlobalVars;
@@ -1283,23 +1287,33 @@ private:
     }
 
 public:
+    long elapsed_us; // wall time (us) of the most recent init/AddBuf/TryGet call on this instance
+
     sRingBuf()
     {
         m_capacity = 0;
         m_head = 0;
         m_count = 0;
         m_indexNewest = true;
+        elapsed_us = 0;
     }
 
     bool init(const int &capacity, const bool &indexNewest)
     {
+        ulong start_us = GetMicrosecondCount();
+
         if (capacity <= 0)
+        {
+            elapsed_us = (long)(GetMicrosecondCount() - start_us);
             return false;
+        }
         m_capacity = capacity;
         ArrayResize(m_buf, m_capacity);
         m_head = 0;
         m_count = 0;
         m_indexNewest = indexNewest;
+
+        elapsed_us = (long)(GetMicrosecondCount() - start_us);
         return true;
     }
 
@@ -1309,12 +1323,16 @@ public:
     // O(1) add
     void AddBuf(const T &item)
     {
+        ulong start_us = GetMicrosecondCount();
+
         m_buf[m_head] = item;
         m_head++;
         if (m_head >= m_capacity)
             m_head = 0;
         if (m_count < m_capacity)
             m_count++;
+
+        elapsed_us = (long)(GetMicrosecondCount() - start_us);
     }
 
     // Overwrite last (update current tick)
@@ -1332,13 +1350,19 @@ public:
     }
 
     // TryGet pattern: returns true and fills out when index valid
-    bool TryGet(const int index, T &out) const
+    // `const` dropped - now records elapsed_us, so it can no longer be a
+    // const method. No existing call site invokes TryGet on a const sRingBuf.
+    bool TryGet(const int index, T &out)
     {
+        ulong start_us = GetMicrosecondCount();
+
         int phys = MapLogicalToPhysical(index);
-        if (phys < 0)
-            return false;
-        out = m_buf[phys]; // single copy
-        return true;
+        bool ok = (phys >= 0);
+        if (ok)
+            out = m_buf[phys]; // single copy
+
+        elapsed_us = (long)(GetMicrosecondCount() - start_us);
+        return ok;
     }
 
     /*

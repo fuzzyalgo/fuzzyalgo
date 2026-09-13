@@ -779,3 +779,130 @@ This is explicitly a `doLive=true`-only idea — `SymbolInfoTick` has no cached
 equivalent in `TickCache.mqh`, so it doesn't apply to closed-market/backtest
 runs. Not scheduled; revisit when live-loop cadence/volatility-adaptive
 sampling becomes an active piece of work.
+
+### `sRingBuf<T>` self-timing (`elapsed_us`) and `RunCacheComparisonHarness_g` latency reporting (2026-09-13)
+
+`RunCacheComparisonHarness_g` (`TestVariables.mq5`) already proved native-vs-cache output
+*correctness* (60/60 samples match exactly, see the validation-harness decision above), but had
+no timing at all — the only latency evidence anywhere in the project was the live loop's
+anecdotal `LAT_US` column (`OnStart()`), which showed `LAT_US` growing ~3x over a simulated run
+but never separated *what* was getting slower (tick-fetch/resum cost vs. ring-buffer mechanics)
+or compared native against cached directly.
+
+**Rejected alternatives, in order:**
+
+1. A standalone `sPerfTimer` struct (`Start()`/`ElapsedUs()`), used externally by wrapping
+   arbitrary blocks of caller code, applied to `OnStart()`'s plain live loop. Rejected by the
+   user — wrong target: the live loop isn't where the native-vs-cache comparison lives.
+2. The same `sPerfTimer` struct applied inside `RunCacheComparisonHarness_g`'s sample-build
+   loop, plus a new `CompareGlobalVarsRingBufs_g` function extracting the harness's existing
+   inline comparison loop into a reusable ring-buffer-diff helper. Rejected by the user as
+   "too complicated and overbloated" — introduced two new pieces of surface area
+   (a generic timer type, a new comparison function) for what should be a small, local change.
+
+**What shipped instead**, per the user's own minimal specification: no new struct, no new
+function. `sRingBuf<T>` (`variables.mqh`) now times its own two mutating/reading operations
+internally and exposes the result as a plain public member:
+
+- Added `long elapsed_us;` to `sRingBuf<T>`, initialized to `0` in the constructor.
+- `AddBuf()` wraps its existing body in `GetMicrosecondCount()` before/after and stores the
+  delta in `elapsed_us`. No behavior change to the add itself.
+- `TryGet()` does the same around its existing body. This required dropping `const` from
+  `TryGet`'s signature, since writing `elapsed_us` is a mutation — MQL5 enforces
+  const-correctness on methods same as C++, so a `const` method cannot write an instance
+  member even one unrelated to the struct's logical read-only contract. Checked every call
+  site first (`TestVariables.mq5`, `TestFFT.mq5`, plus the commented-out usage example inside
+  `variables.mqh` itself) — none invoke `TryGet` on a `const`-qualified `sRingBuf`, so dropping
+  `const` is a safe, non-breaking change.
+
+Callers derive whatever combined metric they need by reading `elapsed_us` right after each call
+(the field is overwritten by the *next* call on the same instance, so it must be read
+immediately, exactly matching the existing call pattern of "call, then use the result before
+calling again"):
+
+- **Normal use** (single ring buffer): `AddBuf(...)`'s `elapsed_us` + `TryGet(...)`'s
+  `elapsed_us` reconstructs the same total the old inline
+  `start_us = GetMicrosecondCount(); ...; latency_us = GetMicrosecondCount() - start_us;`
+  pattern measured — minus whatever work happens *between* the `AddBuf`/`TryGet` calls (e.g.
+  `sGlobalVars` construction), which was never inside `sRingBuf<T>` to begin with and is out of
+  scope for this change.
+- **Comparison use** (`RunCacheComparisonHarness_g`): `ring_native` and `ring_cached` are
+  separate instances, so each has its own independent `elapsed_us` — read `ring_native.elapsed_us`
+  right after `ring_native.AddBuf(...)`/`ring_native.TryGet(...)` and `ring_cached.elapsed_us`
+  right after the matching cached call, accumulate both across all 60 samples, and print one
+  native-vs-cached average line for `AddBuf` and one for `TryGet`. The harness's existing
+  `CompareGlobalVars_g`-based correctness diff is untouched — this only adds four accumulators
+  and one `Print`.
+
+This isolates *ring-buffer copy cost* (copying a whole `sGlobalVars` graph — nested `sSymbolVars[]`/
+`sData[]`/dynamic tick arrays — into and out of the ring buffer) from *tick-fetch/resum cost*
+(inside the `sGlobalVars` constructor itself, which dominates and is where the Phase 1/Phase 2
+cache work actually pays off). Verified: `TestVariables.mq5` and `TestFFT.mq5` (the other
+`sRingBuf<T>.TryGet` call site) both compile with 0 errors/0 warnings after dropping `const`.
+
+`init()` got the same treatment, prompted by checking whether the *constructor* (`sRingBuf()`)
+does any allocation - it doesn't, it's plain scalar assignment. `init()` is where
+`ArrayResize(m_buf, m_capacity)` actually allocates the backing array, so that's the one
+timed: same `GetMicrosecondCount()`-before/after pattern, `elapsed_us` set on both the
+early-return (`capacity <= 0`) and success paths. Called once per ring buffer (not in a loop
+like `AddBuf`/`TryGet`), so `RunCacheComparisonHarness_g` just reads
+`ring_native.elapsed_us`/`ring_cached.elapsed_us` directly after each `init()` call — no
+averaging needed - and reports both alongside the `AddBuf`/`TryGet` averages in the same
+`Print`.
+
+**Measured on first run** (`RunCacheComparisonHarness_g`, n=60):
+`AddBuf avg us: native=122.1 cached=112.7 | TryGet avg us: native=102.2 cached=100.9` — total
+ring-buffer overhead per sample is ~215-225us either way. Compare against the live loop's
+`LAT_US` column from the same run (`OnStart()`'s plain loop, same symbol/config, doLive=false):
+values in the 8600-11000us range. The two numbers intentionally measure different scopes and
+were never expected to match — `LAT_US` spans from before `sGlobalVars tmp1(...)` is
+*constructed* through the end of `AddBuf`+`TryGet`, so the ~97-98% of it not accounted for by
+`AddBuf`/`TryGet` is time spent inside the `sGlobalVars` constructor itself (the
+`CopyTicks`/`CopyTicksRange` fetch plus `DAY`/`REF`/`PRO` resum). This confirms the question this
+change set out to answer: **the cache's benefit lives entirely in the tick-fetch/resum layer,
+not the ring-buffer layer** — native and cached `AddBuf`/`TryGet` costs are close (not
+identical, since native/cached ticks-array lengths can differ slightly) because copying an
+already-built struct costs the same regardless of how its data was fetched. Consistent with the
+already-documented `DAY` full-resum cost in `docs/known-issues.md` and motivates Phase 2
+(incremental accumulation) more concretely than the previous anecdotal `LAT_US`-only evidence.
+
+**Extended to `sGlobalVars` itself, same day.** The above confirmed the tick-fetch/resum cost
+dominates but didn't measure it directly — `AddBuf`/`TryGet`/`init` only cover the ring-buffer
+layer, and the harness's sample-build loop calls `sGlobalVars g_native(time_msc, sr,
+cfg_native)`/`g_cached(...)` directly, outside any `sRingBuf<T>` method. The user asked for the
+same `elapsed_us` pattern one level up ("we need the constructor as well with self timing
+sGlobalVars and/or sGlobalVarsImpl because sometimes .init is not called, then everything runs
+in constructor"), correctly identifying that `sGlobalVars` has no separately-callable `.init()`
+analogous to `sRingBuf<T>`'s — its three parameterized constructors (1/2/3-arg) each call
+`sGlobalVarsImpl()` directly from the constructor body, so timing had to live inside
+`sGlobalVarsImpl()` itself, not a method that might not run.
+
+Shipped: added `long elapsed_us;` to `sGlobalVars`, set to `0` in the empty default constructor
+(used only for `ArrayResize` placeholders — never calls `sGlobalVarsImpl()`, so it stays
+untimed by design, mirroring `sRingBuf()`'s own no-allocation constructor above). Wrapped
+`sGlobalVarsImpl()`'s existing body (`ArrayResize(sSym, c.SYMBOLS_num)` + the per-symbol
+`sSym[cnt].init(...)` loop — the actual `CopyTicks`/`CopyTicksRange` fetch and resum work) in
+the same `GetMicrosecondCount()`-before/after pattern. No new struct, no new function — same
+minimal shape as every prior extension of this pattern.
+
+`RunCacheComparisonHarness_g` reads `g_native.elapsed_us`/`g_cached.elapsed_us` immediately
+after each construction, accumulates native/cached totals across all 60 samples, and reports
+the averages in the same `Print` line as `init`/`AddBuf`/`TryGet` (new `build avg us` field).
+This finally gives the harness a direct, measured native-vs-cached build-time number instead of
+inferring it as "whatever `LAT_US` doesn't explain." Verified: `TestVariables.mq5` and
+`TestFFT.mq5` both compile with 0 errors/0 warnings after this change (`TestFFT.mq5` doesn't use
+`sGlobalVars`'s 3-arg constructor or `elapsed_us` at all, so it was only reconfirmed as an
+unaffected control, not expected to change).
+
+**Measured on first run with `build avg us` wired in**: `cache-cmp init us: native=186 cached=141
+| build avg us: native=8343.8 cached=1378.2 | AddBuf avg us: native=105.2 cached=88.5 | TryGet
+avg us: native=81.4 cached=85.2 (n=60)`. This is the direct measurement the whole instrumentation
+chain (init → AddBuf/TryGet → build) was built to produce: native `sGlobalVars` construction
+costs ~8.3ms per sample, cached costs ~1.4ms — a ~6x reduction, and it accounts for essentially
+all of the previously-unexplained gap between `AddBuf`/`TryGet` (~100us each, native≈cached, as
+expected — copy cost doesn't depend on fetch method) and the live loop's anecdotal `LAT_US`
+(~8.6-11ms). Confirms empirically, not just anecdotally, that the tick cache's benefit is real
+and concentrated entirely in the tick-fetch/resum layer — directly supports prioritizing Phase 2
+(incremental accumulation) as the next latency win, since even the cached path's remaining
+~1.4ms is presumably still dominated by `DAY`'s full-window resum (the one part Phase 1 doesn't
+touch).

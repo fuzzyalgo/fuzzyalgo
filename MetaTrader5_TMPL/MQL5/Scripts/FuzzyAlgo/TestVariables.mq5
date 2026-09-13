@@ -37,7 +37,12 @@ void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
 
     sRingBuf<sGlobalVars> ring_native, ring_cached;
     ring_native.init(ring_buf_num, false);
+    long native_init_us = ring_native.elapsed_us;
     ring_cached.init(ring_buf_num, false);
+    long cached_init_us = ring_cached.elapsed_us;
+
+    long total_native_add_us = 0, total_cached_add_us = 0;
+    long total_native_build_us = 0, total_cached_build_us = 0;
 
     // sr's ref point is anchored at in_time_msc (see OnStart's sr_harness
     // construction), and REF's window is [ref_point_time, sample_time] - so
@@ -49,23 +54,41 @@ void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
     {
         long time_msc = in_time_msc + min_cnt * 60 * 1000;
         sGlobalVars g_native(time_msc, sr, cfg_native);
+        total_native_build_us += g_native.elapsed_us;
         sGlobalVars g_cached(time_msc, sr, cfg_cached);
+        total_cached_build_us += g_cached.elapsed_us;
+
         ring_native.AddBuf(g_native);
+        total_native_add_us += ring_native.elapsed_us;
+
         ring_cached.AddBuf(g_cached);
+        total_cached_add_us += ring_cached.elapsed_us;
     }
 
     int total = 0;
+    long total_native_get_us = 0, total_cached_get_us = 0;
     for (int i = 0; i < ring_buf_num; i++)
     {
         sGlobalVars native, cached;
+
         ring_native.TryGet(i, native);
+        total_native_get_us += ring_native.elapsed_us;
+
         ring_cached.TryGet(i, cached);
+        total_cached_get_us += ring_cached.elapsed_us;
 
         string label = StringFormat("%s.%03d",
                                     TimeToString(native.time_msc / 1000, TIME_DATE | TIME_SECONDS),
                                     native.time_msc % 1000);
         total += CompareGlobalVars_g(native, cached, label);
     }
+
+    Print(StringFormat("cache-cmp init us: native=%d cached=%d | build avg us: native=%.1f cached=%.1f | AddBuf avg us: native=%.1f cached=%.1f | TryGet avg us: native=%.1f cached=%.1f (n=%d)",
+                        native_init_us, cached_init_us,
+                        (double)total_native_build_us / ring_buf_num, (double)total_cached_build_us / ring_buf_num,
+                        (double)total_native_add_us / ring_buf_num, (double)total_cached_add_us / ring_buf_num,
+                        (double)total_native_get_us / ring_buf_num, (double)total_cached_get_us / ring_buf_num,
+                        ring_buf_num));
 
     if (0 == total)
         Print("ALL ", ring_buf_num, " SAMPLES MATCH EXACTLY");
