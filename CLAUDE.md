@@ -19,6 +19,16 @@ This file is intentionally short — a map, not the content. Details live in `do
   sketches, rejected alternatives) behind everything condensed in the docs above. Read this
   for anything not fully covered by the focused docs.
 
+## Guardrails
+
+- **Never expose or commit** credentials, `config/common.ini`, per-user account JSON files
+  (`cf_*.json`), terminal binaries, or compiler logs.
+- Compiler logs go to `C:\fuzzyalgo\logs\`, outside the repo — see `docs/mql5-development.md`.
+- MQL5 source edits affect **every provisioned MT5 account**: their `MQL5/` directories are
+  symlinked back to this repo — see `docs/architecture.md`.
+- Validate before calling a change done: run the relevant Python script, or compile the
+  relevant MQL5 script and inspect the compile log's `Result:` line.
+
 ## Recap / `/init` instruction
 
 A fresh session has no memory of what was discussed last time. For any "recap" / "what's the

@@ -1,49 +1,26 @@
-# GitHub Copilot Instructions
+# Copilot instructions
 
-This file provides guidance to GitHub Copilot when working with code in this repository: a
-fuzzy-logic FX trading strategy implemented twice, independently, in Python and MQL5.
+Follow the repository guidance in `CLAUDE.md` and the focused documents under `docs/`.
 
-This file is intentionally short — a map, not the content. Details live in `docs/`:
+This repository contains two independent systems: Python under `Lib/algotrader/` and MQL5 under `MetaTrader5_TMPL/MQL5/`. Do not assume they share code or validation tooling.
 
-- **`docs/architecture.md`** — subsystem boundaries, core data structures. Read when you need
-  to understand where something lives before making a change.
-- **`docs/mql5-development.md`** — compiling MQL5 scripts, running the MetaTrader terminal.
-  Read before compiling or running anything under `MetaTrader5_TMPL/`.
-- **`docs/known-issues.md`** — open bugs and planned/deferred work. Read before starting new
-  work on `TestVariables.mq5`/`variables.mqh`, to check if it's already known or planned.
-- **`docs/design-decisions.md`** — settled technical decisions and why. Read before
-  questioning or reversing something that looks like a past decision.
-- **`docs/changelog.md`** — dated, one-line implementation milestones, newest first.
-- **`docs/repository-notes.md`** — full historical detail (root-cause investigations, design
-  sketches, rejected alternatives) behind everything condensed in the docs above. Read this
-  for anything not fully covered by the focused docs.
+Read the relevant document before working:
 
-## Recap instruction
+- `docs/architecture.md` for subsystem boundaries and core structures.
+- `docs/mql5-development.md` for MQL5 compilation and terminal execution.
+- `docs/known-issues.md` for current unresolved behavior.
+- `docs/design-decisions.md` before revisiting settled choices.
+- `docs/changelog.md` for dated, one-line implementation milestones, newest first.
+- `docs/repository-notes.md` for full historical detail behind everything condensed in the other docs (root-cause investigations, design sketches, rejected alternatives — not just tick-cache).
 
-A fresh session has no memory of what was discussed last time. For any "recap" / "what's the
-state of X" / "summarize the project" request: check `docs/changelog.md` for recent
-milestones and `git log` for anything not yet documented there — don't rely on the doc map
-alone being current.
+Never expose or commit credentials, `config/common.ini`, per-user account JSON files, terminal binaries, or compiler logs. Write compiler logs to `C:\fuzzyalgo\logs\`. MQL5 source edits affect all provisioned MT5 accounts because their MQL5 directories are symlinked to this repository.
 
-**Any of these files can grow long.** If a doc looks partial or you're unsure you're seeing
-all of it, read the file directly rather than answering from a truncated or cached view.
+Keep changes focused, preserve existing behavior unless the task requires otherwise, and validate Python changes with the relevant script or MQL5 changes by compiling the relevant script and inspecting its output.
 
-## Maintaining this documentation
+Keep the documentation current as you work, rather than leaving new information only in conversation/PR history:
 
-When you produce new information worth keeping, write it to the matching file immediately —
-don't leave it only in conversation history:
-
-- **New bug/regression found, not yet fixed** → append to `docs/known-issues.md` under
-  "Open issues."
-- **New future idea/plan sketched, not yet implemented** → append to `docs/known-issues.md`
-  under "Planned / deferred work."
-- **A bug gets fixed, or a design question gets settled** →
-  1. append the full root-cause reasoning / rationale to `docs/repository-notes.md`,
-  2. add the condensed decision + a pointer into `docs/design-decisions.md`,
-  3. add a one-line dated entry (newest first) to `docs/changelog.md`, and
-  4. remove/update the corresponding entry in `docs/known-issues.md` if it was tracked there.
-- **Subsystem boundaries, core data structures, or major files added/changed/removed** →
-  update `docs/architecture.md` directly.
-- **Compile/run/tooling procedure changes** → update `docs/mql5-development.md` directly.
-- **Any real milestone** (not a pure doc correction) → always gets a `docs/changelog.md`
-  line, even if its full detail lives elsewhere.
+- New bug found, or a new idea sketched but not yet implemented → append to `docs/known-issues.md`.
+- A bug fixed, or a design question settled → append the full reasoning to `docs/repository-notes.md`, add the condensed decision to `docs/design-decisions.md`, add a dated one-line entry (newest first) to `docs/changelog.md`, and remove/update the corresponding `docs/known-issues.md` entry.
+- Subsystem boundaries, core data structures, or major files added/changed/removed → update `docs/architecture.md`.
+- Compile/run/tooling procedure changes → update `docs/mql5-development.md`.
+- Any real milestone, even with detail living elsewhere → always add a line to `docs/changelog.md`.
