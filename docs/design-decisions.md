@@ -54,3 +54,27 @@ rejected three DLL-free alternatives:
 Decision: keep the `GetSystemTime` DLL import; accept "Allow DLL imports" as a requirement
 for `doLive=true` runs. Revisit if a native option surfaces. Full rejection reasoning:
 `docs/repository-notes.md`.
+
+## `sRingBuf<T>` self-times via a plain `elapsed_us` member, not a separate timer type (2026-09-13)
+
+Latency instrumentation for `RunCacheComparisonHarness_g`'s native-vs-cache comparison was
+built directly into `sRingBuf<T>`'s existing `init`/`AddBuf`/`TryGet` methods (each wraps its
+own body in `GetMicrosecondCount()` and stores the delta in a public `elapsed_us` member),
+instead of a
+standalone `sPerfTimer` wrapper struct or a new `CompareGlobalVarsRingBufs_g` comparison
+function — both were tried first and rejected as overbuilt for what should be a small, local
+change. `TryGet` lost its `const` qualifier as a result (writing `elapsed_us` is a mutation);
+checked every call site first, none rely on `TryGet` being callable on a `const` instance.
+Callers sum/compare `elapsed_us` inline (read immediately after each call, before the next call
+on the same instance overwrites it) rather than through any new abstraction. Full rationale and
+rejected alternatives: `docs/repository-notes.md`.
+
+Same pattern extended to `sGlobalVars` on 2026-09-13: a public `elapsed_us` member timing
+`sGlobalVarsImpl()`'s body (the `ArrayResize(sSym, ...)` + per-symbol `sSym[cnt].init(...)` loop
+— the actual tick-fetch/resum work). Needed because `sGlobalVars`'s heavy lifting runs from
+inside its parameterized constructors, not a separately-callable `.init()` like `sRingBuf<T>`
+has — so timing had to move to where the constructor's real work happens
+(`sGlobalVarsImpl()`), not stay bolted onto a method that's sometimes skipped. The empty
+default constructor (used for `ArrayResize` placeholders) sets `elapsed_us(0)` and never calls
+`sGlobalVarsImpl()`, so it stays untimed/zero as before. `RunCacheComparisonHarness_g` now
+reports native-vs-cached `sGlobalVars` build averages alongside `init`/`AddBuf`/`TryGet`.
