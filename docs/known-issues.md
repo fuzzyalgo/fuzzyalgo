@@ -38,13 +38,16 @@ you're seeing is already known, and before starting new work, to check what's al
   cached mode remains, because the live buffer's own fetch is still O(day-so-far) per
   sample. Phase 2 would close this gap for live mode too. Full numbers and analysis:
   `docs/repository-notes.md`.
-- **Live-buffer call-count reduction not yet directly measured** (as of 2026-09-14): the
-  live-buffer batching feature's core claim — N native `CopyTicksRange`/`CopyTicks` calls
-  per symbol per sample collapsing to 1 — has only been verified for *correctness*
-  (`ALL 60 SAMPLES MATCH EXACTLY` against the historical CSV cache), not for the actual
-  native-call-count reduction. Verifying this needs `I_DEBUG>=1`'s
-  `[LiveTickBuffer] ... to_msc=... ticks=...` print (fires once per buffer refresh) counted
-  against the number of period branches configured, across a live/demo run.
+- **Live-buffer call-count reduction is verified for the deterministic harness; real live
+  monitoring remains optional** (verified 2026-09-14): with one symbol, 60 samples, and
+  `I_DEBUG=1`, the harness emitted exactly 60 `[LiveTickBuffer]` refresh lines with unique
+  `to_msc` values from 15:00 through 15:59. The configured `PRO:REF:DAY:S3600` period set
+  therefore reused one live-buffer refresh across the bounded range requests for each sample,
+  rather than refreshing once per period. The same run reported `ALL 60 SAMPLES MATCH EXACTLY`.
+  This verifies the batching behavior in the deterministic closed-time harness while
+  `USE_TICK_CACHE=false`; it is not a separate wall-clock `doLive=true` observation. The
+  remaining performance issue is not call count but that each refresh still rescans the full
+  `[day_start, to_msc]` range; see the Phase 2 item above.
 - **`GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal** (sketched
   2026-09-11, not implemented). Idea: use `delta_msc = GetSystemTimeMsc() - tick.time_msc`
   per symbol to detect connectivity problems, skip resampling idle symbols, or trigger

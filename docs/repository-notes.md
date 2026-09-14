@@ -1132,3 +1132,35 @@ and concentrated entirely in the tick-fetch/resum layer — directly supports pr
 (incremental accumulation) as the next latency win, since even the cached path's remaining
 ~1.4ms is presumably still dominated by `DAY`'s full-window resum (the one part Phase 1 doesn't
 touch).
+
+### Live-buffer refresh count verification (2026-09-14)
+
+The remaining direct verification item for the live-mode batching change was to count the
+existing `[LiveTickBuffer]` diagnostic lines. The diagnostic is emitted only by
+`FindOrRefreshLiveBuffer_g` after an actual native buffer refresh; period branches that reuse
+the already-fetched buffer are silent. Therefore the line count distinguishes one shared
+refresh per sample from one refresh per configured period.
+
+`RunCacheComparisonHarness_g` was run with `I_DEBUG=1`, one symbol (`EURUSD`), 60 samples from
+15:00:00 through 15:59:00, and periods `PRO:REF:DAY:S3600`. The run emitted exactly 60
+`[LiveTickBuffer] EURUSD` lines. Their `to_msc` values were unique and increased by exactly
+60,000 milliseconds from the first sample to the last. There were no duplicate refreshes for
+the four configured period keys.
+
+The same run printed `ALL 60 SAMPLES MATCH EXACTLY`. This establishes both points needed for
+the batching claim in the deterministic harness: bounded range requests for the same symbol
+and sample share one live-buffer refresh, and the reuse preserves the native-versus-cached
+ring-buffer results. It is important that this was the harness's historical-time run with
+`USE_TICK_CACHE=false`, not a separate wall-clock `doLive=true` run; it exercises the live
+buffer implementation deterministically without claiming to test live clock scheduling.
+
+The count does not include `CopyTicks_g`'s single-tick `c0` lookup, which intentionally remains
+a direct native `CopyTicks` call after the regression described above. The confirmed result is
+therefore one `CopyTicksRange`-backed live-buffer refresh per symbol and sample for the bounded
+range requests, not one total native tick API call of every kind.
+
+The remaining performance issue is visible in the same log and in the build timings: native
+`sGlobalVars` construction averaged 11,003.9us versus 2,336.2us cached, while `AddBuf` and
+`TryGet` remained around 100us each. The live buffer still fetches the complete
+`[day_start, to_msc]` range on every newer sample, so the next optimization target remains
+incremental accumulation/extension rather than further period-level batching.
