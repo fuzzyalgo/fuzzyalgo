@@ -28,6 +28,23 @@ you're seeing is already known, and before starting new work, to check what's al
   path is planned first). Removes the resum cost described in the DAY issue above by
   maintaining running aggregates instead of resumming from scratch every sample. Full design
   sketch, correctness-risk analysis, and validation plan: `docs/repository-notes.md`.
+  **Now also covers live mode's per-sample tick buffer** (`FindOrRefreshLiveBuffer_g`,
+  `TickCache.mqh`, added 2026-09-14): its single fetch-per-sample still rescans
+  `[day_start, to_msc]` in full every time `to_msc` advances, so it has the same
+  growing-cost profile as DAY, just now underneath every period instead of only DAY's own
+  branch. Measured 2026-09-14: `build avg us` (full per-sample `sGlobalVars` construction)
+  improved from a pre-batching baseline of native=8343.8/cached=1378.2 to
+  native=5699.5/cached=1418.8 — batching cut ~32% off native's cost, but the ~4x gap to
+  cached mode remains, because the live buffer's own fetch is still O(day-so-far) per
+  sample. Phase 2 would close this gap for live mode too. Full numbers and analysis:
+  `docs/repository-notes.md`.
+- **Live-buffer call-count reduction not yet directly measured** (as of 2026-09-14): the
+  live-buffer batching feature's core claim — N native `CopyTicksRange`/`CopyTicks` calls
+  per symbol per sample collapsing to 1 — has only been verified for *correctness*
+  (`ALL 60 SAMPLES MATCH EXACTLY` against the historical CSV cache), not for the actual
+  native-call-count reduction. Verifying this needs `I_DEBUG>=1`'s
+  `[LiveTickBuffer] ... to_msc=... ticks=...` print (fires once per buffer refresh) counted
+  against the number of period branches configured, across a live/demo run.
 - **`GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal** (sketched
   2026-09-11, not implemented). Idea: use `delta_msc = GetSystemTimeMsc() - tick.time_msc`
   per symbol to detect connectivity problems, skip resampling idle symbols, or trigger
