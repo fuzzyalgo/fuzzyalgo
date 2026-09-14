@@ -43,7 +43,7 @@ input ENUM_COPY_TICKS I_COPY_TICKS_FLAG = COPY_TICKS_TIME_MS; // COPY_TICKS_INFO
 // those call sites and docs/repository-notes.md's Tick cache section for what RTFP is for).
 // Level 2 is chatty (one Print per tick-array sample) - fine for a short
 // closed-market comparison run, too noisy to leave on by default.
-input int I_DEBUG = 0;                                        // enable debug output (0=off, 1=period debug, 2=+tick-cache RTFP diagnostics)
+input int I_DEBUG = 1;                                        // enable debug output (0=off, 1=period debug, 2=+tick-cache RTFP diagnostics)
 input bool I_USE_TICK_CACHE = false;                           // replay ticks from CSV cache instead of CopyTicks(Range) - closed-market/backtest use only, flip to false before live/EA use
 input int I_EVENT_TIMER_INTERVAL_MSC = 1000;                  // Event Timer Interval in milliseconds
 
