@@ -6,6 +6,9 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-14** — verified live-buffer batching: `I_DEBUG=1` produced 60 unique refreshes
+  for 60 harness samples (one per sample, not one per period), with `ALL 60 SAMPLES MATCH
+  EXACTLY`; the remaining cost is the full day-to-sample rescan on each refresh.
 - **2026-09-14** — Re-measured native-vs-cached `build avg us` (full per-sample `sGlobalVars`
   construction) after the `CopyTicks_g` fix above: native=5699.5us, cached=1418.8us, vs a
   pre-batching baseline of native=8343.8us/cached=1378.2us — the live-buffer batching cut

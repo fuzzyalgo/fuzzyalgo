@@ -55,6 +55,20 @@ Decision: keep the `GetSystemTime` DLL import; accept "Allow DLL imports" as a r
 for `doLive=true` runs. Revisit if a native option surfaces. Full rejection reasoning:
 `docs/repository-notes.md`.
 
+## Live-buffer refresh count verified in the 60-sample harness (2026-09-14)
+
+With `I_DEBUG=1`, the one-symbol `PRO:REF:DAY:S3600` harness emitted exactly 60
+`[LiveTickBuffer]` lines for its 60 samples, with unique `to_msc` values from 15:00 through
+15:59. The bounded range requests therefore shared one live-buffer refresh per sample rather
+than refreshing once per configured period. The harness also reported `ALL 60 SAMPLES MATCH
+EXACTLY`, confirming that the reuse did not alter native-versus-cached results.
+
+This verifies the batching claim in the deterministic harness with `USE_TICK_CACHE=false`; it
+does not claim a separate wall-clock `doLive=true` run. `CopyTicks_g`'s single-tick `c0` lookup
+remains a direct native call and is outside this bounded-range refresh count. The remaining
+performance problem is the full day-start-to-sample rescan performed by each refresh, not an
+extra refresh per period. Full evidence: `docs/repository-notes.md`.
+
 ## `sRingBuf<T>` self-times via a plain `elapsed_us` member, not a separate timer type (2026-09-13)
 
 Latency instrumentation for `RunCacheComparisonHarness_g`'s native-vs-cache comparison was
