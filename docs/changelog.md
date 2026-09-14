@@ -6,6 +6,27 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-14** — Re-measured native-vs-cached `build avg us` (full per-sample `sGlobalVars`
+  construction) after the `CopyTicks_g` fix above: native=5699.5us, cached=1418.8us, vs a
+  pre-batching baseline of native=8343.8us/cached=1378.2us — the live-buffer batching cut
+  ~32% off native's per-sample cost, but the ~4x gap to cached mode remains, since the live
+  buffer's single fetch still rescans `[day_start, to_msc]` in full every sample (same
+  growing-cost shape as the DAY period issue). Logged as an extension of the existing Phase 2
+  plan in [known-issues.md](known-issues.md); the "N calls collapse to 1" claim itself is
+  still unverified by direct call-count measurement.
+- **2026-09-14** — Fixed a bug in the live-mode tick-fetch batching below: `CopyTicks_g`'s
+  `use_cache=false` branch routed PRO's/REF's single-tick `c0` lookup through the new live
+  buffer, but that buffer only supports bounded-range queries, not the open-ended forward
+  search `CopyTicks_g` needs — caused `c0` to read `0` on 60/60 harness samples in the first
+  live/demo run. Reverted that branch to always call native `CopyTicks` directly (see
+  [design-decisions.md](design-decisions.md)). Compiled clean (0 errors/0 warnings); re-ran the
+  harness afterward — `ALL 60 SAMPLES MATCH EXACTLY`, 0 mismatches.
+- **2026-09-14** — Live-mode (`I_USE_TICK_CACHE=false`) tick fetching batched: a new
+  `sLiveTickBuffer`/`g_live_tick_buffers`/`FindOrRefreshLiveBuffer_g` layer in `TickCache.mqh`
+  collapses N native `CopyTicksRange`/`CopyTicks` calls per symbol per sample (one per
+  configured period) down to 1, mirroring the "one fetch, many slices" pattern cache mode
+  already had via `g_tick_day_caches` (see [design-decisions.md](design-decisions.md)). No
+  changes needed to `variables.mqh` or any call site. Compiled clean (0 errors/0 warnings).
 - **2026-09-13** — `sGlobalVars` now self-times its own construction: a public `elapsed_us`
   member set inside `sGlobalVarsImpl()` (the tick-fetch/resum work every parameterized
   constructor calls directly, since `sGlobalVars` has no separate `.init()`);

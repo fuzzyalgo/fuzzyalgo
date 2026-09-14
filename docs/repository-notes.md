@@ -780,6 +780,232 @@ equivalent in `TickCache.mqh`, so it doesn't apply to closed-market/backtest
 runs. Not scheduled; revisit when live-loop cadence/volatility-adaptive
 sampling becomes an active piece of work.
 
+### Live-mode per-sample tick buffer: collapsing N native `CopyTicksRange` calls per sample down to 1 (implemented and compiled clean 2026-09-14)
+
+#### Problem
+
+`init_ticks_arr_g` (`variables.mqh`) calls `CopyTicksRange_g`/`CopyTicks_g` once per period
+branch (PRO, REF, DAY, each `S<n>`/`T<n>` in `I_PERIODS`) for every symbol, every sample. For
+`use_cache=true` (closed-market/backtest) this was already cheap — Phase 1's `TickCache.mqh`
+loads a symbol+day's ticks from CSV into `g_tick_day_caches[]` once and every subsequent call
+just binary-searches/slices that in-memory array (`TickCacheLowerBound_g` + `ArrayCopy`). But
+for `use_cache=false` (live mode, `doLive=true` in `TestVariables.mq5`), every single period
+branch fell straight through to a **native** `CopyTicksRange`/`CopyTicks` call against the
+terminal's tick store — i.e. with N periods configured, N native calls per symbol per sample,
+even though every one of those calls shares the same `to_msc` (`in_time_msc`) within one
+sample and most of them (PRO/REF/DAY, plus any `S<n>` window) are subsets of the same
+`[day_start(in_time_msc), in_time_msc]` range. This is exactly the same "day-level" batching
+opportunity Phase 1 already exploited for cache mode, just never extended to live mode.
+
+Raised by the user directly: "CopyTicksRange_g is called too often, it shall be called once
+per symbol for the whole day and then the actual MQL array shall be used that was retrieved
+once for the sub periods" — with an explicit distinction between live and
+cache/backtest/history modes:
+- **Live mode**: `CopyTicksRange` should be called once per `time_msc` sample (fetching
+  `[day_start, now]`), then sliced in memory for every period. No accumulation/incremental
+  fetching implemented yet (see the Phase 2 plan above for a related, larger idea) — "for now
+  every time_msc one fetch of day ticks is done."
+- **Cache/backtest/history mode**: the fetch + CSV-write + in-memory population should happen
+  once per historic trading day, on the very first `time_msc` sample of that day; every
+  subsequent `time_msc` for the same day reuses the already-populated array. This is precisely
+  what `g_tick_day_caches[]`/`FindOrLoadDayCache_g` already do — confirmed during planning that
+  **no change was needed on the cache-mode side**, only live mode was missing the equivalent
+  mechanism.
+
+One design point the user corrected explicitly during planning: an earlier draft of this plan
+considered widening the day-window fetch to cover an open position's opening time when it
+predates the current trading day (a "PRO anchor extension"). The user clarified this is wrong
+— **PRO is a period like any other period**; it is empty when there is no open position, and
+when a position is open, PRO runs from the position's open time to `in_time_msc`, using
+whatever data is available in that window. No special widening of the master fetch window for
+PRO was implemented.
+
+#### Design considered and rejected: restructuring `variables.mqh`
+
+The first plan sketched touching `sSymbolVars`/`sDataVars`/`init_ticks_arr_g` directly — adding
+a `master_ticks[]` array to `sSymbolVars`, fetching it once in `sSymbolVars::init`, and
+refactoring every period branch in `init_ticks_arr_g` to slice from a passed-in master array
+instead of calling `CopyTicksRange_g`/`CopyTicks_g` itself. Rejected in favor of a narrower fix
+once it became clear the *cache-mode* side of this exact pattern already exists one layer
+down, inside `TickCache.mqh` — `CopyTicksRange_g`/`CopyTicks_g` already present one drop-in
+API to every call site in `variables.mqh` regardless of `use_cache`, and every one of those
+call sites already passes the same `to_msc`/`from_msc` (`in_time_msc`) per sample. Extending
+the *live* branch of that same API to do the equivalent "one fetch, many slices" batching
+requires zero changes to `variables.mqh`, `sSymbolVars`, `sDataVars`, `TestVariables.mq5`, or
+`TestTickCacheDiff.mq5` — the optimization is fully containable inside `TickCache.mqh`.
+
+#### Implementation
+
+Added a live-mode counterpart to `sTickDayCache`/`g_tick_day_caches`/`FindOrLoadDayCache_g`,
+all in `TickCache.mqh`:
+
+- **`sLiveTickBuffer`** (`symbol`, `day_start_msc`, `last_to_msc`, `ticks[]`) +
+  file-scope `g_live_tick_buffers[]` — one slot per symbol, holding "today's ticks from
+  day-start up to the last `to_msc` this buffer was fetched for." Unlike `sTickDayCache`
+  (immutable once loaded — a historical day's ticks never change), this buffer is designed to
+  keep growing as live time passes.
+- **`FindOrRefreshLiveBuffer_g(symbol, to_msc, flags, debug)`**: finds or creates the symbol's
+  slot; resets it (drops `ticks[]`, `last_to_msc = 0`) if the calendar day has rolled over
+  since it was last used; if `last_to_msc >= to_msc` — i.e. this is not the first period-branch
+  call for this exact `time_msc` sample — returns immediately with **zero native calls**;
+  otherwise issues exactly one `CopyTicksRange(symbol, day_start_msc, to_msc)` and stores the
+  result, updating `last_to_msc`. A real fetch error (`CopyTicksRange` returning negative)
+  returns `-1` without touching the existing buffer contents, so a transient failure doesn't
+  wipe out otherwise-usable data — mirrors `CopyTicksRange_g`'s existing "no silent masking"
+  philosophy for cache-mode failures.
+- **`CopyTicksRange_g`/`CopyTicks_g`**, `use_cache==false` branch: now routes through
+  `FindOrRefreshLiveBuffer_g` + the same `TickCacheLowerBound_g` binary-search slicer already
+  used for cache mode, instead of calling native `CopyTicksRange`/`CopyTicks` directly. One
+  safety fallback: if the requested `from_msc` predates the buffer's `day_start_msc` (e.g. a
+  PRO position opened on an earlier calendar day — the one case explicitly discussed above),
+  that single request bypasses the buffer and calls native directly, rather than widening the
+  buffer's window to accommodate it — keeps the buffer bounded to "today" unconditionally.
+  `CopyTicks_g`'s live branch only takes this path for `count==1` (the only count ever used in
+  this codebase, per the pre-existing comment); any other count also falls through to native
+  directly, unchanged from before.
+
+No changes were needed to `variables.mqh`, `sConfig`, `sSymbolVars`, `sDataVars`,
+`TestVariables.mq5`, or `TestTickCacheDiff.mq5` — every existing call site already calls
+`CopyTicksRange_g(symbol, arr, flags, from_msc, to_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG)`/
+`CopyTicks_g(...)` with the exact same signature; the batching is entirely internal to
+`TickCache.mqh`.
+
+#### Net effect
+
+- **Live mode**: N native `CopyTicksRange` calls per symbol per sample (one per configured
+  period in `I_PERIODS`) collapses to **1** native call per symbol per sample — every period
+  branch (PRO/REF/DAY/`S<n>`) for the same `in_time_msc` now shares one buffer via cheap
+  in-memory binary-search slicing.
+  - `PRO`'s and `REF`'s single-tick `CopyTicks_g` "no window yet" branches (fetching just `c0`
+    when no position/ref-window has elapsed) were originally also routed through the same
+    buffer, but this was reverted — see "Bug found via first live-mode run" below;
+    `CopyTicks_g`'s `use_cache==false` path now always calls native `CopyTicks` directly.
+  - `ENUM_PERIOD_TYPE_TICKS_T`'s retry loop (`inc_cnt` from 5 to 14, `variables.mqh`) calls
+    `CopyTicksRange_g` up to 10 times with a *growing* `from_msc` but the same `to_msc` — each
+    of those retries now also shares the one live buffer instead of issuing up to 10 native
+    calls on its own.
+- **Cache/backtest mode**: unchanged — confirmed already correct at the day-level batching this
+  request asked for (`g_tick_day_caches`/`FindOrLoadDayCache_g`), so no source changes were made
+  to that path at all.
+
+#### Verification
+
+Compiled both `TestVariables.mq5` and `TestTickCacheDiff.mq5` (the two scripts that `#include`
+`TickCache.mqh` and/or call `CopyTicksRange_g`/`CopyTicks_g` directly) via `MetaEditor64.exe` —
+both **0 errors, 0 warnings**. No behavioral/output diff expected for `use_cache=true` runs
+(that path's source is untouched) or for `TestVariables.mq5`'s existing 60-sample cache=false
+vs cache=true validation harness (`RunCacheComparisonHarness_g`) — its cache=false side now
+issues fewer native calls per sample internally, but the *ticks fetched and returned* for any
+given `(from_msc, to_msc)` slice are unchanged (same underlying data, just sourced from one
+shared buffer fetch instead of N independent native fetches covering overlapping ranges). Not
+yet re-run against a live/demo terminal with `doLive=true` and multiple configured periods to
+directly observe the native-call-count reduction (e.g. via `I_DEBUG>=1`'s new
+`[LiveTickBuffer] ... to_msc=... ticks=...` print, which fires once per sample instead of once
+per period) — recommended next validation step before considering this fully closed out.
+
+#### Bug found via first live-mode run, fixed same day (2026-09-14)
+
+The "recommended next validation step" above was run: `TestVariables.mq5`'s
+`RunCacheComparisonHarness_g` (cache=false/native vs cache=true, 60 samples, EURUSD H1) was
+executed against a live/demo terminal with the live-buffer code in place. Result: **every one
+of the 60 samples** reported `EURUSD PRO c0 MISMATCH native=0.000000000000 cached=<real
+price>`, plus one extra `REF c0 MISMATCH` at the very first sample (15:00:00, before REF's
+window had opened) — `61 total mismatches across 60 samples` in the harness's own summary
+line. Every `DAY`/`S3600`/window-based row matched exactly; only the two single-tick `c0`
+lookups routed through `CopyTicks_g` were affected.
+
+**Root cause**: `CopyTicks_g`'s `use_cache==false`, `count==1` branch (the "no window yet" `c0`
+lookup used by PRO always, and by REF before its ref-point window opens — both call sites in
+`variables.mqh`, e.g. the PRO branch around `init_ticks_arr_g`) reused
+`FindOrRefreshLiveBuffer_g`, which was designed for `CopyTicksRange_g`'s bounded-range case
+where the second argument is a genuine upper fetch bound. `CopyTicks_g`'s call is different in
+kind: `CopyTicks(symbol, out, flags, from_msc, 1)` is an **open-ended forward search** for "the
+first tick at/after `from_msc`", with no upper bound at all. Passing `from_msc` as the buffer's
+`to_msc` fetches ticks only *up to* `from_msc`, and then `TickCacheLowerBound_g(ticks, from_msc)`
+searches that same backward-looking array for the first tick `>= from_msc` — which can only
+succeed if a tick happens to land at exactly `from_msc`. Real tick `time_msc` values are
+sub-second (confirmed via `TestTickCacheDiff.mq5`'s fingerprint prints, e.g.
+`...520100`/`...520386`, never a clean `...000`), while every sample's `in_time_msc` is aligned
+to whole minutes — so the exact-match case was, in practice, never true. `native` c0 resolved to
+`0` on essentially every call, silently propagating into `out_data.c0` and everything derived
+from it.
+
+This is the same symptom already tracked in `docs/known-issues.md` as "EURUSD `sRefPoint`/
+`CopyTicks` intermittently returns 0 results... price: 0.00000" — that issue was never filed as
+caused by this code (the live-buffer feature postdates it), but the failure signature is
+identical. That pre-existing issue remains open and describes a *different*, genuinely
+intermittent cause (native `CopyTicks`/`CopyTicksRange` itself occasionally returning 0 results)
+— this fix does not close it, since this bug was specific to the now-reverted live-buffer
+routing, not to native tick fetches.
+
+**Fix**: `CopyTicks_g`'s `use_cache==false` branch no longer touches the live buffer at all —
+it unconditionally calls native `CopyTicks(symbol, out, flags, from_msc, count)`, exactly as it
+did before this feature was added. Reusing the live buffer for this call was never actually
+necessary for the "collapse N calls to 1" goal either: `CopyTicksRange_g`'s bounded-window calls
+(DAY/REF/S`<n>`, and PRO once it has an open position) are what dominate the N-calls-per-sample
+count and are unaffected by this fix; the single-tick `c0` lookup is at most one extra native
+call per symbol per sample in the "no window yet" case, not the N-per-period problem this
+feature targeted. `CopyTicksRange_g`'s live branch is unaffected by this fix and remains
+correct — its `to_msc` genuinely is the caller's upper bound, which is exactly what
+`FindOrRefreshLiveBuffer_g`/`TickCacheLowerBound_g` were built for.
+
+**Verification**: recompiled `TestVariables.mq5` and `TestTickCacheDiff.mq5` after the fix — both
+**0 errors, 0 warnings**. Re-ran `RunCacheComparisonHarness_g` live against the same
+15:00:00–15:59:00 EURUSD H1 window: every sample now reports `TOTAL mismatches across all
+symbol x period: 0`, including the previously-affected PRO/REF `c0` rows, and the harness's
+final line is `ALL 60 SAMPLES MATCH EXACTLY`. Confirms the fix without any regression to the
+`CopyTicksRange_g` live-buffer batching itself — `build avg us: native=5699.5 cached=1418.8`
+still shows the expected native-vs-cached cost gap, unaffected by this fix.
+
+What this verification does and doesn't cover: the harness's "native" side (`use_cache=false`)
+now runs entirely through `FindOrRefreshLiveBuffer_g`/`TickCacheLowerBound_g` for every
+`CopyTicksRange_g` call (DAY/REF/S3600) and through direct native `CopyTicks` for the
+single-tick `c0` lookup (post-fix). `ALL 60 SAMPLES MATCH EXACTLY` against the independently
+CSV-cache-derived output is therefore a real correctness proof of `sLiveTickBuffer`'s slicing,
+day-rollover reset, and "refresh only on strictly newer `to_msc`" logic, not just of the
+`CopyTicks_g` fix in isolation. It does **not** verify this feature's original "N native calls
+per sample collapse to 1" motivation directly — the log carries no native-call-count evidence,
+only tick-derived output values and aggregate `build`/`AddBuf`/`TryGet`/`init` latency. Directly
+observing the call-count reduction would need `I_DEBUG>=1`'s `[LiveTickBuffer] ... to_msc=...
+ticks=...` print (fires once per buffer *refresh*, not once per period-branch call) counted
+against the number of configured periods over a live/demo run — logged as still-open in
+`docs/known-issues.md`.
+
+#### Performance re-measurement after the fix (2026-09-14)
+
+`RunCacheComparisonHarness_g`'s latency line (from the `elapsed_us` self-timing feature,
+2026-09-13) lets native-vs-cached `build`/`AddBuf`/`TryGet`/`init` costs be compared directly
+before and after this batching feature:
+
+| metric | pre-batching baseline (2026-09-13) | post-fix (2026-09-14) |
+|---|---|---|
+| `init` (`sRingBuf<T>::init`) | native=186us cached=141us | native=155us cached=156us |
+| `AddBuf` | native=105.2us cached=88.5us | native=139.7us cached=113.6us |
+| `TryGet` | native=81.4us cached=85.2us | native=84.8us cached=88.5us |
+| **`build`** (full per-sample `sGlobalVars` construction) | **native=8343.8us cached=1378.2us** | **native=5699.5us cached=1418.8us** |
+
+`init`/`AddBuf`/`TryGet` are pure `sRingBuf<T>` mechanics, independent of tick-fetch mode — the
+small native-vs-cached deltas in both runs are noise, not signal. `build` is the metric that
+actually reflects tick-fetch cost (it wraps `init_ticks_arr_g`, which is what calls
+`CopyTicksRange_g`/`CopyTicks_g`), and it shows a real but partial win: native's per-sample cost
+dropped ~32% (8343.8us → 5699.5us), but the gap to cached mode's ~1.4ms is still ~4x, essentially
+unchanged in ratio.
+
+**Why the gap didn't close further**: `FindOrRefreshLiveBuffer_g` still issues
+`CopyTicksRange(symbol, fresh, flags, day_start_msc, to_msc)` on every refresh — a **full
+day-start-to-now rescan**, growing more expensive as the trading day progresses (the harness's
+own DAY tick counts climb from 30270 at 15:00:00 to 41911 at 15:59:00 in the same run — the live
+buffer's fetch window grows in exact lockstep, since both cover `[day_start, to_msc]`). This is
+the same growing-cost profile already documented for the DAY period branch in
+`docs/known-issues.md`'s open issues — the batching feature collapsed the *per-period
+multiplier* (N calls → 1 per sample) but inherited DAY's *per-sample* cost growth for that one
+remaining call, since it fetches the same day-so-far window DAY itself fetches. Cached mode's
+`build` stays flat across the day because its CSV is loaded once (`FindOrLoadDayCache_g`) and
+only sliced afterward — no re-fetch cost at all after the first sample. Phase 2's planned
+incremental-accumulation work (see `docs/known-issues.md`) would remove this cost for the live
+buffer the same way it's planned to for DAY — noted there as an extension of that existing plan
+rather than a new issue.
+
 ### `sRingBuf<T>` self-timing (`elapsed_us`) and `RunCacheComparisonHarness_g` latency reporting (2026-09-13)
 
 `RunCacheComparisonHarness_g` (`TestVariables.mq5`) already proved native-vs-cache output
