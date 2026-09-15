@@ -6,6 +6,19 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-15** — Removed `CopyTicks_g` completely from the source. PRO/REF c0 lookup
+  now uses the last tick from a bounded 15-second `CopyTicksRange_g` window, gated by
+  `in_conf.USE_TICK_CACHE` like every other call site — not a live-only change, it applies
+  the same way in cache mode. This is the current implementation; the `CopyTicks_g` entries
+  below document yesterday's state.
+- **2026-09-15** — Re-measured native-vs-cached `build avg us` (full per-sample `sGlobalVars`
+  construction) after the c0 lookup fix: native=5699.5us, cached=1418.8us, vs a
+  pre-batching baseline of native=8343.8us/cached=1378.2us — the live-buffer batching cut
+  ~32% off native's per-sample cost, but the ~4x gap to cached mode remains, since the live
+  buffer's single fetch still rescans `[day_start, to_msc]` in full every sample (same
+  growing-cost shape as the DAY period issue). Logged as an extension of the existing Phase 2
+  plan in [known-issues.md](known-issues.md); the "N calls collapse to 1" claim itself is
+  still unverified by direct call-count measurement.
 - **2026-09-14** — verified live-buffer batching: `I_DEBUG=1` produced 60 unique refreshes
   for 60 harness samples (one per sample, not one per period), with `ALL 60 SAMPLES MATCH
   EXACTLY`; the remaining cost is the full day-to-sample rescan on each refresh.

@@ -64,10 +64,11 @@ than refreshing once per configured period. The harness also reported `ALL 60 SA
 EXACTLY`, confirming that the reuse did not alter native-versus-cached results.
 
 This verifies the batching claim in the deterministic harness with `USE_TICK_CACHE=false`; it
-does not claim a separate wall-clock `doLive=true` run. `CopyTicks_g`'s single-tick `c0` lookup
-remains a direct native call and is outside this bounded-range refresh count. The remaining
-performance problem is the full day-start-to-sample rescan performed by each refresh, not an
-extra refresh per period. Full evidence: `docs/repository-notes.md`.
+does not claim a separate wall-clock `doLive=true` run. The PRO/REF c0 paths now use a
+15-second `CopyTicksRange_g` window and select its last tick — this is `CopyTicksRange_g`'s
+normal `use_cache`-gated behavior, so it applies identically whether cache mode is on or off,
+not only in live mode. The remaining full-range DAY/period fetch cost is now acceptable for
+the current live loop. Full evidence: `docs/repository-notes.md`.
 
 ## `sRingBuf<T>` self-times via a plain `elapsed_us` member, not a separate timer type (2026-09-13)
 
@@ -95,15 +96,15 @@ reports native-vs-cached `sGlobalVars` build averages alongside `init`/`AddBuf`/
 
 ## Live-mode tick fetching batched per-sample via `TickCache.mqh`, not a `variables.mqh` restructure (2026-09-14)
 
-Live mode (`use_cache=false`) issued one native `CopyTicksRange`/`CopyTicks` call per period
+Live mode (`use_cache=false`) issued one native `CopyTicksRange` call per period
 branch (PRO/REF/DAY/`S<n>`) per symbol per sample — N native calls where cache mode already
 only needed 1 (`TickCache.mqh`'s `g_tick_day_caches`/`FindOrLoadDayCache_g` load a symbol+day
 once from CSV and slice in memory for every period). Considered restructuring
 `sSymbolVars`/`sDataVars`/`init_ticks_arr_g` to fetch a shared `master_ticks[]` once per
 symbol per sample and slice it for every period — rejected in favor of a narrower fix: added a
 live-mode counterpart (`sLiveTickBuffer`/`g_live_tick_buffers`/`FindOrRefreshLiveBuffer_g`) to
-`TickCache.mqh` itself, so `CopyTicksRange_g`/`CopyTicks_g`'s existing `use_cache==false`
-branch now fetches `[day_start(to_msc), to_msc]` once per distinct `to_msc` and slices it via
+`TickCache.mqh` itself, so `CopyTicksRange_g`'s existing `use_cache==false` branch now fetches
+`[day_start(to_msc), to_msc]` once per distinct `to_msc` and slices it via
 the same `TickCacheLowerBound_g` binary search cache mode already uses — zero changes needed
 to `variables.mqh` or any call site, since every caller already passes the same `to_msc` per
 sample. Explicitly rejected as part of this: widening the live buffer's fetch window to cover
@@ -111,22 +112,19 @@ a PRO position opened before the current day (PRO is a period like any other —
 open position, `[position_open_time, in_time_msc]` when one exists — not a special anchor that
 warrants expanding the shared day-window fetch). Compiled clean (0 errors/0 warnings) for both
 `TestVariables.mq5` and `TestTickCacheDiff.mq5`. First live/demo terminal run of this feature
-surfaced a bug in `CopyTicks_g`'s live branch specifically — see the entry immediately below.
+surfaced a bug in the c0 lookup specifically — see the entry immediately below.
 Full rationale, rejected alternatives, and follow-up verification notes:
 `docs/repository-notes.md`.
 
-## `CopyTicks_g`'s live branch reverted to always call native `CopyTicks` (2026-09-14)
+## c0 lookup uses `CopyTicksRange_g` (2026-09-15)
 
-The live-buffer batching above was extended to `CopyTicks_g`'s single-tick `c0` lookup (PRO's
-"no open position" branch, and REF's "window not yet open" branch, both in `variables.mqh`) on
-the assumption that it was just another case of "many callers share one `to_msc`." It isn't:
-`CopyTicksRange_g`'s `to_msc` is a genuine upper fetch bound, but `CopyTicks_g`'s `from_msc` is a
-lower bound for an open-ended forward search ("first tick at/after `from_msc`") — routing it
-through the same backward-looking buffer meant it could only ever find a tick landing at exactly
-`from_msc`, which real sub-second tick timestamps essentially never do against a whole-second
-sample time. First live/demo run of the batching feature caught this immediately: PRO's `c0`
-mismatched native-vs-cached on all 60/60 harness samples. Fixed by reverting `CopyTicks_g`'s
-`use_cache==false` branch to unconditionally call native `CopyTicks` — it never needed the
-buffer in the first place, since the single-tick lookup isn't the N-calls-per-period problem
-this feature targeted. `CopyTicksRange_g`'s live branch is unaffected and remains correct. Full
-root-cause writeup: `docs/repository-notes.md`.
+The c0 paths in PRO (no open position/window) and REF (window not yet open) use a bounded
+15-second `CopyTicksRange_g` window and select the last returned tick, which handles the fact
+that a sample timestamp may not have an exact tick. Since this is a call to `CopyTicksRange_g`
+with `in_conf.USE_TICK_CACHE` threaded through, it is not live-only — the same bounded window
+is used whether `USE_TICK_CACHE` is true or false. This also keeps the lookup on the
+established range-fetch path and avoids the unreliable direct single-tick call.
+
+The 2026-09-15 run confirmed `ALL 60 SAMPLES MATCH EXACTLY`. Live `LAT_US` was generally about
+1.4-2.9 ms, so the current implementation is considered sufficiently fast. The next work is
+optional Phase 2 incremental accumulation/fetching, not a correctness fix.

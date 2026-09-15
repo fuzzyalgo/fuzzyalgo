@@ -252,7 +252,7 @@ bool init_ticks_arr_g(
         // Same three states as REF:
         //   1) no open position for in_symbol - handled in the `if` below,
         //      everything stays 0 except c0, which still gets the current
-        //      price via a single-tick lookup.
+        //      price via a bounded 15-second CopyTicksRange_g lookup (see below).
         //   2) position just opened, in_time_msc == open time: zero-width
         //      window, PRODLT (if displayed) prints 0.
         //   3) in_time_msc > open time: real window [open_time, in_time_msc],
@@ -272,16 +272,29 @@ bool init_ticks_arr_g(
 
         if (0 >= start_time_pro_msc || in_time_msc <= start_time_pro_msc)
         {
-            // No open position, or no time has elapsed since it opened -
-            // same reasoning as REF's skip branch: no window to sum over,
-            // and CopyTicksRange with from<=0 or from>=to risks corrupting
-            // subsequent tick fetches, so it's skipped. c0 still gets the
-            // current price via a single-tick lookup.
             MqlTick tarr[];
-            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
+            // try to get the last tick just at or before in_time_msc
+            // so set just_before_in_time_msc 15 seconds before in_time_msc
+            // as sometimes there is no tick for longer period of seconds
+            datetime just_before_in_time_msc = (datetime)(in_time_msc - 15*1000);
+            int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, just_before_in_time_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
-                out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
-            ret = true;
+            {
+                out_data.c0 = (tarr[len-1].ask + tarr[len-1].bid) / 2;
+                out_data.t0 = tarr[len-1].time_msc;
+                if( 2 < in_conf.DEBUG )
+                {
+                    string dbgstr = StringFormat("%s %-19s.%03d %10.05f",
+                                            EnumToString(ENUM_PERIOD_TYPE_PRO),
+                                            TimeToString(out_data.t0 / 1000, TIME_DATE | TIME_SECONDS),
+                                            out_data.t0 % 1000,
+                                            out_data.c0
+                                            );
+                    Print( dbgstr );
+                    //ArrayPrint(tarr);
+                }
+                ret = true;
+            }
         }
         else
         {
@@ -330,18 +343,35 @@ bool init_ticks_arr_g(
         {
             // No ref point established yet, or no time has elapsed since it -
             // there's no window to sum OC/HL/SUM_POS/SUM_NEG/NETFLOW over, so
-            // those stay at their zero-initialized defaults. Calling
-            // CopyTicksRange here (from<=0 or from>=to) risks corrupting
-            // subsequent tick fetches for the rest of the run, so it's
-            // skipped - but c0 is still the current price regardless of
-            // whether any window has elapsed, so fetch it via a single-tick
-            // lookup (same pattern as sRefPoint's constructor) rather than
-            // leaving it at 0.
+            // those stay at their zero-initialized defaults. 
+            // but c0 is still the current price regardless of
+            // whether any window has elapsed, so fetch it via a bounded
+            // 15-second CopyTicksRange_g window (unlike sRefPoint's constructor,
+            // which does a genuine single-tick native CopyTicks call) rather
+            // than leaving it at 0.
+            // try to get the last tick just at or before in_time_msc
+            // so set just_before_in_time_msc 15 seconds before in_time_msc
+            // as sometimes there is no tick for longer period of seconds
             MqlTick tarr[];
-            int len = CopyTicks_g(in_symbol, tarr, COPY_TICKS_TIME_MS, in_time_msc, 1, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
+            datetime just_before_in_time_msc = (datetime)(in_time_msc - 15*1000);
+            int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, just_before_in_time_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
-                out_data.c0 = (tarr[0].ask + tarr[0].bid) / 2;
-            ret = true;
+            {
+                out_data.c0 = (tarr[len-1].ask + tarr[len-1].bid) / 2;
+                out_data.t0 = tarr[len-1].time_msc;
+                if( 2 < in_conf.DEBUG )
+                {
+                    string dbgstr = StringFormat("%s %-19s.%03d %10.05f",
+                                            EnumToString(ENUM_PERIOD_TYPE_REF),
+                                            TimeToString(out_data.t0 / 1000, TIME_DATE | TIME_SECONDS),
+                                            out_data.t0 % 1000,
+                                            out_data.c0
+                                            );
+                    Print( dbgstr );
+                    //ArrayPrint(tarr);
+                }
+                ret = true;
+            }
         }
         else
         {

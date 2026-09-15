@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//|                                                          FFT.mq5 |
-//|                             Copyright 2000-2025, MetaQuotes Ltd. |
-//|                                             https://www.mql5.com |
+//|                                                TestVariables.mq5 |
+//|                                        Copyright 2026, fuzzyalgo |
+//|                                        https://www.fuzzyalgo.com |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2000-2026, MetaQuotes Ltd."
-#property link "https://www.mql5.com"
+#property copyright "Copyright 2026, fuzzyalgo"
+#property link "https://www.fuzzyalgo.com"
 #property version "1.00"
 
 #include <FuzzyAlgo/variables.mqh>
@@ -101,6 +101,17 @@ void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
 //+------------------------------------------------------------------+
 void OnStart()
 {
+    MqlDateTime time_struct = {};
+    time_struct.year = 2026;
+    time_struct.mon = 9;
+    time_struct.day = 4;
+    time_struct.hour = 15;
+    time_struct.min = 0;
+    time_struct.sec = 0;
+    long in_time_msc_cache_cmp = StructToTime(time_struct) * 1000;
+    sRefPoint sr_harness(in_time_msc_cache_cmp);
+    RunCacheComparisonHarness_g(in_time_msc_cache_cmp, sr_harness);
+
     bool doLive = false;
     long in_time_msc;
     int ring_buf_num = 10;
@@ -124,9 +135,6 @@ void OnStart()
         in_time_msc = StructToTime(time_struct) * 1000;
 
     } // if( doLive )
-
-    sRefPoint sr_harness(in_time_msc);
-    RunCacheComparisonHarness_g(in_time_msc, sr_harness);
 
     sGlobalVars g(in_time_msc);
     Print("symbols " + g.c.SYMBOLS + " | " + IntegerToString(g.c.SYMBOLS_num));
@@ -175,7 +183,8 @@ void OnStart()
         sGlobalVars tmp1(time_msc, sr3);
         ringbuf.AddBuf(tmp1);
         sGlobalVars tmp;
-        // ringbuf was init'd with indexNewest=false (see line 54), so logical
+        // ringbuf was init'd with indexNewest=false (see the ringbuf.init(...)
+        // call above), so logical
         // index 0 means "oldest buffered entry", not "the one just added" -
         // TryGet(0, ...) would silently replay the seed-fill backlog one
         // iteration late instead of showing the sample just pushed above.
