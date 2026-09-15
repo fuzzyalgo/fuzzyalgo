@@ -26,9 +26,8 @@
 //    native calls per symbol per sample (one per period) down to 1.
 //
 // Both are sliced via the same TickCacheLowerBound_g binary search, so
-// CopyTicksRange_g/CopyTicks_g present one drop-in-replacement API to
-// callers (variables.mqh's init_ticks_arr_g) regardless of which mode is
-// active.
+// CopyTicksRange_g presents one drop-in-replacement API to callers
+// (variables.mqh's init_ticks_arr_g) regardless of which mode is active.
 
 //+------------------------------------------------------------------+
 //| Midnight-to-next-midnight bounds (ms) for in_time_msc's calendar |
@@ -69,9 +68,9 @@ sTickDayCache g_tick_day_caches[];
 //| when a NEW time_msc is seen; every period branch in               |
 //| init_ticks_arr_g that runs for that same time_msc (PRO/REF/DAY/  |
 //| S...) reuses the buffer via TickCacheLowerBound_g slicing instead |
-//| of each issuing its own native call. See CopyTicksRange_g/       |
-//| CopyTicks_g below and docs/design-decisions.md's tick-fetch       |
-//| batching notes for why this exists.                               |
+//| of each issuing its own native call. See CopyTicksRange_g below   |
+//| and docs/design-decisions.md's tick-fetch batching notes for why |
+//| this exists.                                                       |
 //+------------------------------------------------------------------+
 struct sLiveTickBuffer
 {
@@ -422,48 +421,3 @@ int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS 
     return ArrayCopy(out, g_tick_day_caches[idx].ticks, 0, from_idx, count);
 } // int CopyTicksRange_g
 
-//+------------------------------------------------------------------+
-//| Drop-in replacement for the native CopyTicks. Only ever called   |
-//| with count==1 in this codebase (single latest-tick-at-or-after   |
-//| lookups for c0).                                                  |
-//|                                                                    |
-//| use_cache==true: same historical-cache slicing as before, any     |
-//| count other than 1, a window outside the cached day, or a cache   |
-//| load failure is surfaced as a negative return - no native         |
-//| fallback.                                                          |
-//|                                                                    |
-//| use_cache==false: always a direct native CopyTicks call, NOT       |
-//| routed through the live buffer. The live buffer only ever holds    |
-//| ticks up to the to_msc it was last fetched with, and this is an   |
-//| open-ended "first tick at/after from_msc" forward search - unlike |
-//| CopyTicksRange_g's from_msc, here from_msc is a lower bound with  |
-//| no matching upper fetch bound, so TickCacheLowerBound_g would only |
-//| ever find a hit if a tick landed at exactly from_msc (real tick    |
-//| timestamps are sub-second, sample times are not, so in practice   |
-//| that was never true - this is what caused PRO/REF's c0 to read 0  |
-//| every sample; see docs/repository-notes.md).                       |
-//+------------------------------------------------------------------+
-int CopyTicks_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS flags, const long from_msc, const int count, const bool use_cache, const int debug)
-{
-    if (!use_cache)
-        return CopyTicks(symbol, out, flags, from_msc, count);
-
-    if (1 != count)
-        return -1;
-
-    long day_start_msc, day_end_msc;
-    GetDayBoundsMsc_g(from_msc, day_start_msc, day_end_msc);
-    if (from_msc > day_end_msc || from_msc < day_start_msc)
-        return -1;
-
-    int idx = FindOrLoadDayCache_g(symbol, from_msc, flags, debug);
-    if (0 > idx)
-        return -1;
-
-    int from_idx = TickCacheLowerBound_g(g_tick_day_caches[idx].ticks, from_msc);
-    if (from_idx >= ArraySize(g_tick_day_caches[idx].ticks))
-        return 0;
-
-    return ArrayCopy(out, g_tick_day_caches[idx].ticks, 0, from_idx, 1);
-} // int CopyTicks_g
-//+------------------------------------------------------------------+

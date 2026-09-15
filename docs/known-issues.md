@@ -23,21 +23,12 @@ you're seeing is already known, and before starting new work, to check what's al
 
 ## Planned / deferred work
 
-- **Phase 2: incremental accumulation for DAY/REF/PRO** (drafted 2026-09-09, not yet
-  implemented — a refactor to consolidate the old full-resum path and the new incremental
-  path is planned first). Removes the resum cost described in the DAY issue above by
-  maintaining running aggregates instead of resumming from scratch every sample. Full design
-  sketch, correctness-risk analysis, and validation plan: `docs/repository-notes.md`.
-  **Now also covers live mode's per-sample tick buffer** (`FindOrRefreshLiveBuffer_g`,
-  `TickCache.mqh`, added 2026-09-14): its single fetch-per-sample still rescans
-  `[day_start, to_msc]` in full every time `to_msc` advances, so it has the same
-  growing-cost profile as DAY, just now underneath every period instead of only DAY's own
-  branch. Measured 2026-09-14: `build avg us` (full per-sample `sGlobalVars` construction)
-  improved from a pre-batching baseline of native=8343.8/cached=1378.2 to
-  native=5699.5/cached=1418.8 — batching cut ~32% off native's cost, but the ~4x gap to
-  cached mode remains, because the live buffer's own fetch is still O(day-so-far) per
-  sample. Phase 2 would close this gap for live mode too. Full numbers and analysis:
-  `docs/repository-notes.md`.
+- **Phase 2: incremental accumulation/fetching** (ready for a separate trial, not required for
+  correctness). The current implementation still recomputes full windows and refreshes the
+  live day range, but the latest run shows acceptable live latency after the c0 paths (used in
+  both cache and live modes) were moved to a 15-second `CopyTicksRange_g` lookup. Phase 2 can
+  now be tested as an isolated performance optimization for DAY/REF/PRO and live tick refreshes.
+  Full design sketch, risk analysis, and validation history: `docs/repository-notes.md`.
 - **Live-buffer call-count reduction is verified for the deterministic harness; real live
   monitoring remains optional** (verified 2026-09-14): with one symbol, 60 samples, and
   `I_DEBUG=1`, the harness emitted exactly 60 `[LiveTickBuffer]` refresh lines with unique
@@ -46,8 +37,8 @@ you're seeing is already known, and before starting new work, to check what's al
   rather than refreshing once per period. The same run reported `ALL 60 SAMPLES MATCH EXACTLY`.
   This verifies the batching behavior in the deterministic closed-time harness while
   `USE_TICK_CACHE=false`; it is not a separate wall-clock `doLive=true` observation. The
-  remaining performance issue is not call count but that each refresh still rescans the full
-  `[day_start, to_msc]` range; see the Phase 2 item above.
+  remaining optimization opportunity is the full `[day_start, to_msc]` refresh and resum work;
+  see the Phase 2 item above.
 - **`GetSystemTime` vs `SymbolInfoTick` delta as a staleness/volatility signal** (sketched
   2026-09-11, not implemented). Idea: use `delta_msc = GetSystemTimeMsc() - tick.time_msc`
   per symbol to detect connectivity problems, skip resampling idle symbols, or trigger
