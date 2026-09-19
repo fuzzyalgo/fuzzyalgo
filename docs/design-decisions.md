@@ -3,6 +3,18 @@
 Read this before questioning or reversing a settled technical decision, or before adding a
 feature that resembles something already decided against.
 
+## SignalFusion ambiguity/timing weighting policy (2026-09-19)
+
+For multi-period NETFLOW fusion in `SignalFusion.mqh`, ambiguous FLAT outcomes are now resolved
+via the sign of `OC_HL` (`OC/HL`, already normalized) from a configurable tie-break period index
+(default: longest configured period, `periods_num - 1`). This keeps tie resolution scale-safe
+while preserving explicit FLAT when that tie-break value is zero/degenerate.
+
+Weighted fusion keeps static period weights as the baseline and adds an adaptive mode where each
+period uses `effective_weight = static_weight * VOLS_TD`, with zero/non-positive `VOLS_TD` rows
+skipped and all-zero-total-weight rows returning neutral FLAT behavior. Full rationale and demo
+notes: `docs/repository-notes.md`.
+
 ## `sConfig` composition over inheritance (2026-09-09)
 
 `sConfigVars` used to be inherited by `sDataVars`/`sRefPoint`/`sSymbolVars`/`sGlobalVars`,

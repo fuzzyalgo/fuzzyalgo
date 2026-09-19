@@ -72,9 +72,10 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   `docs/repository-notes.md` for the precision bugs this surfaced and how they were fixed.
 - `MQL5/Include/FuzzyAlgo/SignalFusion.mqh` adds matrix-style extraction from
   `sRingBuf<sGlobalVars>` into `sDataMatrix`, plus multi-period NETFLOW fusion helpers:
-  weighted-average (`WeightedAverageFusion_g`) and confirmation-threshold voting
-  (`ConfirmationFusion_g` / `ConfirmationFusionSeries_g`), plus vote diagnostics
-  (`CountNetflowSignAgreement_g`).
+  weighted-average (`WeightedAverageFusion_g`), adaptive weighted-average
+  (`effective_weight = static_weight * VOLS_TD`), and confirmation-threshold voting
+  (`ConfirmationFusion_g` / `ConfirmationFusionSeries_g`) with OC/HL tie-break fallback for
+  ambiguous rows, plus vote diagnostics (`CountNetflowSignAgreement_g`).
 - `MQL5/Include/FuzzyAlgo/HistogramChart.mqh` — charting helper, not otherwise load-bearing to
   the data model above.
 - `MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — the main script; builds the object graph above

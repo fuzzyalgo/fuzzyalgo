@@ -16,6 +16,22 @@ enum ENUM_FUSION_SIGNAL
     ENUM_FUSION_SIGNAL_SELL = 2
 };
 
+struct sFusionWeights
+{
+    double w[];
+
+    void InitDefault(const int in_periods_num)
+    {
+        ArrayResize(w, 0);
+        if (in_periods_num <= 0)
+            return;
+
+        ArrayResize(w, in_periods_num);
+        for (int period_idx = 0; period_idx < in_periods_num; period_idx++)
+            w[period_idx] = (double)(period_idx + 1);
+    }
+};
+
 string FusionSignalToString_g(const ENUM_FUSION_SIGNAL in_signal)
 {
     if (ENUM_FUSION_SIGNAL_BUY == in_signal)
@@ -171,7 +187,120 @@ bool CountNetflowSignAgreement_g(const sDataMatrix &in_matrix,
     return true;
 }
 
-double WeightedAverageNetflowScore_g(const sDataMatrix &in_matrix, const int in_row_idx, const int in_symbol_idx)
+double FusionStaticWeightAt_g(const sFusionWeights &in_weights, const int in_period_idx)
+{
+    int weights_num = ArraySize(in_weights.w);
+    if (in_period_idx >= 0 && in_period_idx < weights_num)
+        return in_weights.w[in_period_idx];
+    return (double)(in_period_idx + 1);
+}
+
+ENUM_FUSION_SIGNAL FusionSignalFromScore_g(const double in_score)
+{
+    if (in_score > 0.0)
+        return ENUM_FUSION_SIGNAL_BUY;
+    if (in_score < 0.0)
+        return ENUM_FUSION_SIGNAL_SELL;
+    return ENUM_FUSION_SIGNAL_FLAT;
+}
+
+ENUM_FUSION_SIGNAL ConfirmationSignalFromVotes_g(const int in_buy_votes,
+                                                 const int in_sell_votes,
+                                                 const int in_threshold)
+{
+    if (in_buy_votes >= in_threshold && in_sell_votes >= in_threshold)
+        return ENUM_FUSION_SIGNAL_FLAT;
+    if (in_buy_votes >= in_threshold)
+        return ENUM_FUSION_SIGNAL_BUY;
+    if (in_sell_votes >= in_threshold)
+        return ENUM_FUSION_SIGNAL_SELL;
+    return ENUM_FUSION_SIGNAL_FLAT;
+}
+
+int ResolveTieBreakerPeriodIdx_g(const sDataMatrix &in_matrix, const int in_period_idx)
+{
+    if (in_matrix.periods_num <= 1)
+        return -1;
+    if (in_period_idx >= 0 && in_period_idx < in_matrix.periods_num)
+        return in_period_idx;
+    return in_matrix.periods_num - 1;
+}
+
+ENUM_FUSION_SIGNAL OCHLTieBreakerSignal_g(const sDataMatrix &in_matrix,
+                                          const int in_row_idx,
+                                          const int in_symbol_idx,
+                                          const int in_period_idx,
+                                          double &out_oc_hl,
+                                          int &out_tie_breaker_period_idx)
+{
+    out_oc_hl = 0.0;
+    out_tie_breaker_period_idx = ResolveTieBreakerPeriodIdx_g(in_matrix, in_period_idx);
+    if (out_tie_breaker_period_idx < 0)
+        return ENUM_FUSION_SIGNAL_FLAT;
+
+    int cell_idx = in_matrix.CellIndex(in_row_idx, in_symbol_idx, out_tie_breaker_period_idx);
+    if (cell_idx < 0)
+        return ENUM_FUSION_SIGNAL_FLAT;
+
+    // OC_HL is already normalized upstream as OC / HL, so only its sign is
+    // used here as a scale-independent tie-breaker across periods/symbols.
+    out_oc_hl = in_matrix.cells[cell_idx].OC_HL;
+    if (out_oc_hl > 0.0)
+        return ENUM_FUSION_SIGNAL_BUY;
+    if (out_oc_hl < 0.0)
+        return ENUM_FUSION_SIGNAL_SELL;
+    return ENUM_FUSION_SIGNAL_FLAT;
+}
+
+ENUM_FUSION_SIGNAL ApplyOCHLTieBreaker_g(const sDataMatrix &in_matrix,
+                                         const int in_row_idx,
+                                         const int in_symbol_idx,
+                                         const int in_period_idx,
+                                         const string in_context,
+                                         const bool in_log_tie_breaker,
+                                         bool &out_tie_breaker_used)
+{
+    out_tie_breaker_used = false;
+
+    double oc_hl = 0.0;
+    int tie_breaker_period_idx = -1;
+    ENUM_FUSION_SIGNAL tie_signal = OCHLTieBreakerSignal_g(in_matrix,
+                                                           in_row_idx,
+                                                           in_symbol_idx,
+                                                           in_period_idx,
+                                                           oc_hl,
+                                                           tie_breaker_period_idx);
+    if (tie_breaker_period_idx < 0)
+        return ENUM_FUSION_SIGNAL_FLAT;
+
+    out_tie_breaker_used = true;
+    if (in_log_tie_breaker)
+    {
+        string symbol = "";
+        string period = "";
+        if (in_symbol_idx >= 0 && in_symbol_idx < ArraySize(in_matrix.symbols_arr))
+            symbol = in_matrix.symbols_arr[in_symbol_idx];
+        if (tie_breaker_period_idx >= 0 && tie_breaker_period_idx < ArraySize(in_matrix.periods_arr))
+            period = in_matrix.periods_arr[tie_breaker_period_idx];
+
+        Print(StringFormat("[SignalFusion tie-breaker] %s row=%d symbol=%s period=%s(idx=%d) OC_HL=%+.6f -> %s",
+                           in_context,
+                           in_row_idx,
+                           symbol,
+                           period,
+                           tie_breaker_period_idx,
+                           oc_hl,
+                           FusionSignalToString_g(tie_signal)));
+    }
+
+    return tie_signal;
+}
+
+double FuseNetflowRow_g(const sDataMatrix &in_matrix,
+                        const int in_row_idx,
+                        const int in_symbol_idx,
+                        const sFusionWeights &in_weights,
+                        const bool in_use_adaptive_weighting)
 {
     if (in_matrix.sample_count <= 0 || in_matrix.symbols_num <= 0 || in_matrix.periods_num <= 0)
         return 0.0;
@@ -188,9 +317,27 @@ double WeightedAverageNetflowScore_g(const sDataMatrix &in_matrix, const int in_
         if (cell_idx < 0)
             continue;
 
-        double weight = (double)(period_idx + 1);
-        weighted_sum += in_matrix.cells[cell_idx].NETFLOW * weight;
-        total_weight += weight;
+        double static_weight = FusionStaticWeightAt_g(in_weights, period_idx);
+        if (static_weight <= 0.0)
+            continue;
+
+        double effective_weight = static_weight;
+        if (in_use_adaptive_weighting)
+        {
+            // VOLS_TD is ticks-per-second density for this period/row. Higher
+            // density means "fresher/richer sample", so we scale static period
+            // weights by it to adapt influence per row.
+            double volstd = in_matrix.cells[cell_idx].VOLS_TD;
+            if (volstd <= 0.0)
+                continue;
+            effective_weight *= volstd;
+        }
+
+        if (effective_weight <= 0.0)
+            continue;
+
+        weighted_sum += in_matrix.cells[cell_idx].NETFLOW * effective_weight;
+        total_weight += effective_weight;
     }
 
     if (total_weight <= 0.0)
@@ -199,14 +346,63 @@ double WeightedAverageNetflowScore_g(const sDataMatrix &in_matrix, const int in_
     return weighted_sum / total_weight;
 }
 
+bool FuseNetflowSeries_g(const sDataMatrix &in_matrix,
+                         const int in_symbol_idx,
+                         const sFusionWeights &in_weights,
+                         const bool in_use_adaptive_weighting,
+                         double &out_scores[])
+{
+    ArrayResize(out_scores, 0);
+    if (in_matrix.sample_count <= 0 || in_matrix.symbols_num <= 0 || in_matrix.periods_num <= 0)
+        return false;
+    if (in_symbol_idx < 0 || in_symbol_idx >= in_matrix.symbols_num)
+        return false;
+
+    ArrayResize(out_scores, in_matrix.sample_count);
+    for (int row_idx = 0; row_idx < in_matrix.sample_count; row_idx++)
+        out_scores[row_idx] = FuseNetflowRow_g(in_matrix, row_idx, in_symbol_idx, in_weights, in_use_adaptive_weighting);
+
+    return true;
+}
+
+double WeightedAverageNetflowScore_g(const sDataMatrix &in_matrix, const int in_row_idx, const int in_symbol_idx)
+{
+    sFusionWeights default_weights;
+    default_weights.InitDefault(in_matrix.periods_num);
+    return FuseNetflowRow_g(in_matrix, in_row_idx, in_symbol_idx, default_weights, false);
+}
+
+ENUM_FUSION_SIGNAL WeightedAverageFusion_g(const sDataMatrix &in_matrix,
+                                           const int in_row_idx,
+                                           const int in_symbol_idx,
+                                           const sFusionWeights &in_weights,
+                                           const bool in_use_adaptive_weighting,
+                                           const int in_tie_breaker_period_idx = -1,
+                                           const bool in_log_tie_breaker = true)
+{
+    double score = FuseNetflowRow_g(in_matrix, in_row_idx, in_symbol_idx, in_weights, in_use_adaptive_weighting);
+    ENUM_FUSION_SIGNAL signal = FusionSignalFromScore_g(score);
+    if (ENUM_FUSION_SIGNAL_FLAT != signal)
+        return signal;
+
+    bool tie_breaker_used = false;
+    ENUM_FUSION_SIGNAL tie_signal = ApplyOCHLTieBreaker_g(in_matrix,
+                                                          in_row_idx,
+                                                          in_symbol_idx,
+                                                          in_tie_breaker_period_idx,
+                                                          in_use_adaptive_weighting ? "weighted-adaptive" : "weighted-static",
+                                                          in_log_tie_breaker,
+                                                          tie_breaker_used);
+    if (ENUM_FUSION_SIGNAL_FLAT != tie_signal)
+        return tie_signal;
+    return signal;
+}
+
 ENUM_FUSION_SIGNAL WeightedAverageFusion_g(const sDataMatrix &in_matrix, const int in_row_idx, const int in_symbol_idx)
 {
-    double score = WeightedAverageNetflowScore_g(in_matrix, in_row_idx, in_symbol_idx);
-    if (score > 0.0)
-        return ENUM_FUSION_SIGNAL_BUY;
-    if (score < 0.0)
-        return ENUM_FUSION_SIGNAL_SELL;
-    return ENUM_FUSION_SIGNAL_FLAT;
+    sFusionWeights default_weights;
+    default_weights.InitDefault(in_matrix.periods_num);
+    return WeightedAverageFusion_g(in_matrix, in_row_idx, in_symbol_idx, default_weights, false, -1, true);
 }
 
 bool WeightedAverageFusionSeries_g(const sDataMatrix &in_matrix,
@@ -219,9 +415,45 @@ bool WeightedAverageFusionSeries_g(const sDataMatrix &in_matrix,
     if (in_symbol_idx < 0 || in_symbol_idx >= in_matrix.symbols_num)
         return false;
 
+    sFusionWeights default_weights;
+    default_weights.InitDefault(in_matrix.periods_num);
+
     ArrayResize(out_series, in_matrix.sample_count);
     for (int row_idx = 0; row_idx < in_matrix.sample_count; row_idx++)
-        out_series[row_idx] = WeightedAverageFusion_g(in_matrix, row_idx, in_symbol_idx);
+        out_series[row_idx] = WeightedAverageFusion_g(in_matrix,
+                                                      row_idx,
+                                                      in_symbol_idx,
+                                                      default_weights,
+                                                      false,
+                                                      -1,
+                                                      true);
+
+    return true;
+}
+
+bool WeightedAverageFusionSeries_g(const sDataMatrix &in_matrix,
+                                   const int in_symbol_idx,
+                                   const sFusionWeights &in_weights,
+                                   const bool in_use_adaptive_weighting,
+                                   ENUM_FUSION_SIGNAL &out_series[],
+                                   const int in_tie_breaker_period_idx = -1,
+                                   const bool in_log_tie_breaker = true)
+{
+    ArrayResize(out_series, 0);
+    if (in_matrix.sample_count <= 0 || in_matrix.symbols_num <= 0 || in_matrix.periods_num <= 0)
+        return false;
+    if (in_symbol_idx < 0 || in_symbol_idx >= in_matrix.symbols_num)
+        return false;
+
+    ArrayResize(out_series, in_matrix.sample_count);
+    for (int row_idx = 0; row_idx < in_matrix.sample_count; row_idx++)
+        out_series[row_idx] = WeightedAverageFusion_g(in_matrix,
+                                                      row_idx,
+                                                      in_symbol_idx,
+                                                      in_weights,
+                                                      in_use_adaptive_weighting,
+                                                      in_tie_breaker_period_idx,
+                                                      in_log_tie_breaker);
 
     return true;
 }
@@ -229,7 +461,9 @@ bool WeightedAverageFusionSeries_g(const sDataMatrix &in_matrix,
 ENUM_FUSION_SIGNAL ConfirmationFusion_g(const sDataMatrix &in_matrix,
                                         const int in_row_idx,
                                         const int in_symbol_idx,
-                                        const int in_min_confirmation_count)
+                                        const int in_min_confirmation_count,
+                                        const int in_tie_breaker_period_idx = -1,
+                                        const bool in_log_tie_breaker = true)
 {
     if (in_matrix.sample_count <= 0 || in_matrix.symbols_num <= 0 || in_matrix.periods_num <= 0)
         return ENUM_FUSION_SIGNAL_FLAT;
@@ -249,20 +483,29 @@ ENUM_FUSION_SIGNAL ConfirmationFusion_g(const sDataMatrix &in_matrix,
     if (!CountNetflowSignAgreement_g(in_matrix, in_row_idx, in_symbol_idx, buy_votes, sell_votes))
         return ENUM_FUSION_SIGNAL_FLAT;
 
-    // If both sides meet threshold, treat as conflicting/tied consensus and stay flat.
-    if (buy_votes >= threshold && sell_votes >= threshold)
-        return ENUM_FUSION_SIGNAL_FLAT;
-    if (buy_votes >= threshold)
-        return ENUM_FUSION_SIGNAL_BUY;
-    if (sell_votes >= threshold)
-        return ENUM_FUSION_SIGNAL_SELL;
-    return ENUM_FUSION_SIGNAL_FLAT;
+    ENUM_FUSION_SIGNAL signal = ConfirmationSignalFromVotes_g(buy_votes, sell_votes, threshold);
+    if (ENUM_FUSION_SIGNAL_FLAT != signal)
+        return signal;
+
+    bool tie_breaker_used = false;
+    ENUM_FUSION_SIGNAL tie_signal = ApplyOCHLTieBreaker_g(in_matrix,
+                                                          in_row_idx,
+                                                          in_symbol_idx,
+                                                          in_tie_breaker_period_idx,
+                                                          "confirmation",
+                                                          in_log_tie_breaker,
+                                                          tie_breaker_used);
+    if (ENUM_FUSION_SIGNAL_FLAT != tie_signal)
+        return tie_signal;
+    return signal;
 }
 
 bool ConfirmationFusionSeries_g(const sDataMatrix &in_matrix,
                                 const int in_symbol_idx,
                                 const int in_min_confirmation_count,
-                                ENUM_FUSION_SIGNAL &out_series[])
+                                ENUM_FUSION_SIGNAL &out_series[],
+                                const int in_tie_breaker_period_idx = -1,
+                                const bool in_log_tie_breaker = true)
 {
     ArrayResize(out_series, 0);
     if (in_matrix.sample_count <= 0 || in_matrix.symbols_num <= 0 || in_matrix.periods_num <= 0)
@@ -272,7 +515,12 @@ bool ConfirmationFusionSeries_g(const sDataMatrix &in_matrix,
 
     ArrayResize(out_series, in_matrix.sample_count);
     for (int row_idx = 0; row_idx < in_matrix.sample_count; row_idx++)
-        out_series[row_idx] = ConfirmationFusion_g(in_matrix, row_idx, in_symbol_idx, in_min_confirmation_count);
+        out_series[row_idx] = ConfirmationFusion_g(in_matrix,
+                                                   row_idx,
+                                                   in_symbol_idx,
+                                                   in_min_confirmation_count,
+                                                   in_tie_breaker_period_idx,
+                                                   in_log_tie_breaker);
 
     return true;
 }

@@ -11,6 +11,11 @@ where relevant.
   `in_conf.USE_TICK_CACHE` like every other call site — not a live-only change, it applies
   the same way in cache mode. This is the current implementation; the `CopyTicks_g` entries
   below document yesterday's state.
+- **2026-09-19** — Extended `SignalFusion.mqh` with OC/HL sign tie-breaking on ambiguous
+  confirmation/weighted results (defaulting to the longest configured period, configurable by
+  period index), plus adaptive weighted fusion via `effective_weight = static_weight * VOLS_TD`,
+  and updated `TestVariables.mq5` to print static-vs-adaptive weighted signals and tie-breaker
+  activity summaries.
 - **2026-09-19** — Added `SignalFusion.mqh` with a matrix extractor from `sRingBuf<sGlobalVars>`,
   weighted-average and confirmation-based NETFLOW fusion (`ConfirmationFusion_g` /
   `ConfirmationFusionSeries_g`), plus a `TestVariables.mq5` demo that prints per-row period
