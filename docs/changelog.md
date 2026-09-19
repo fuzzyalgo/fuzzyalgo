@@ -6,11 +6,24 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-19** — Added per-cell unsigned `sData.SCORE` in `variables.mqh`, computed from that
+  cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, surfaced it in row printing and cache-vs-native
+  comparisons, and updated the fusion demo/docs to distinguish it from the existing multi-period
+  `SignalFusion.mqh` row outputs.
 - **2026-09-15** — Removed `CopyTicks_g` completely from the source. PRO/REF c0 lookup
   now uses the last tick from a bounded 15-second `CopyTicksRange_g` window, gated by
   `in_conf.USE_TICK_CACHE` like every other call site — not a live-only change, it applies
   the same way in cache mode. This is the current implementation; the `CopyTicks_g` entries
   below document yesterday's state.
+- **2026-09-19** — Extended `SignalFusion.mqh` with OC/HL sign tie-breaking on ambiguous
+  confirmation/weighted results (defaulting to the longest configured period, configurable by
+  period index), plus adaptive weighted fusion via `effective_weight = static_weight * VOLS_TD`,
+  and updated `TestVariables.mq5` to print static-vs-adaptive weighted signals and tie-breaker
+  activity summaries.
+- **2026-09-19** — Added `SignalFusion.mqh` with a matrix extractor from `sRingBuf<sGlobalVars>`,
+  weighted-average and confirmation-based NETFLOW fusion (`ConfirmationFusion_g` /
+  `ConfirmationFusionSeries_g`), plus a `TestVariables.mq5` demo that prints per-row period
+  NETFLOW values, BUY/SELL vote counts, and weighted-vs-confirmation signals side-by-side.
 - **2026-09-15** — Re-measured native-vs-cached `build avg us` (full per-sample `sGlobalVars`
   construction) after the c0 lookup fix: native=5699.5us, cached=1418.8us, vs a
   pre-batching baseline of native=8343.8us/cached=1378.2us — the live-buffer batching cut

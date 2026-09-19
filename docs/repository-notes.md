@@ -1131,3 +1131,62 @@ This establishes a stable baseline for Phase 2. Incremental accumulation/fetchin
 optional performance experiment to reduce full-window recomputation and refresh work; it is no
 longer part of the correctness fix. Phase 2 should preserve the current 60-sample exact-match
 result as its acceptance criterion.
+
+### SignalFusion OC_HL tie-breaker and adaptive weighting (2026-09-19)
+
+`SignalFusion.mqh` originally shipped with two row-level fusion outputs over `sDataMatrix`:
+weighted-average NETFLOW and confirmation-threshold vote counting. Both could legitimately return
+`FLAT` on ambiguous rows (equal/conflicting votes, threshold not reached, or weighted score=0),
+which made downstream behavior sensitive to pure tie/neutral cases.
+
+The implemented policy now resolves only those ambiguous `FLAT` outcomes through a dedicated
+`OC_HL` tie-breaker. `OC_HL` is already normalized in `variables.mqh` as `OC / HL`, so only its
+sign is consumed (`>0 => BUY`, `<0 => SELL`, `0 => FLAT`) and no cross-period magnitude scaling
+is assumed. The tie-break period index is configurable per call; default behavior uses the longest
+configured period (`periods_num - 1`). Every tie-break invocation logs context/row/period/`OC_HL`
+and the resulting signal so tie-resolved outputs are distinguishable from normal confirmations.
+
+Weighted fusion now supports an adaptive mode in addition to the original static-weight behavior.
+The adaptive path computes each row-period contribution with
+`effective_weight = static_weight * VOLS_TD`, where `VOLS_TD` is ticks-per-second density for
+that period/row. This keeps user-supplied static weights as baseline multipliers while scaling
+influence by per-row tick density (a proxy for sample freshness/information density). Defensive
+handling skips non-positive static weights and non-positive `VOLS_TD` values, and returns neutral
+`FLAT` when total effective weight is zero (prevents divide-by-zero and handles all-zero rows).
+
+`TestVariables.mq5`'s fusion demo was updated to print weighted-static, weighted-adaptive, and
+confirmation outputs side-by-side per row, plus a tie-breaker summary stating either the number of
+ambiguous rows resolved by `OC_HL` or that none resolved (with count of ambiguous rows that stayed
+flat due to `OC_HL==0`/degenerate).
+
+### Per-cell unsigned `sData.SCORE` (2026-09-19)
+
+The next requested signal was not another row-level fusion output in `SignalFusion.mqh`, but a
+sign-independent score stored directly on each `sData` cell. The important clarification was the
+scope: this value must be derived only from data already inside one `(symbol, period, sample)`
+cell, not from the surrounding `sDataMatrix` row and not from cross-period voting/weighting.
+
+The implemented helper `CalculateDataScore_g(const sData&, const double activity_reference=1.0)`
+therefore uses only:
+
+- `abs(NETFLOW)` as bounded flow strength (`NETFLOW` is already in `[-1, 1]`);
+- `abs(OC_HL)` as directional price-efficiency magnitude, defensively clamped to `[0, 1]`;
+- `VOLS_TD` converted to a saturating activity term
+  `VOLS_TD / (VOLS_TD + activity_reference)` when both inputs are positive.
+
+The initial weights are `0.50 * flow_strength + 0.35 * price_efficiency + 0.15 * activity`,
+clamped back into `[0, 1]`. Non-positive `VOLS_TD` or a non-positive reference produce `activity=0`
+so degenerate inputs stay safe and direction-neutral.
+
+`init_data_from_ticks_arr_g(...)` computes `SCORE` only after `NETFLOW`, `OC_HL`, and `VOLS_TD`
+have all been finalized, immediately before returning. Zero-window REF/PRO paths that never enter
+that function keep the constructor default `SCORE=0.0`, which matches the intended "no evidence"
+state.
+
+To make the field observable and regression-checked, `sSymbolVars::PrintRowHeader()` /
+`PrintRow()` now include a `SCORE` column for every configured period, `CompareDataVars_g()` diffs
+`SCORE` with the same epsilon style as the other derived doubles, and `TestVariables.mq5`'s fusion
+demo now prints each period as `PERIOD(NF=... SCORE=...)`. `SignalFusion.mqh` was not repurposed:
+its weighted/confirmation outputs remain row-level multi-period aggregation across cells, while
+each copied `sDataMatrix.cells[cell_idx]` now simply retains the new per-cell `SCORE` alongside the
+existing signed fields.
