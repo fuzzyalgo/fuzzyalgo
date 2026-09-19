@@ -12,6 +12,7 @@ MetaTrader5_TMPL/config
 MetaTrader5_TMPL/logs
 MetaTrader5_TMPL/temp
 MetaTrader5_TMPL/metaeditor64.exe
+MetaTrader5_TMPL/MetaEditor64.exe
 MetaTrader5_TMPL/metatester64.exe
 MetaTrader5_TMPL/terminal64.exe
 MetaTrader5_TMPL/MQL5/experts.dat
@@ -23,4 +24,3 @@ MetaTrader5_TMPL/MQL5/Profiles/deleted
 MetaTrader5_TMPL/MQL5/Profiles/Tester
 MetaTrader5_TMPL/Tester
 MetaTrader5_TMPL/llm-agent
-

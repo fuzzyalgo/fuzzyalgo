@@ -8,6 +8,7 @@
 #property version "1.00"
 
 #include <FuzzyAlgo/variables.mqh>
+#include <FuzzyAlgo/SignalFusion.mqh>
 #include <FuzzyAlgo/HistogramChart.mqh>
 #include <WinAPI/sysinfoapi.mqh>
 
@@ -96,6 +97,131 @@ void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
         Print(total, " total mismatches across ", ring_buf_num, " samples - see above");
 } // void RunCacheComparisonHarness_g
 
+void RunSignalFusionDemo_g(sRingBuf<sGlobalVars> &ringbuf, const int in_symbol_idx, const int in_min_confirmations)
+{
+    sDataMatrix matrix;
+    if (!ExtractRingBufToDataMatrix_g(ringbuf, matrix))
+    {
+        Print("SignalFusion demo skipped: unable to build matrix from ring buffer");
+        return;
+    }
+
+    if (matrix.sample_count <= 0 || matrix.periods_num <= 0 || matrix.symbols_num <= 0)
+    {
+        Print("SignalFusion demo skipped: empty matrix");
+        return;
+    }
+
+    if (in_symbol_idx < 0 || in_symbol_idx >= matrix.symbols_num)
+    {
+        Print("SignalFusion demo skipped: invalid symbol index ", in_symbol_idx);
+        return;
+    }
+
+    sFusionWeights fusion_weights;
+    fusion_weights.InitDefault(matrix.periods_num);
+    int tie_breaker_period_idx = matrix.periods_num - 1;
+
+    ENUM_FUSION_SIGNAL weighted_static_series[];
+    ENUM_FUSION_SIGNAL weighted_adaptive_series[];
+    ENUM_FUSION_SIGNAL confirmation_series[];
+    bool has_weighted_static = WeightedAverageFusionSeries_g(matrix,
+                                                             in_symbol_idx,
+                                                             fusion_weights,
+                                                             false,
+                                                             weighted_static_series,
+                                                             tie_breaker_period_idx,
+                                                             true);
+    bool has_weighted_adaptive = WeightedAverageFusionSeries_g(matrix,
+                                                               in_symbol_idx,
+                                                               fusion_weights,
+                                                               true,
+                                                               weighted_adaptive_series,
+                                                               tie_breaker_period_idx,
+                                                               true);
+    bool has_confirmation = ConfirmationFusionSeries_g(matrix,
+                                                       in_symbol_idx,
+                                                       in_min_confirmations,
+                                                       confirmation_series,
+                                                       tie_breaker_period_idx,
+                                                       true);
+    if (!has_weighted_static || !has_weighted_adaptive || !has_confirmation)
+    {
+        Print("SignalFusion demo skipped: unable to build signal series");
+        return;
+    }
+
+    Print(StringFormat("SignalFusion demo: symbol=%s rows=%d periods=%d min_confirmations=%d",
+                       matrix.symbols_arr[in_symbol_idx],
+                       matrix.sample_count,
+                       matrix.periods_num,
+                       in_min_confirmations));
+
+    int tie_breaker_resolved_count = 0;
+    int tie_breaker_ambiguous_flat_count = 0;
+
+    for (int row_idx = 0; row_idx < matrix.sample_count; row_idx++)
+    {
+        string netflow_per_period = "";
+        for (int period_idx = 0; period_idx < matrix.periods_num; period_idx++)
+        {
+            int cell_idx = matrix.CellIndex(row_idx, in_symbol_idx, period_idx);
+            if (cell_idx < 0)
+                continue;
+            netflow_per_period += StringFormat(" %s=%+.2f",
+                                               matrix.periods_arr[period_idx],
+                                               matrix.cells[cell_idx].NETFLOW);
+        }
+
+        int buy_votes = 0;
+        int sell_votes = 0;
+        CountNetflowSignAgreement_g(matrix, row_idx, in_symbol_idx, buy_votes, sell_votes);
+
+        int threshold = in_min_confirmations;
+        if (threshold <= 0)
+            threshold = 1;
+        if (threshold > matrix.periods_num)
+            threshold = matrix.periods_num;
+
+        ENUM_FUSION_SIGNAL confirmation_raw = ConfirmationSignalFromVotes_g(buy_votes, sell_votes, threshold);
+        double oc_hl_tb = 0.0;
+        int tie_idx_used = -1;
+        ENUM_FUSION_SIGNAL tie_signal = OCHLTieBreakerSignal_g(matrix, row_idx, in_symbol_idx, tie_breaker_period_idx, oc_hl_tb, tie_idx_used);
+        if (ENUM_FUSION_SIGNAL_FLAT == confirmation_raw)
+        {
+            if (ENUM_FUSION_SIGNAL_FLAT != tie_signal)
+                tie_breaker_resolved_count++;
+            else
+                tie_breaker_ambiguous_flat_count++;
+        }
+
+        Print(StringFormat("%s.%03d |%s | votes BUY=%d SELL=%d | weighted_static=%s weighted_adaptive=%s confirmation=%s",
+                           TimeToString(matrix.time_msc[row_idx] / 1000, TIME_DATE | TIME_SECONDS),
+                           matrix.time_msc[row_idx] % 1000,
+                           netflow_per_period,
+                           buy_votes,
+                           sell_votes,
+                           FusionSignalToString_g(weighted_static_series[row_idx]),
+                           FusionSignalToString_g(weighted_adaptive_series[row_idx]),
+                           FusionSignalToString_g(confirmation_series[row_idx])));
+    }
+
+    if (tie_breaker_resolved_count > 0)
+    {
+        Print(StringFormat("SignalFusion demo tie-breaker summary: OC_HL tie-breaker resolved %d ambiguous rows using period %s(idx=%d)",
+                           tie_breaker_resolved_count,
+                           matrix.periods_arr[tie_breaker_period_idx],
+                           tie_breaker_period_idx));
+    }
+    else
+    {
+        Print(StringFormat("SignalFusion demo tie-breaker summary: no ambiguous rows were resolved by OC_HL (ambiguous rows with OC_HL==0/degenerate=%d, period=%s idx=%d)",
+                           tie_breaker_ambiguous_flat_count,
+                           matrix.periods_arr[tie_breaker_period_idx],
+                           tie_breaker_period_idx));
+    }
+}
+
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
 //+------------------------------------------------------------------+
@@ -162,6 +288,8 @@ void OnStart()
         for (int symbol_idx = 0; symbol_idx < tmp.c.SYMBOLS_num; symbol_idx++)
             tmp.sSym[symbol_idx].PrintRow();
     }
+
+    RunSignalFusionDemo_g(ringbuf, 0, 3);
 
     sRefPoint sr3(in_time_msc);
 

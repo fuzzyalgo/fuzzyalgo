@@ -1131,3 +1131,30 @@ This establishes a stable baseline for Phase 2. Incremental accumulation/fetchin
 optional performance experiment to reduce full-window recomputation and refresh work; it is no
 longer part of the correctness fix. Phase 2 should preserve the current 60-sample exact-match
 result as its acceptance criterion.
+
+### SignalFusion OC_HL tie-breaker and adaptive weighting (2026-09-19)
+
+`SignalFusion.mqh` originally shipped with two row-level fusion outputs over `sDataMatrix`:
+weighted-average NETFLOW and confirmation-threshold vote counting. Both could legitimately return
+`FLAT` on ambiguous rows (equal/conflicting votes, threshold not reached, or weighted score=0),
+which made downstream behavior sensitive to pure tie/neutral cases.
+
+The implemented policy now resolves only those ambiguous `FLAT` outcomes through a dedicated
+`OC_HL` tie-breaker. `OC_HL` is already normalized in `variables.mqh` as `OC / HL`, so only its
+sign is consumed (`>0 => BUY`, `<0 => SELL`, `0 => FLAT`) and no cross-period magnitude scaling
+is assumed. The tie-break period index is configurable per call; default behavior uses the longest
+configured period (`periods_num - 1`). Every tie-break invocation logs context/row/period/`OC_HL`
+and the resulting signal so tie-resolved outputs are distinguishable from normal confirmations.
+
+Weighted fusion now supports an adaptive mode in addition to the original static-weight behavior.
+The adaptive path computes each row-period contribution with
+`effective_weight = static_weight * VOLS_TD`, where `VOLS_TD` is ticks-per-second density for
+that period/row. This keeps user-supplied static weights as baseline multipliers while scaling
+influence by per-row tick density (a proxy for sample freshness/information density). Defensive
+handling skips non-positive static weights and non-positive `VOLS_TD` values, and returns neutral
+`FLAT` when total effective weight is zero (prevents divide-by-zero and handles all-zero rows).
+
+`TestVariables.mq5`'s fusion demo was updated to print weighted-static, weighted-adaptive, and
+confirmation outputs side-by-side per row, plus a tie-breaker summary stating either the number of
+ambiguous rows resolved by `OC_HL` or that none resolved (with count of ambiguous rows that stayed
+flat due to `OC_HL==0`/degenerate).
