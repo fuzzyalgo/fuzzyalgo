@@ -70,6 +70,11 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   closed-market/backtest run can replay ticks without re-hitting the terminal's tick store on
   every sample. Gated by `input bool I_USE_TICK_CACHE` / `conf.c.USE_TICK_CACHE`. See
   `docs/repository-notes.md` for the precision bugs this surfaced and how they were fixed.
+- `MQL5/Include/FuzzyAlgo/SignalFusion.mqh` adds matrix-style extraction from
+  `sRingBuf<sGlobalVars>` into `sDataMatrix`, plus multi-period NETFLOW fusion helpers:
+  weighted-average (`WeightedAverageFusion_g`) and confirmation-threshold voting
+  (`ConfirmationFusion_g` / `ConfirmationFusionSeries_g`), plus vote diagnostics
+  (`CountNetflowSignAgreement_g`).
 - `MQL5/Include/FuzzyAlgo/HistogramChart.mqh` — charting helper, not otherwise load-bearing to
   the data model above.
 - `MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — the main script; builds the object graph above

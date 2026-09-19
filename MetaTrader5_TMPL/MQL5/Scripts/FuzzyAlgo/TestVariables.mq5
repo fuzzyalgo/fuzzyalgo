@@ -8,6 +8,7 @@
 #property version "1.00"
 
 #include <FuzzyAlgo/variables.mqh>
+#include <FuzzyAlgo/SignalFusion.mqh>
 #include <FuzzyAlgo/HistogramChart.mqh>
 #include <WinAPI/sysinfoapi.mqh>
 
@@ -96,6 +97,71 @@ void RunCacheComparisonHarness_g(const long in_time_msc, const sRefPoint &sr)
         Print(total, " total mismatches across ", ring_buf_num, " samples - see above");
 } // void RunCacheComparisonHarness_g
 
+void RunSignalFusionDemo_g(sRingBuf<sGlobalVars> &ringbuf, const int in_symbol_idx, const int in_min_confirmations)
+{
+    sDataMatrix matrix;
+    if (!ExtractRingBufToDataMatrix_g(ringbuf, matrix))
+    {
+        Print("SignalFusion demo skipped: unable to build matrix from ring buffer");
+        return;
+    }
+
+    if (matrix.sample_count <= 0 || matrix.periods_num <= 0 || matrix.symbols_num <= 0)
+    {
+        Print("SignalFusion demo skipped: empty matrix");
+        return;
+    }
+
+    if (in_symbol_idx < 0 || in_symbol_idx >= matrix.symbols_num)
+    {
+        Print("SignalFusion demo skipped: invalid symbol index ", in_symbol_idx);
+        return;
+    }
+
+    ENUM_FUSION_SIGNAL weighted_series[];
+    ENUM_FUSION_SIGNAL confirmation_series[];
+    bool has_weighted = WeightedAverageFusionSeries_g(matrix, in_symbol_idx, weighted_series);
+    bool has_confirmation = ConfirmationFusionSeries_g(matrix, in_symbol_idx, in_min_confirmations, confirmation_series);
+    if (!has_weighted || !has_confirmation)
+    {
+        Print("SignalFusion demo skipped: unable to build signal series");
+        return;
+    }
+
+    Print(StringFormat("SignalFusion demo: symbol=%s rows=%d periods=%d min_confirmations=%d",
+                       matrix.symbols_arr[in_symbol_idx],
+                       matrix.sample_count,
+                       matrix.periods_num,
+                       in_min_confirmations));
+
+    for (int row_idx = 0; row_idx < matrix.sample_count; row_idx++)
+    {
+        string netflow_per_period = "";
+        for (int period_idx = 0; period_idx < matrix.periods_num; period_idx++)
+        {
+            int cell_idx = matrix.CellIndex(row_idx, in_symbol_idx, period_idx);
+            if (cell_idx < 0)
+                continue;
+            netflow_per_period += StringFormat(" %s=%+.2f",
+                                               matrix.periods_arr[period_idx],
+                                               matrix.cells[cell_idx].NETFLOW);
+        }
+
+        int buy_votes = 0;
+        int sell_votes = 0;
+        CountNetflowSignAgreement_g(matrix, row_idx, in_symbol_idx, buy_votes, sell_votes);
+
+        Print(StringFormat("%s.%03d |%s | votes BUY=%d SELL=%d | weighted=%s confirmation=%s",
+                           TimeToString(matrix.time_msc[row_idx] / 1000, TIME_DATE | TIME_SECONDS),
+                           matrix.time_msc[row_idx] % 1000,
+                           netflow_per_period,
+                           buy_votes,
+                           sell_votes,
+                           FusionSignalToString_g(weighted_series[row_idx]),
+                           FusionSignalToString_g(confirmation_series[row_idx])));
+    }
+}
+
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
 //+------------------------------------------------------------------+
@@ -162,6 +228,8 @@ void OnStart()
         for (int symbol_idx = 0; symbol_idx < tmp.c.SYMBOLS_num; symbol_idx++)
             tmp.sSym[symbol_idx].PrintRow();
     }
+
+    RunSignalFusionDemo_g(ringbuf, 0, 3);
 
     sRefPoint sr3(in_time_msc);
 
