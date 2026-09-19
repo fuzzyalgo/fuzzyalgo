@@ -64,6 +64,34 @@ int string_split_g(const string &in_string_to_split, const string &in_seperator,
     return num_splits;
 }
 
+double CalculateDataScore_g(const sData &in_data, const double in_activity_reference = 1.0)
+{
+    double flow_strength = MathAbs(in_data.NETFLOW);
+    if (1.0 < flow_strength)
+        flow_strength = 1.0;
+
+    double price_efficiency = MathAbs(in_data.OC_HL);
+    if (1.0 < price_efficiency)
+        price_efficiency = 1.0;
+
+    double activity = 0.0;
+    if (0.0 < in_data.VOLS_TD && 0.0 < in_activity_reference)
+        activity = in_data.VOLS_TD / (in_data.VOLS_TD + in_activity_reference);
+    if (0.0 > activity)
+        activity = 0.0;
+    if (1.0 < activity)
+        activity = 1.0;
+
+    double score = 0.50 * flow_strength +
+                   0.35 * price_efficiency +
+                   0.15 * activity;
+    if (0.0 > score)
+        return 0.0;
+    if (1.0 < score)
+        return 1.0;
+    return score;
+}
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -171,6 +199,10 @@ bool init_data_from_ticks_arr_g(
     double netflow_total = out_data.SUM_POS - out_data.SUM_NEG;
     if (0.0 != netflow_total)
         out_data.NETFLOW = (out_data.SUM_POS + out_data.SUM_NEG) / netflow_total;
+
+    // SCORE is a bounded per-cell quality/strength metric only; direction stays
+    // encoded separately in signed fields like NETFLOW and OC_HL.
+    out_data.SCORE = CalculateDataScore_g(out_data);
 
     return ret;
     //+------------------------------------------------------------------+
@@ -699,6 +731,7 @@ struct sData
     double VOLS_TD;
     double HL_TD;
     double SUMCOL;
+    double SCORE; // sign-independent per-cell score in [0, 1]
 
     // prices and time
     long t0;
@@ -737,6 +770,7 @@ struct sData
         VOLS_TD = 0;
         HL_TD = 0;
         SUMCOL = 0;
+        SCORE = 0.0;
 
         // prices and time
         c0 = 0.0;
@@ -948,9 +982,9 @@ struct sSymbolVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
-            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %9s %9s",
+            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %7s %9s %9s",
                                         sData[p].period,
-                                        "OC", "HL", "OC/HL", "NETFLOW", "SUMPOS", "SUMNEG");
+                                        "OC", "HL", "OC/HL", "SCORE", "NETFLOW", "SUMPOS", "SUMNEG");
         }
 
         string foot = StringFormat(" | %10s %8s", "C0", "LAT_US");
@@ -1001,11 +1035,12 @@ struct sSymbolVars
             // proved it. OC/HL don't need this - they're single-arithmetic
             // values, not summed across the window, so they never accumulate
             // this noise.
-            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %9d %9d",
+            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %7.2f %9d %9d",
                                         sData[p].period,
                                         (int)sData[p].d.OC,
                                         (int)sData[p].d.HL,
                                         sData[p].d.OC_HL,
+                                        sData[p].d.SCORE,
                                         sData[p].d.NETFLOW,
                                         (int)MathRound(sData[p].d.SUM_POS),
                                         (int)MathRound(sData[p].d.SUM_NEG));
@@ -1211,6 +1246,11 @@ int CompareDataVars_g(const sDataVars &a, const sDataVars &b, const string &cont
     if (eps < MathAbs(a.d.SUMCOL - b.d.SUMCOL))
     {
         Print("  ", context, " SUMCOL MISMATCH native=", DoubleToString(a.d.SUMCOL, 12), " cached=", DoubleToString(b.d.SUMCOL, 12));
+        mismatches++;
+    }
+    if (eps < MathAbs(a.d.SCORE - b.d.SCORE))
+    {
+        Print("  ", context, " SCORE MISMATCH native=", DoubleToString(a.d.SCORE, 12), " cached=", DoubleToString(b.d.SCORE, 12));
         mismatches++;
     }
 

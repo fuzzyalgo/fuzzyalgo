@@ -59,7 +59,8 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
 - `MQL5/Include/FuzzyAlgo/variables.mqh` (~1,440 lines) is the core data model: `sConfig`
   (per-run config, composed into every other struct below), `sData`/`sDataVars` (per-symbol,
   per-period derived tick features — `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW`/etc., plus the
-  raw per-tick delta series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
+  per-cell unsigned `SCORE` derived only from that cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, and
+  the raw per-tick delta series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
   `CopyTicks` only, never cached), `sSymbolVars` (all periods for one symbol), `sGlobalVars`
   (all symbols for one sample), and `sRingBuf<T>` (a fixed-size ring buffer used to hold
   recent `sGlobalVars` snapshots). `ENUM_PERIOD_TYPE` (DAY/PRO/REF/SECONDS_S/TICKS_T) selects
@@ -75,7 +76,9 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   weighted-average (`WeightedAverageFusion_g`), adaptive weighted-average
   (`effective_weight = static_weight * VOLS_TD`), and confirmation-threshold voting
   (`ConfirmationFusion_g` / `ConfirmationFusionSeries_g`) with OC/HL tie-break fallback for
-  ambiguous rows, plus vote diagnostics (`CountNetflowSignAgreement_g`).
+  ambiguous rows, plus vote diagnostics (`CountNetflowSignAgreement_g`). These outputs aggregate
+  across multiple cells in one row; they remain separate from each cell's own unsigned
+  `sData.SCORE`.
 - `MQL5/Include/FuzzyAlgo/HistogramChart.mqh` — charting helper, not otherwise load-bearing to
   the data model above.
 - `MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — the main script; builds the object graph above

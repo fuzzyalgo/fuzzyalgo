@@ -168,9 +168,10 @@ void RunSignalFusionDemo_g(sRingBuf<sGlobalVars> &ringbuf, const int in_symbol_i
             int cell_idx = matrix.CellIndex(row_idx, in_symbol_idx, period_idx);
             if (cell_idx < 0)
                 continue;
-            netflow_per_period += StringFormat(" %s=%+.2f",
+            netflow_per_period += StringFormat(" %s(NF=%+.2f SCORE=%.2f)",
                                                matrix.periods_arr[period_idx],
-                                               matrix.cells[cell_idx].NETFLOW);
+                                               matrix.cells[cell_idx].NETFLOW,
+                                               matrix.cells[cell_idx].SCORE);
         }
 
         int buy_votes = 0;

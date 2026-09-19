@@ -3,6 +3,19 @@
 Read this before questioning or reversing a settled technical decision, or before adding a
 feature that resembles something already decided against.
 
+## `sData.SCORE` stays per-cell and unsigned (2026-09-19)
+
+`sData` now carries a bounded `SCORE` in `[0, 1]` computed only from that one cell's own
+`NETFLOW`, `OC_HL`, and `VOLS_TD`. It is intentionally sign-independent: direction remains in the
+existing signed fields (`NETFLOW`, `OC`, `OC_HL`) and in the row-level/multi-period logic in
+`SignalFusion.mqh`.
+
+This explicitly rejects repurposing `SCORE` into a row summary or multi-period fusion output.
+`SignalFusion.mqh` still owns cross-period aggregation/confirmation behavior; `sData.SCORE` is
+only a per-period evidence-strength/quality measure that downstream code may inspect without
+changing BUY/SELL direction semantics. Full rationale and implementation notes:
+`docs/repository-notes.md`.
+
 ## SignalFusion ambiguity/timing weighting policy (2026-09-19)
 
 For multi-period NETFLOW fusion in `SignalFusion.mqh`, ambiguous FLAT outcomes are now resolved

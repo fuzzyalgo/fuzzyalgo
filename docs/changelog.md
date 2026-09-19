@@ -6,6 +6,10 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-19** — Added per-cell unsigned `sData.SCORE` in `variables.mqh`, computed from that
+  cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, surfaced it in row printing and cache-vs-native
+  comparisons, and updated the fusion demo/docs to distinguish it from the existing multi-period
+  `SignalFusion.mqh` row outputs.
 - **2026-09-15** — Removed `CopyTicks_g` completely from the source. PRO/REF c0 lookup
   now uses the last tick from a bounded 15-second `CopyTicksRange_g` window, gated by
   `in_conf.USE_TICK_CACHE` like every other call site — not a live-only change, it applies
