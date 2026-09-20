@@ -25,10 +25,29 @@ you're seeing is already known, and before starting new work, to check what's al
 
 - **Phase 2: incremental accumulation/fetching** (ready for a separate trial, not required for
   correctness). The current implementation still recomputes full windows and refreshes the
-  live day range, but the latest run shows acceptable live latency after the c0 paths (used in
-  both cache and live modes) were moved to a 15-second `CopyTicksRange_g` lookup. Phase 2 can
-  now be tested as an isolated performance optimization for DAY/REF/PRO and live tick refreshes.
-  Full design sketch, risk analysis, and validation history: `docs/repository-notes.md`.
+  live day range. Two 2026-09-20 runs bound the cost:
+  - without an open PRO position, native/cached `sGlobalVars` builds averaged 4.52/2.02 ms,
+    but native replay latency grew from 1.39 ms over its first 60 rows to 6.79 ms over its last
+    60 rows (15:00 through 20:47 overall), confirming the DAY/REF growing-window cost;
+  - with a cross-day PRO position holding about 5.68 million ticks per sample, both modes
+    averaged about 0.32 seconds because the day-scoped cache must use the native cross-day path.
+  Phase 2 should therefore cover DAY/REF first and preserve a reset/rebuild path for PRO anchor
+  changes and cross-day positions. Full design sketch, risk analysis, and validation history:
+  `docs/repository-notes.md`.
+- **Expose fusion decision provenance and runtime policy inputs.** The current final
+  `confirmation` value does not tell a caller whether the threshold was met or OC/HL resolved
+  an ambiguous row. In the no-PRO EURUSD run, 31/60 rows used the tie-breaker; all 27 final BUY
+  confirmations came from that fallback, while the 29 direct confirmations were SELL. The
+  next round should expose raw signal, final signal, and `tie_breaker_used`, and should make
+  confirmation threshold, tie-break period, and per-row tie logging script inputs rather than
+  demo literals. It must also decide whether an empty/zero PRO period remains an abstention
+  under a fixed threshold or reduces the effective threshold. Full evidence:
+  `docs/repository-notes.md`.
+- **A lightweight fusion snapshot is optional, not the next performance priority.** Without
+  the pathological cross-day PRO array, `AddBuf` and `TryGet` averaged only about 0.11-0.13 ms
+  each versus 2.02-4.52 ms to build `sGlobalVars`. Keep the idea of storing only
+  NETFLOW/OC_HL/VOLS_TD/SCORE for high-symbol-count or large-PRO workloads, but prioritize
+  incremental DAY/REF aggregation first.
 - **Live-buffer call-count reduction is verified for the deterministic harness; real live
   monitoring remains optional** (verified 2026-09-14): with one symbol, 60 samples, and
   `I_DEBUG=1`, the harness emitted exactly 60 `[LiveTickBuffer]` refresh lines with unique

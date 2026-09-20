@@ -6,13 +6,30 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-20** — Re-ran `TestVariables` on EURUSD without a large PRO buffer: all 240
+  comparisons matched, cached construction was 2.24x faster than native, replay latency still
+  grew about 4.9x across the supplied interval, and 31/60 confirmation rows used OC/HL
+  tie-breaking; recorded the resulting Phase 2 and fusion-provenance priorities.
+- **2026-09-20** — Verified the combined PR #3/current-worktree `TestVariables` run on GBPJPY:
+  all 240 symbol-period comparisons across 60 samples matched, static/adaptive fusion both
+  produced 7 BUY and 53 SELL rows, and confirmation produced 3 direct BUY plus 57 OC/HL
+  tie-resolved SELL rows.
+- **2026-09-20** — Switched cached quotes to a symbol-digit point-grid representation, made
+  `SUM_POS`/`SUM_NEG` exact `long` accumulators of per-tick rounded point moves, quantized
+  `NETFLOW` to four decimals, widened the empty-PRO c0 lookup to five minutes, and expanded the
+  cached fusion demo to 60 one-minute rows for every configured symbol; compilation and the
+  subsequent EURUSD/GBPJPY terminal exact-match runs passed.
+- **2026-09-19** — Added per-cell unsigned `sData.SCORE` in `variables.mqh`, computed from that
+  cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, surfaced it in row printing and cache-vs-native
+  comparisons, and updated the fusion demo/docs to distinguish it from the existing multi-period
+  `SignalFusion.mqh` row outputs.
 - **2026-09-15** — Removed `CopyTicks_g` completely from the source. PRO/REF c0 lookup
-  now uses the last tick from a bounded 15-second `CopyTicksRange_g` window, gated by
+  used the last tick from a bounded 15-second `CopyTicksRange_g` window, gated by
   `in_conf.USE_TICK_CACHE` like every other call site — not a live-only change, it applies
-  the same way in cache mode. This is the current implementation; the `CopyTicks_g` entries
-  below document yesterday's state.
+  the same way in cache mode. The 2026-09-20 entry above records the later PRO widening; the
+  `CopyTicks_g` entries below document the preceding state.
 - **2026-09-19** — Extended `SignalFusion.mqh` with OC/HL sign tie-breaking on ambiguous
-  confirmation/weighted results (defaulting to the longest configured period, configurable by
+  confirmation/weighted results (defaulting to the last configured period, configurable by
   period index), plus adaptive weighted fusion via `effective_weight = static_weight * VOLS_TD`,
   and updated `TestVariables.mq5` to print static-vs-adaptive weighted signals and tie-breaker
   activity summaries.

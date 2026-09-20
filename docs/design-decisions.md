@@ -3,17 +3,50 @@
 Read this before questioning or reversing a settled technical decision, or before adding a
 feature that resembles something already decided against.
 
+## Point-grid cache and integer tick-flow aggregation (2026-09-20)
+
+Tick-cache prices are now a canonical symbol-grid representation rather than a bit-exact
+serialization of terminal doubles: `TickCache.mqh` normalizes bid/ask/last to `SYMBOL_DIGITS`
+when writing and reading CSV, while `volume` and `volume_real` retain two decimal places.
+
+`sData.SUM_POS` and `SUM_NEG` are `long` values. Each per-tick price delta is rounded to whole
+points before accumulation, eliminating accumulated floating-point noise and making native/cache
+sum comparison exact. `NETFLOW` is derived from those integer sums with fixed-point arithmetic
+and intentionally truncated to four decimal places. `OC` and `HL` retain `MathRound` at their
+point conversion boundaries.
+
+This supersedes the 2026-09-09 full-double-round-trip policy below. The new contract favors
+stable point-domain strategy inputs over preserving sub-point binary detail that the strategy
+does not consume. Full change notes and current validation status: `docs/repository-notes.md`.
+
+## `sData.SCORE` stays per-cell and unsigned (2026-09-19)
+
+`sData` now carries a bounded `SCORE` in `[0, 1]` computed only from that one cell's own
+`NETFLOW`, `OC_HL`, and `VOLS_TD`. It is intentionally sign-independent: direction remains in the
+existing signed fields (`NETFLOW`, `OC`, `OC_HL`) and in the row-level/multi-period logic in
+`SignalFusion.mqh`.
+
+This explicitly rejects repurposing `SCORE` into a row summary or multi-period fusion output.
+`SignalFusion.mqh` still owns cross-period aggregation/confirmation behavior; `sData.SCORE` is
+only a per-period evidence-strength/quality measure that downstream code may inspect without
+changing BUY/SELL direction semantics. Full rationale and implementation notes:
+`docs/repository-notes.md`.
+
 ## SignalFusion ambiguity/timing weighting policy (2026-09-19)
 
 For multi-period NETFLOW fusion in `SignalFusion.mqh`, ambiguous FLAT outcomes are now resolved
 via the sign of `OC_HL` (`OC/HL`, already normalized) from a configurable tie-break period index
-(default: longest configured period, `periods_num - 1`). This keeps tie resolution scale-safe
-while preserving explicit FLAT when that tie-break value is zero/degenerate.
+(default: last configured period, `periods_num - 1`). It is only the longest period when
+`I_PERIODS` is ordered that way. This keeps tie resolution scale-safe while preserving explicit
+FLAT when that tie-break value is zero/degenerate.
 
 Weighted fusion keeps static period weights as the baseline and adds an adaptive mode where each
 period uses `effective_weight = static_weight * VOLS_TD`, with zero/non-positive `VOLS_TD` rows
 skipped and all-zero-total-weight rows returning neutral FLAT behavior. Full rationale and demo
-notes: `docs/repository-notes.md`.
+notes: `docs/repository-notes.md`. Default static weights are `1..N` in configured period order,
+so later entries have greater influence without inferring duration from labels. Confirmation
+voting uses only the sign of `NETFLOW`; zero values abstain and `sData.SCORE` does not alter
+either fusion algorithm.
 
 ## `sConfig` composition over inheritance (2026-09-09)
 
@@ -26,7 +59,7 @@ on each struct, threaded explicitly through constructors) so any future flag is 
 on a copied struct, not a new parameter thread. Verified as a pure internal restructuring
 with zero output changes. Full details: `docs/repository-notes.md`.
 
-## Tick-cache CSV round-trip precision (2026-09-09)
+## Tick-cache CSV round-trip precision (2026-09-09, superseded 2026-09-20)
 
 Native-vs-cache runs of `TestVariables.mq5` occasionally disagreed on `OC`/`HL`/`SUM_POS`/
 `SUM_NEG` by ±1. Root cause: `TickCache.mqh` wrote bid/ask/last at `SYMBOL_DIGITS` precision
@@ -34,9 +67,10 @@ Native-vs-cache runs of `TestVariables.mq5` occasionally disagreed on `OC`/`HL`/
 `(int)` cast instead of `MathRound` in a few display/derivation spots. Fixed by (a) writing
 bid/ask/last at a fixed `TICK_CACHE_ROUNDTRIP_DIGITS_G = 16` instead of `SYMBOL_DIGITS`, and
 (b) using `MathRound` instead of truncation wherever a near-integer double is cast to `int`.
-This is the resolved answer to "how do we make cache=true and cache=false agree exactly" —
-verified via the validation harness below (60/60 samples match exactly). Full root-cause
-writeup, including the diagnostic tooling built to isolate it: `docs/repository-notes.md`.
+This was the policy verified at the time via the validation harness below (60/60 samples
+matched exactly). It was replaced on 2026-09-20 by point-grid cache canonicalization and
+per-tick integer accumulation; the historical root-cause writeup remains in
+`docs/repository-notes.md`.
 
 ## Cache=false vs cache=true validation harness (implemented and verified 2026-09-10)
 
@@ -76,11 +110,11 @@ than refreshing once per configured period. The harness also reported `ALL 60 SA
 EXACTLY`, confirming that the reuse did not alter native-versus-cached results.
 
 This verifies the batching claim in the deterministic harness with `USE_TICK_CACHE=false`; it
-does not claim a separate wall-clock `doLive=true` run. The PRO/REF c0 paths now use a
-15-second `CopyTicksRange_g` window and select its last tick — this is `CopyTicksRange_g`'s
-normal `use_cache`-gated behavior, so it applies identically whether cache mode is on or off,
-not only in live mode. The remaining full-range DAY/period fetch cost is now acceptable for
-the current live loop. Full evidence: `docs/repository-notes.md`.
+does not claim a separate wall-clock `doLive=true` run. The bounded c0 lookups select the last
+available tick (five minutes for PRO, 15 seconds for REF) through `CopyTicksRange_g`'s normal
+`use_cache`-gated behavior, so they apply identically whether cache mode is on or off. The
+remaining full-range DAY/period fetch cost is now acceptable for the current live loop. Full
+evidence: `docs/repository-notes.md`.
 
 ## `sRingBuf<T>` self-times via a plain `elapsed_us` member, not a separate timer type (2026-09-13)
 
@@ -130,12 +164,12 @@ Full rationale, rejected alternatives, and follow-up verification notes:
 
 ## c0 lookup uses `CopyTicksRange_g` (2026-09-15)
 
-The c0 paths in PRO (no open position/window) and REF (window not yet open) use a bounded
-15-second `CopyTicksRange_g` window and select the last returned tick, which handles the fact
-that a sample timestamp may not have an exact tick. Since this is a call to `CopyTicksRange_g`
-with `in_conf.USE_TICK_CACHE` threaded through, it is not live-only — the same bounded window
-is used whether `USE_TICK_CACHE` is true or false. This also keeps the lookup on the
-established range-fetch path and avoids the unreliable direct single-tick call.
+The c0 paths in PRO (no open position/window) and REF (window not yet open) use bounded
+`CopyTicksRange_g` windows and select the last returned tick, which handles the fact that a
+sample timestamp may not have an exact tick. PRO uses a five-minute lookback; REF retains the
+15-second lookback. Since both calls thread `in_conf.USE_TICK_CACHE`, they are not live-only.
+This also keeps the lookup on the established range-fetch path and avoids the unreliable direct
+single-tick call.
 
 The 2026-09-15 run confirmed `ALL 60 SAMPLES MATCH EXACTLY`. Live `LAT_US` was generally about
 1.4-2.9 ms, so the current implementation is considered sufficiently fast. The next work is

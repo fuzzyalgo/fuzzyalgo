@@ -16,6 +16,8 @@ enum ENUM_FUSION_SIGNAL
     ENUM_FUSION_SIGNAL_SELL = 2
 };
 
+// Static weights follow configured period order. The default 1..N sequence
+// gives later entries more influence; it does not inspect period duration.
 struct sFusionWeights
 {
     double w[];
@@ -41,6 +43,8 @@ string FusionSignalToString_g(const ENUM_FUSION_SIGNAL in_signal)
     return "FLAT";
 }
 
+// Dense row-major snapshot: [sample][symbol][period]. CellIndex is the only
+// supported mapping into cells[] so callers do not duplicate layout math.
 struct sDataMatrix
 {
     int sample_count;
@@ -109,6 +113,9 @@ struct sDataMatrix
     }
 };
 
+// Copies a chronological ring-buffer view into a rectangular matrix. Every
+// snapshot must have the same symbol/period shape and ordering as row zero;
+// partial rows are rejected instead of being returned with default cells.
 bool ExtractRingBufToDataMatrix_g(sRingBuf<sGlobalVars> &in_ringbuf, sDataMatrix &out_matrix)
 {
     out_matrix.Reset();
@@ -134,19 +141,47 @@ bool ExtractRingBufToDataMatrix_g(sRingBuf<sGlobalVars> &in_ringbuf, sDataMatrix
     {
         sGlobalVars sample;
         if (!in_ringbuf.TryGet(row_idx, sample))
-            continue;
+        {
+            out_matrix.Reset();
+            return false;
+        }
+
+        if (sample.c.SYMBOLS_num != out_matrix.symbols_num ||
+            sample.c.PERIODS_num != out_matrix.periods_num ||
+            ArraySize(sample.c.SYMBOLS_arr) != out_matrix.symbols_num ||
+            ArraySize(sample.c.PERIODS_arr) != out_matrix.periods_num ||
+            ArraySize(sample.sSym) != out_matrix.symbols_num)
+        {
+            out_matrix.Reset();
+            return false;
+        }
+
+        for (int period_idx = 0; period_idx < out_matrix.periods_num; period_idx++)
+            if (sample.c.PERIODS_arr[period_idx] != out_matrix.periods_arr[period_idx])
+            {
+                out_matrix.Reset();
+                return false;
+            }
 
         out_matrix.time_msc[row_idx] = sample.time_msc;
 
-        int sample_symbols_num = ArraySize(sample.sSym);
-        for (int symbol_idx = 0; symbol_idx < out_matrix.symbols_num && symbol_idx < sample_symbols_num; symbol_idx++)
+        for (int symbol_idx = 0; symbol_idx < out_matrix.symbols_num; symbol_idx++)
         {
-            int sample_periods_num = ArraySize(sample.sSym[symbol_idx].sData);
-            for (int period_idx = 0; period_idx < out_matrix.periods_num && period_idx < sample_periods_num; period_idx++)
+            if (sample.c.SYMBOLS_arr[symbol_idx] != out_matrix.symbols_arr[symbol_idx] ||
+                ArraySize(sample.sSym[symbol_idx].sData) != out_matrix.periods_num)
+            {
+                out_matrix.Reset();
+                return false;
+            }
+
+            for (int period_idx = 0; period_idx < out_matrix.periods_num; period_idx++)
             {
                 int cell_idx = out_matrix.CellIndex(row_idx, symbol_idx, period_idx);
                 if (cell_idx < 0)
-                    continue;
+                {
+                    out_matrix.Reset();
+                    return false;
+                }
                 out_matrix.cells[cell_idx] = sample.sSym[symbol_idx].sData[period_idx].d;
             }
         }
@@ -155,6 +190,8 @@ bool ExtractRingBufToDataMatrix_g(sRingBuf<sGlobalVars> &in_ringbuf, sDataMatrix
     return true;
 }
 
+// Positive NETFLOW is one BUY vote, negative NETFLOW one SELL vote, and zero
+// abstains. Magnitude and per-cell SCORE do not affect confirmation voting.
 bool CountNetflowSignAgreement_g(const sDataMatrix &in_matrix,
                                  const int in_row_idx,
                                  const int in_symbol_idx,
@@ -223,6 +260,8 @@ int ResolveTieBreakerPeriodIdx_g(const sDataMatrix &in_matrix, const int in_peri
         return -1;
     if (in_period_idx >= 0 && in_period_idx < in_matrix.periods_num)
         return in_period_idx;
+    // Default to the last configured period. Callers control whether this is
+    // also the longest duration by how they order I_PERIODS.
     return in_matrix.periods_num - 1;
 }
 
@@ -309,6 +348,8 @@ double FuseNetflowRow_g(const sDataMatrix &in_matrix,
     if (in_symbol_idx < 0 || in_symbol_idx >= in_matrix.symbols_num)
         return 0.0;
 
+    // SCORE is intentionally not part of fusion. Static mode weights NETFLOW
+    // directly; adaptive mode multiplies each static weight by VOLS_TD.
     double weighted_sum = 0.0;
     double total_weight = 0.0;
     for (int period_idx = 0; period_idx < in_matrix.periods_num; period_idx++)

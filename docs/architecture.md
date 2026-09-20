@@ -58,8 +58,10 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
 
 - `MQL5/Include/FuzzyAlgo/variables.mqh` (~1,440 lines) is the core data model: `sConfig`
   (per-run config, composed into every other struct below), `sData`/`sDataVars` (per-symbol,
-  per-period derived tick features — `OC`/`HL`/`SUM_POS`/`SUM_NEG`/`NETFLOW`/etc., plus the
-  raw per-tick delta series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
+  per-period derived tick features — `OC`/`HL`, exact `long` point accumulators
+  `SUM_POS`/`SUM_NEG`, four-decimal `NETFLOW`, etc., plus the per-cell unsigned `SCORE`
+  derived only from that cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, and the raw per-tick delta
+  series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
   `CopyTicks` only, never cached), `sSymbolVars` (all periods for one symbol), `sGlobalVars`
   (all symbols for one sample), and `sRingBuf<T>` (a fixed-size ring buffer used to hold
   recent `sGlobalVars` snapshots). `ENUM_PERIOD_TYPE` (DAY/PRO/REF/SECONDS_S/TICKS_T) selects
@@ -68,19 +70,26 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   [design-decisions.md](design-decisions.md)).
 - `MQL5/Include/FuzzyAlgo/TickCache.mqh` caches a full day's ticks per symbol to CSV so a
   closed-market/backtest run can replay ticks without re-hitting the terminal's tick store on
-  every sample. Gated by `input bool I_USE_TICK_CACHE` / `conf.c.USE_TICK_CACHE`. See
-  `docs/repository-notes.md` for the precision bugs this surfaced and how they were fixed.
+  every sample. Cached prices are canonicalized to `SYMBOL_DIGITS` on write and read, and
+  volume fields are persisted with two decimal places. Gated by `input bool I_USE_TICK_CACHE`
+  / `conf.c.USE_TICK_CACHE`. See `docs/repository-notes.md` for the precision history.
 - `MQL5/Include/FuzzyAlgo/SignalFusion.mqh` adds matrix-style extraction from
-  `sRingBuf<sGlobalVars>` into `sDataMatrix`, plus multi-period NETFLOW fusion helpers:
-  weighted-average (`WeightedAverageFusion_g`), adaptive weighted-average
+  `sRingBuf<sGlobalVars>` into a dense row-major `sDataMatrix` whose flattened `cells[]` layout
+  is `[sample][symbol][period]`. Extraction requires every snapshot to have identical
+  symbol/period dimensions and ordering. Multi-period NETFLOW helpers provide weighted-average
+  (`WeightedAverageFusion_g`), adaptive weighted-average
   (`effective_weight = static_weight * VOLS_TD`), and confirmation-threshold voting
   (`ConfirmationFusion_g` / `ConfirmationFusionSeries_g`) with OC/HL tie-break fallback for
-  ambiguous rows, plus vote diagnostics (`CountNetflowSignAgreement_g`).
+  ambiguous rows. Default weights are `1..N` in configured period order; zero NETFLOW abstains
+  from confirmation voting; the default tie-break source is the last configured period. These
+  outputs aggregate across multiple cells in one row and remain separate from each cell's own
+  unsigned `sData.SCORE`.
 - `MQL5/Include/FuzzyAlgo/HistogramChart.mqh` — charting helper, not otherwise load-bearing to
   the data model above.
 - `MQL5/Scripts/FuzzyAlgo/TestVariables.mq5` — the main script; builds the object graph above
   per sample (live loop or closed-market/backtest via `doLive`), and runs the cache=false vs
-  cache=true comparison harness before the existing demo/live loop.
+  cache=true comparison harness before a cached SignalFusion matrix/demo and the subsequent
+  native replay/live loop.
 - `MQL5/Scripts/FuzzyAlgo/TestTickCacheDiff.mq5` — standing diagnostic/regression script that
   diffs raw tick arrays between native and cached fetches, and native-vs-native a few seconds
   apart, to catch cache- or feed-related discrepancies. Not a throwaway script — kept
