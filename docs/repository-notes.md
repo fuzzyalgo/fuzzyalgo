@@ -622,13 +622,11 @@ existing diff-reporting shape:
     `ticks_arr[i]` is computed once, independently, with no iterative
     accumulation noise). Prints the first 5 `DIFF[i]` lines
     (`a.ticks_arr[i]` vs `b.ticks_arr[i]`), then a total diff count.
-  - Also compares the derived `sData` fields: exact-int equality for
-    `OC`/`HL`/`VOLS`/`TD`/`SPREAD`; `MathRound`-to-int equality for
-    `SUM_POS`/`SUM_NEG` (matching `PrintRow`'s established display-equivalence
-    contract) — if the rounded values match but the raw doubles don't, print
-    an RTFP-style raw-value note (informational, not a failure); small-epsilon
-    (1e-9) equality for `NETFLOW`/`OC_HL`/`VOLS_TD`/`HL_TD`/`SUMCOL`; exact
-    equality for `c0`/`c1`/`t0`/`t1`.
+  - Also compares the derived `sData` fields: exact integer equality for
+    `OC`/`HL`/`VOLS`/`TD`/`SPREAD` and the `long` `SUM_POS`/`SUM_NEG`
+    accumulators; small-epsilon (1e-9) equality for
+    `NETFLOW`/`OC_HL`/`VOLS_TD`/`HL_TD`/`SUMCOL`; exact equality for
+    `c0`/`c1`/`t0`/`t1`.
   - Prints one final line per (symbol, period, sample): "MATCH exactly (N
     ticks)" or "MISMATCH (n diffs)", mirroring
     `TestTickCacheDiff.mq5`'s per-window summary line.
@@ -860,8 +858,9 @@ all in `TickCache.mqh`:
   PRO position opened on an earlier calendar day — the one case explicitly discussed above),
   that single request bypasses the buffer and calls native directly, rather than widening the
   buffer's window to accommodate it — keeps the buffer bounded to "today" unconditionally.
-  Live c0 lookups are handled separately through a bounded 15-second `CopyTicksRange_g`
-  request — the same request path used regardless of `use_cache`, not a live-only branch.
+  Live c0 lookups are handled separately through bounded `CopyTicksRange_g` requests
+  (currently five minutes for PRO and 15 seconds for REF) — the same request path used
+  regardless of `use_cache`, not a live-only branch.
 
 No changes were needed to `variables.mqh`, `sConfig`, `sSymbolVars`, `sDataVars`,
 `TestVariables.mq5`, or `TestTickCacheDiff.mq5` — every existing call site already calls
@@ -875,9 +874,10 @@ with the exact same signature; the batching is entirely internal to
   period in `I_PERIODS`) collapses to **1** native call per symbol per sample — every period
   branch (PRO/REF/DAY/`S<n>`) for the same `in_time_msc` now shares one buffer via cheap
   in-memory binary-search slicing.
-  - PRO's and REF's former single-tick "no window yet" branches now use a bounded 15-second
-    `CopyTicksRange_g` lookup for c0, gated by `in_conf.USE_TICK_CACHE` like every other call
-    site — this runs the same way in cache mode as in live mode, it is not a live-only path.
+  - PRO's and REF's former single-tick "no window yet" branches use bounded
+    `CopyTicksRange_g` lookups for c0, gated by `in_conf.USE_TICK_CACHE` like every other call
+    site — this runs the same way in cache mode as in live mode. PRO now looks back five
+    minutes; REF retains the original 15-second range.
   - `ENUM_PERIOD_TYPE_TICKS_T`'s retry loop (`inc_cnt` from 5 to 14, `variables.mqh`) calls
     `CopyTicksRange_g` up to 10 times with a *growing* `from_msc` but the same `to_msc` — each
     of those retries now also shares the one live buffer instead of issuing up to 10 native
@@ -906,10 +906,10 @@ per period) — recommended next validation step before considering this fully c
 The first live-buffer experiment routed the PRO/REF "no window yet" c0 lookup through the
 day buffer. That failed because a day buffer is a bounded range, while the former single-tick
 lookup required a different search contract; c0 became zero in the harness. The obsolete
-single-tick helper was removed from the source. The current implementation requests the
-preceding 15 seconds with `CopyTicksRange_g` and selects the last returned tick instead. This
-call is gated by `in_conf.USE_TICK_CACHE` exactly like every other `CopyTicksRange_g` call site,
-so it is not a live-only fix — the same 15-second window is used in cache mode too.
+single-tick helper was removed from the source. The current implementation requests a bounded
+range with `CopyTicksRange_g` and selects the last returned tick instead (five minutes for PRO,
+15 seconds for REF). These calls are gated by `in_conf.USE_TICK_CACHE` exactly like every other
+`CopyTicksRange_g` call site, so they are not live-only fixes.
 
 The corrected run reported zero mismatches for every PRO, REF, DAY, and S3600 comparison and
 ended with `ALL 60 SAMPLES MATCH EXACTLY`. Live `LAT_US` was generally approximately
@@ -1099,9 +1099,9 @@ ring-buffer results. It is important that this was the harness's historical-time
 `USE_TICK_CACHE=false`, not a separate wall-clock `doLive=true` run; it exercises the live
 buffer implementation deterministically without claiming to test live clock scheduling.
 
-The count concerns the bounded range requests only. The current c0 path also uses a bounded
-15-second `CopyTicksRange_g` request — the same request used in both cache and live modes, not
-a live-specific contract.
+The count concerns the bounded range requests only. The current c0 paths also use bounded
+`CopyTicksRange_g` requests (five minutes for PRO, 15 seconds for REF) in both cache and live
+modes; this is not a live-specific contract.
 
 The remaining performance issue is visible in the same log and in the build timings: native
 `sGlobalVars` construction averaged 11,003.9us versus 2,336.2us cached, while `AddBuf` and
@@ -1111,11 +1111,12 @@ incremental accumulation/extension rather than further period-level batching.
 
 ### Current c0 lookup and Phase 2 status (2026-09-15)
 
-The PRO and REF c0 paths now use `CopyTicksRange_g` over the preceding 15 seconds and take
-the last returned tick. This call is gated by `in_conf.USE_TICK_CACHE` like every other
-`CopyTicksRange_g` call site in `init_ticks_arr_g`, so it is not live-specific — it runs
-identically in cache mode and live mode. This avoids depending on an exact tick at the sample
-timestamp and keeps c0 on the range-fetch path already used by the period calculations.
+The PRO and REF c0 paths use `CopyTicksRange_g` over a bounded lookback and take the last
+returned tick. PRO now uses five minutes; REF retains 15 seconds. Both calls are gated by
+`in_conf.USE_TICK_CACHE` like every other `CopyTicksRange_g` call site in
+`init_ticks_arr_g`, so they are not live-specific. This avoids depending on an exact tick at
+the sample timestamp and keeps c0 on the range-fetch path already used by the period
+calculations.
 
 The latest run verified:
 
@@ -1142,9 +1143,10 @@ which made downstream behavior sensitive to pure tie/neutral cases.
 The implemented policy now resolves only those ambiguous `FLAT` outcomes through a dedicated
 `OC_HL` tie-breaker. `OC_HL` is already normalized in `variables.mqh` as `OC / HL`, so only its
 sign is consumed (`>0 => BUY`, `<0 => SELL`, `0 => FLAT`) and no cross-period magnitude scaling
-is assumed. The tie-break period index is configurable per call; default behavior uses the longest
-configured period (`periods_num - 1`). Every tie-break invocation logs context/row/period/`OC_HL`
-and the resulting signal so tie-resolved outputs are distinguishable from normal confirmations.
+is assumed. The tie-break period index is configurable per call; default behavior uses the last
+configured period (`periods_num - 1`), which is only the longest period if `I_PERIODS` is ordered
+that way. Every tie-break invocation logs context/row/period/`OC_HL` and the resulting signal so
+tie-resolved outputs are distinguishable from normal confirmations.
 
 Weighted fusion now supports an adaptive mode in addition to the original static-weight behavior.
 The adaptive path computes each row-period contribution with
@@ -1190,3 +1192,195 @@ demo now prints each period as `PERIOD(NF=... SCORE=...)`. `SignalFusion.mqh` wa
 its weighted/confirmation outputs remain row-level multi-period aggregation across cells, while
 each copied `sDataMatrix.cells[cell_idx]` now simply retains the new per-cell `SCORE` alongside the
 existing signed fields.
+
+### Point-grid cache, integer tick-flow sums, and expanded fusion replay (2026-09-20)
+
+The tick-derived flow path now treats whole symbol points as its canonical numeric domain.
+`TickCache.mqh` normalizes bid/ask/last to `SYMBOL_DIGITS` both when writing CSV and when
+loading it, including older cache files that may contain more precision. `volume` and
+`volume_real` are persisted with two decimal places. This replaces the earlier fixed
+16-decimal cache representation: the strategy consumes point moves, so preserving sub-point
+binary detail is no longer the cache contract.
+
+`sData.SUM_POS` and `SUM_NEG` changed from `double` to `long`. Each value in `ticks_arr` remains
+available as a raw `double`, but its contribution is `MathRound`ed to a whole point before it
+is added to the positive or negative accumulator. The comparison harness can therefore compare
+the sums directly instead of applying a display-only rounding equivalence and carrying
+unreachable "raw doubles differ" diagnostics. `NETFLOW` uses the exact integer sums, scales
+the numerator by 10,000, performs integer division, and converts back to `double`; its contract
+is consequently a value in `[-1, 1]` truncated to four decimal places.
+
+The PRO path was adjusted in two related ways. Its no-position/zero-width c0 search now scans
+the preceding five minutes rather than 15 seconds, reducing empty results on quiet symbols.
+When an actual position window starts on an earlier calendar day, the day-scoped cache wrapper
+cannot represent the cross-day range; a direct native `CopyTicksRange` fallback preserves the
+complete `[position_open, sample_time]` window.
+
+`TestVariables.mq5` now builds the SignalFusion demo from 60 one-minute cached samples starting
+at the configured historical timestamp and runs the demo for every configured symbol. The
+following replay/live loop explicitly uses `USE_TICK_CACHE=false`, retaining an independent
+native-data view, and historical replay stops before constructing the first sample at the next
+midnight using full millisecond day bounds rather than comparing only the day-of-month.
+
+Validation on 2026-09-20: `TestVariables.mq5`, `TestTickCacheDiff.mq5`, and `TestFFT.mq5`
+compiled with 0 errors and 0 warnings. The supplied terminal run then reported
+`ALL 60 SAMPLES MATCH EXACTLY`, covering all four configured GBPJPY periods at every sample;
+the detailed PR/output analysis follows.
+
+### PR #3 delta from main and supplied TestVariables output (2026-09-20)
+
+The committed PR #3 range (`7afbba7` on main through `99025f7`) contains five commits and
+introduces the signal-fusion layer without changing the Python subsystem:
+
+- new `SignalFusion.mqh`, with a dense `[sample][symbol][period]` `sDataMatrix` copied from
+  `sRingBuf<sGlobalVars>`, default static weights `1..N` in configured period order,
+  weighted NETFLOW, optional `VOLS_TD`-adaptive weighting, sign-count confirmation, and
+  last-configured-period OC/HL tie-breaking;
+- per-cell unsigned `sData.SCORE`, its `0.50/0.35/0.15` flow/price/activity formula, row output,
+  and native-vs-cache comparison;
+- `RunSignalFusionDemo_g` in `TestVariables.mq5`, which prints each period's NETFLOW/SCORE,
+  BUY/SELL vote counts, static/adaptive weighted decisions, confirmation decisions, and a
+  tie-break summary;
+- the uppercase `MetaEditor64.exe` ignore entry needed on case-sensitive Git clients.
+
+The original committed PR demo called fusion for symbol index 0 over the existing ten-entry,
+one-second ring-buffer seed. The later uncommitted worktree expands that to every configured
+symbol and 60 one-minute cached samples. The supplied log predates the final start-time cleanup,
+so its fusion matrix spans 14:59 through 15:58; the current worktree starts at 15:00 and is
+expected to span 15:00 through 15:59.
+
+The supplied GBPJPY run (`PRO:REF:DAY:S3600`) demonstrates the output changes relative to main:
+
+- Main printed `OC`, `HL`, `OC/HL`, `NETFLOW`, `SUMPOS`, and `SUMNEG` per period and had no
+  fusion output. PR #3 adds `SCORE`; the later worktree format shown in this log omits the two
+  sum columns and prints `OC`, `HL`, `OC/HL`, `SCORE`, and `NETFLOW`.
+- The cache harness emitted 240 exact period comparisons (`60 samples * 4 periods`), 60
+  zero-mismatch sample summaries, and final `ALL 60 SAMPLES MATCH EXACTLY`. This closes the
+  pending runtime check for symbol-digit cache normalization, exact integer flow sums,
+  four-decimal NETFLOW, and SCORE comparison.
+- Timings were native build `326050.1 us` versus cached build `320255.6 us`; ring-buffer
+  `AddBuf` averaged `6405.7/6187.5 us` and `TryGet` averaged `7266.1/7444.6 us`
+  (native/cached). The small cache advantage is expected here because PRO held roughly
+  5.68 million cross-day ticks per sample and therefore used the native cross-day path on
+  both sides; copying those large snapshots also explains the millisecond ring-buffer cost.
+- The 60 fusion rows contained 240 displayed SCORE values ranging from `0.00` to `0.96`.
+  Static and adaptive weighted modes agreed on every row: 7 BUY and 53 SELL.
+- Raw confirmation vote patterns were 56 rows at 2 BUY / 2 SELL, one row at 2 BUY / 1 SELL,
+  and three rows at 3 BUY / 1 SELL. With `min_confirmations=3`, only 15:01, 15:02, and 15:03
+  were direct BUY confirmations. The other 57 rows were ambiguous and all resolved to SELL
+  from negative S3600 `OC_HL`; no row remained FLAT.
+- Weighted and confirmation outputs intentionally differed on four rows (14:59, 15:00,
+  15:04, and 15:05): weighted modes returned BUY while confirmation, after tie-breaking,
+  returned SELL. This confirms that weighted magnitude and threshold voting are independent
+  policies rather than two names for the same calculation.
+
+The pasted log ends during the subsequent native historical replay at 15:46, so it verifies
+the complete cache harness and fusion demo but not that replay loop's eventual day-boundary
+termination.
+
+### TestVariables output without the cross-day PRO buffer (2026-09-20)
+
+A second supplied run used EURUSD with the same `PRO:REF:DAY:S3600` configuration but no open
+position, so PRO remained a zero-data cell throughout. This removes the prior run's roughly
+5.68-million-tick cross-day PRO cost and gives a representative baseline for the remaining
+DAY/REF/S3600 work.
+
+Correctness remained exact: 240 period comparisons across 60 samples, 60 zero-mismatch sample
+summaries, and final `ALL 60 SAMPLES MATCH EXACTLY`. The run contained no explicit failure,
+skip, or mismatch output. SCORE remained bounded as designed; the 240 displayed values ranged
+from `0.00` to `0.91`.
+
+The cache benefit is visible once PRO no longer dominates:
+
+- `sGlobalVars` build average: native `4523.1 us`, cached `2022.0 us` — cached construction
+  took about 44.7% of native time (approximately 2.24x faster).
+- `AddBuf`: native/cached `126.3/108.8 us`.
+- `TryGet`: native/cached `126.1/118.4 us`.
+
+This changes the performance priority inferred from the first log. Under a normal no-PRO load,
+ring-buffer copies are small compared with object construction, so a lightweight fusion-only
+snapshot would be an optional scaling optimization rather than the next task. The supplied
+native replay contains 348 rows from 15:00 through 20:47: average latency was `1388.9 us` for
+the first 60 rows and `6794.1 us` for the last 60 rows, a roughly 4.9x increase. That is direct
+evidence that growing DAY/REF windows, not the fusion matrix, are the normal-load bottleneck and
+keeps Phase 2 incremental accumulation as the next performance implementation.
+
+The fusion distribution also differs materially from the prior GBPJPY run:
+
+- Static weighting: 18 BUY / 42 SELL.
+- Adaptive weighting: 25 BUY / 35 SELL.
+- Static and adaptive differed on seven rows; every change was static SELL to adaptive BUY
+  (`15:01`, `15:02`, `15:14`, `15:15`, `15:22`, `15:26`, and `15:27`). This confirms that
+  `VOLS_TD` weighting is active and can change direction rather than merely confidence.
+- With PRO empty, its zero NETFLOW abstained. The remaining vote patterns were 29 rows at
+  0 BUY / 3 SELL, 22 at 2 BUY / 1 SELL, eight at 1 BUY / 2 SELL, and one at 1 BUY / 1 SELL.
+  At `min_confirmations=3`, the 29 unanimous active-period rows were direct SELL
+  confirmations; there were no direct BUY confirmations.
+- The other 31 rows were raw FLAT and invoked S3600 OC/HL: 27 resolved BUY and four resolved
+  SELL, producing final confirmation totals of 27 BUY / 33 SELL with no remaining FLAT rows.
+  Static weighting and final confirmation differed on nine rows.
+
+The result makes provenance important: a final `confirmation=BUY` in this run always means
+"ambiguous vote resolved by OC/HL," not "three periods confirmed BUY." The next implementation
+round should expose at least raw signal, final signal, and `tie_breaker_used` to downstream
+callers and output. It should also move the demo's confirmation threshold, tie-break period,
+and verbose per-row tie logging to explicit script inputs. Before changing behavior, decide
+whether empty periods such as PRO should continue to abstain under an unchanged absolute
+threshold (current behavior) or reduce an effective threshold based on active voters.
+
+```text
+Per-period NETFLOW for one sample and symbol
+             |
+             v
+  +---------------------------+
+  | Count signs               |
+  | NETFLOW > 0  -> BUY vote  |
+  | NETFLOW < 0  -> SELL vote |
+  | NETFLOW = 0  -> abstain   |
+  +---------------------------+
+             |
+             v
+  +----------------------------------+
+  | Apply confirmation threshold     |
+  | BUY votes  >= threshold -> BUY   |
+  | SELL votes >= threshold -> SELL  |
+  | otherwise                 -> FLAT |
+  +----------------------------------+
+             |
+             v
+       raw_signal
+        /      \
+  BUY/SELL     FLAT
+      |          |
+      |          v
+      |   +--------------------------------+
+      |   | Read OC_HL from configured     |
+      |   | tie-break period (default:     |
+      |   | last configured period)        |
+      |   +--------------------------------+
+      |          |
+      |          v
+      |   OC_HL > 0 -> BUY
+      |   OC_HL < 0 -> SELL
+      |   OC_HL = 0 -> FLAT
+      |          |
+      +----------+
+             |
+             v
+  +----------------------------------+
+  | Proposed result                  |
+  | raw_signal                       |
+  | final_signal                     |
+  | tie_breaker_used                 |
+  | buy_votes / sell_votes           |
+  | tie_breaker_period_idx / OC_HL   |
+  +----------------------------------+
+
+Current EURUSD example with PRO empty and threshold=3:
+
+  PRO=0, REF=BUY, DAY=SELL, S3600=BUY
+       -> votes BUY=2, SELL=1, PRO abstains
+       -> raw_signal=FLAT
+       -> S3600 OC_HL > 0
+       -> final_signal=BUY, tie_breaker_used=true
+```

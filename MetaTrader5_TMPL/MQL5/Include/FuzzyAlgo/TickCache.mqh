@@ -166,25 +166,14 @@ bool TickCacheFileExists_g(const string symbol, const long day_start_msc)
     return FileIsExist(TickCacheFilePath_g(symbol, day_start_msc));
 } // bool TickCacheFileExists_g
 
-// A double has at most ~17 significant decimal digits; 16 digits after the
-// decimal point is far more than enough for any FX price (single-digit
-// integer part) to round-trip through DoubleToString/StringToDouble with
-// the exact same bit pattern it started with. Writing bid/ask/last at the
-// symbol's display precision (SYMBOL_DIGITS, e.g. 5) instead lost bits below
-// that precision - invisible directly, but amplified ~10^5x by later
-// division by `point` in OC/HL, occasionally flipping which integer a
-// native-vs-cache value rounds to (see docs/repository-notes.md's OC/HL ULP writeup).
-#define TICK_CACHE_ROUNDTRIP_DIGITS_G 16
-
 //+------------------------------------------------------------------+
 //| Writes arr[] to filename as CSV (header + one row per tick),     |
 //| following the FileOpen(FILE_WRITE|FILE_CSV|FILE_ANSI) pattern    |
-//| already used for CSV output in Ticks.mq5. bid/ask/last are       |
-//| written at full round-trip precision (see                        |
-//| TICK_CACHE_ROUNDTRIP_DIGITS_G above), not the symbol's display   |
-//| digits - this file's caller-supplied `digits` is only used for   |
-//| the (unrelated) volume/volume_real-adjacent Print/diagnostic     |
-//| call sites elsewhere, not for what actually gets written here.   |
+//| already used for CSV output in Ticks.mq5. Prices are normalized  |
+//| to the symbol's point grid before writing; volume fields retain  |
+//| two decimal places. ReadTicksFromCsv_g repeats price             |
+//| normalization so old and newly-created cache files have the same |
+//| in-memory representation.                                        |
 //+------------------------------------------------------------------+
 int WriteTicksToCsv_g(const string filename, const MqlTick &arr[], const int digits)
 {
@@ -200,12 +189,12 @@ int WriteTicksToCsv_g(const string filename, const MqlTick &arr[], const int dig
     {
         string row = StringFormat("%I64d,%s,%s,%s,%s,%u,%s\n",
                                   arr[cnt].time_msc,
-                                  DoubleToString(arr[cnt].bid, TICK_CACHE_ROUNDTRIP_DIGITS_G),
-                                  DoubleToString(arr[cnt].ask, TICK_CACHE_ROUNDTRIP_DIGITS_G),
-                                  DoubleToString(arr[cnt].last, TICK_CACHE_ROUNDTRIP_DIGITS_G),
-                                  DoubleToString((double)arr[cnt].volume, 1),
+                                  DoubleToString(NormalizeDouble(arr[cnt].bid, digits), digits),
+                                  DoubleToString(NormalizeDouble(arr[cnt].ask, digits), digits),
+                                  DoubleToString(NormalizeDouble(arr[cnt].last, digits), digits),
+                                  DoubleToString((double)arr[cnt].volume, 2),
                                   arr[cnt].flags,
-                                  DoubleToString(arr[cnt].volume_real, 1));
+                                  DoubleToString(arr[cnt].volume_real, 2));
         FileWriteString(file_handle, row);
     }
     FileClose(file_handle);
@@ -213,10 +202,11 @@ int WriteTicksToCsv_g(const string filename, const MqlTick &arr[], const int dig
 } // int WriteTicksToCsv_g
 
 //+------------------------------------------------------------------+
-//| Reads filename back into out_arr[]. Assumes the file exists -    |
-//| caller's job to have checked TickCacheFileExists_g first.        |
+//| Reads filename back into out_arr[] and canonicalizes prices to   |
+//| the symbol's point grid. Assumes the file exists - caller's job  |
+//| to have checked TickCacheFileExists_g first.                     |
 //+------------------------------------------------------------------+
-int ReadTicksFromCsv_g(const string filename, MqlTick &out_arr[])
+int ReadTicksFromCsv_g(const string filename, MqlTick &out_arr[], const int digits)
 {
     int file_handle = FileOpen(filename, FILE_READ | FILE_CSV | FILE_ANSI);
     if (INVALID_HANDLE == file_handle)
@@ -251,9 +241,9 @@ int ReadTicksFromCsv_g(const string filename, MqlTick &out_arr[])
 
         out_arr[cnt].time_msc = (long)StringToInteger(fields[0]);
         out_arr[cnt].time = (datetime)(out_arr[cnt].time_msc / 1000);
-        out_arr[cnt].bid = StringToDouble(fields[1]);
-        out_arr[cnt].ask = StringToDouble(fields[2]);
-        out_arr[cnt].last = StringToDouble(fields[3]);
+        out_arr[cnt].bid = NormalizeDouble(StringToDouble(fields[1]), digits);
+        out_arr[cnt].ask = NormalizeDouble(StringToDouble(fields[2]), digits);
+        out_arr[cnt].last = NormalizeDouble(StringToDouble(fields[3]), digits);
         out_arr[cnt].volume = (ulong)StringToDouble(fields[4]);
         out_arr[cnt].flags = (uint)StringToInteger(fields[5]);
         out_arr[cnt].volume_real = StringToDouble(fields[6]);
@@ -289,8 +279,9 @@ int CreateTickCacheFile_g(const string symbol, const long day_start_msc, const l
 //+------------------------------------------------------------------+
 int LoadTickCacheFile_g(const string symbol, const long day_start_msc, MqlTick &out_arr[])
 {
+    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
     string filename = TickCacheFilePath_g(symbol, day_start_msc);
-    return ReadTicksFromCsv_g(filename, out_arr);
+    return ReadTicksFromCsv_g(filename, out_arr, digits);
 } // int LoadTickCacheFile_g
 
 //+------------------------------------------------------------------+
@@ -420,4 +411,3 @@ int CopyTicksRange_g(const string symbol, MqlTick &out[], const ENUM_COPY_TICKS 
 
     return ArrayCopy(out, g_tick_day_caches[idx].ticks, 0, from_idx, count);
 } // int CopyTicksRange_g
-

@@ -280,12 +280,8 @@ void OnStart()
         int raw_diff_count = 0;
         for (int i = 0; i < min_size; i++)
         {
-            // Both sides normalized through the same digits round-trip - the
-            // cache now stores full round-trip precision (TICK_CACHE_ROUNDTRIP_DIGITS_G
-            // in TickCache.mqh), not the symbol's display digits, so comparing
-            // a digits-rounded native value against an un-rounded cache value
-            // would manufacture false diffs even when the underlying data is
-            // identical (as RAWDIFF below already confirms exactly).
+            // Compare both sides on the symbol's point grid, matching
+            // TickCache.mqh's persisted price representation.
             double native_bid = StringToDouble(DoubleToString(native_arr[i].bid, digits));
             double native_ask = StringToDouble(DoubleToString(native_arr[i].ask, digits));
             double cache_bid = StringToDouble(DoubleToString(cache_arr[i].bid, digits));
