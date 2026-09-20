@@ -64,6 +64,8 @@ int string_split_g(const string &in_string_to_split, const string &in_seperator,
     return num_splits;
 }
 
+// Per-cell, sign-independent evidence strength. Direction remains in NETFLOW
+// and OC_HL; this score combines their magnitudes with saturating activity.
 double CalculateDataScore_g(const sData &in_data, const double in_activity_reference = 1.0)
 {
     double flow_strength = MathAbs(in_data.NETFLOW);
@@ -117,19 +119,10 @@ bool init_data_from_ticks_arr_g(
     out_data.t0 = in_array[size1 - 1].time_msc;
     out_data.c1 = (in_array[0].ask + in_array[0].bid) / 2;
     out_data.t1 = in_array[0].time_msc;
-    // (c0-c1)/point is a single arithmetic result, not an accumulated sum, but
-    // a native in-memory double and a CSV-round-tripped double (tick cache)
-    // can still differ by ~1 ULP, which the /point division amplifies ~10^5x
-    // (point ~0.00001 for 5-digit EURUSD) - enough to land on the opposite
-    // side of an integer/half-integer boundary. A plain (int) truncation cast
-    // flipped native-vs-cache OC by 1 in exactly this scenario; MathRound
-    // fixes the boundary-straddle cases where both sides' true values agree.
-    // A handful of survivors (raw values sitting almost exactly on a .5
-    // boundary) were NOT a rounding artifact but a genuine raw-value
-    // difference, root-caused to TickCache.mqh writing bid/ask/last at
-    // SYMBOL_DIGITS precision instead of a full round-trip precision - see
-    // TICK_CACHE_ROUNDTRIP_DIGITS_G in TickCache.mqh and docs/repository-notes.md's
-    // Tick cache section ("OC/HL had the same class of native-vs-cache mismatch").
+    // Price-derived point distances are whole-number domain values. MathRound
+    // prevents binary floating-point noise around a point boundary from
+    // becoming a one-point truncation error; cached prices are additionally
+    // canonicalized to SYMBOL_DIGITS in TickCache.mqh.
     out_data.OC = (int)MathRound((out_data.c0 - out_data.c1) / point);
     out_data.VOLS = size1;
     if (ENUM_PERIOD_TYPE_SECONDS_S == in_period_type)
@@ -171,17 +164,16 @@ bool init_data_from_ticks_arr_g(
         if (spread < s)
             spread = s;
 
+        // Quantize each price move to whole points before accumulation. The
+        // resulting long sums are deterministic and cannot collect FP noise.
         if (0.0 < out_ticks_arr[cnt])
-            out_data.SUM_POS += out_ticks_arr[cnt];
+            out_data.SUM_POS += (long)MathRound(out_ticks_arr[cnt]);
         if (0.0 > out_ticks_arr[cnt])
-            out_data.SUM_NEG += out_ticks_arr[cnt];
+            out_data.SUM_NEG += (long)MathRound(out_ticks_arr[cnt]);
 
     } // for (int cnt = 0; cnt < size1; cnt++)
 
-    // Same ULP-amplification-via-/point issue as OC above, and the same
-    // two-part fix: MathRound handles the boundary-straddle cases, full CSV
-    // round-trip precision (TickCache.mqh) handles the genuine raw-value
-    // differences that rounding alone can't paper over.
+    // HL uses the same point-grid rounding contract as OC above.
     out_data.HL = (int)MathRound((high - low) / point);
     out_data.SPREAD = spread;
 
@@ -193,12 +185,17 @@ bool init_data_from_ticks_arr_g(
         out_data.HL_TD = (double)((double)out_data.HL / (double)out_data.TD);
     out_data.SUMCOL = MathAbs(out_data.OC_HL) + out_data.VOLS_TD + out_data.HL_TD;
 
-    // bounded net-flow share in [-1, 1]: (pos + neg) / (pos - neg).
-    // sum_neg <= 0, so the denominator is pos + |neg| (total tick magnitude).
+    // Bounded net-flow share in [-1, 1]: (pos + neg) / (pos - neg).
+    // SUM_NEG <= 0, so the denominator is pos + |neg|. Integer division
+    // intentionally truncates the result to four decimal places.
     out_data.NETFLOW = 0.0;
-    double netflow_total = out_data.SUM_POS - out_data.SUM_NEG;
-    if (0.0 != netflow_total)
-        out_data.NETFLOW = (out_data.SUM_POS + out_data.SUM_NEG) / netflow_total;
+    long netflow_total = out_data.SUM_POS - out_data.SUM_NEG;
+    if (0 != netflow_total)
+    {
+        long nf = (out_data.SUM_POS + out_data.SUM_NEG) * 10000;
+        nf = nf / netflow_total;
+        out_data.NETFLOW = (double)nf / 10000.0;
+    }
 
     // SCORE is a bounded per-cell quality/strength metric only; direction stays
     // encoded separately in signed fields like NETFLOW and OC_HL.
@@ -284,7 +281,7 @@ bool init_ticks_arr_g(
         // Same three states as REF:
         //   1) no open position for in_symbol - handled in the `if` below,
         //      everything stays 0 except c0, which still gets the current
-        //      price via a bounded 15-second CopyTicksRange_g lookup (see below).
+        //      price via a bounded five-minute CopyTicksRange_g lookup (see below).
         //   2) position just opened, in_time_msc == open time: zero-width
         //      window, PRODLT (if displayed) prints 0.
         //   3) in_time_msc > open time: real window [open_time, in_time_msc],
@@ -305,11 +302,10 @@ bool init_ticks_arr_g(
         if (0 >= start_time_pro_msc || in_time_msc <= start_time_pro_msc)
         {
             MqlTick tarr[];
-            // try to get the last tick just at or before in_time_msc
-            // so set just_before_in_time_msc 15 seconds before in_time_msc
-            // as sometimes there is no tick for longer period of seconds
-            datetime just_before_in_time_msc = (datetime)(in_time_msc - 15*1000);
-            int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, just_before_in_time_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
+            // Use the last available tick in a five-minute lookback because
+            // quiet symbols may have no tick at the exact sample timestamp.
+            long c0_from_msc = in_time_msc - 5 * 60 * 1000;
+            int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, c0_from_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
             {
                 out_data.c0 = (tarr[len-1].ask + tarr[len-1].bid) / 2;
@@ -330,10 +326,21 @@ bool init_ticks_arr_g(
         }
         else
         {
-            size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
-            if (0 < size1)
-            {
+            long pro_day_start_msc, pro_day_end_msc;
+            GetDayBoundsMsc_g(start_time_pro_msc, pro_day_start_msc, pro_day_end_msc);
+            bool use_cross_day_native = in_conf.USE_TICK_CACHE && in_time_msc > pro_day_end_msc;
 
+            if (use_cross_day_native)
+            {
+                // Cached ranges are day-scoped. A position opened on an
+                // earlier day crosses that boundary, so preserve the complete
+                // PRO window with a direct native fetch.
+                size1 = CopyTicksRange(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc);
+            }
+            else
+                size1 = CopyTicksRange_g(in_symbol, in_array, in_conf.COPY_TICKS_FLAG, start_time_pro_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
+
+            if (0 < size1)
                 ret = init_data_from_ticks_arr_g(
                     in_time_msc,
                     in_symbol,
@@ -342,7 +349,6 @@ bool init_ticks_arr_g(
                     in_array,
                     out_ticks_arr,
                     out_data);
-            }
         }
 
     } // if (ENUM_PERIOD_TYPE_PRO == in_period_type)
@@ -375,15 +381,9 @@ bool init_ticks_arr_g(
         {
             // No ref point established yet, or no time has elapsed since it -
             // there's no window to sum OC/HL/SUM_POS/SUM_NEG/NETFLOW over, so
-            // those stay at their zero-initialized defaults. 
-            // but c0 is still the current price regardless of
-            // whether any window has elapsed, so fetch it via a bounded
-            // 15-second CopyTicksRange_g window (unlike sRefPoint's constructor,
-            // which does a genuine single-tick native CopyTicks call) rather
-            // than leaving it at 0.
-            // try to get the last tick just at or before in_time_msc
-            // so set just_before_in_time_msc 15 seconds before in_time_msc
-            // as sometimes there is no tick for longer period of seconds
+            // those stay at their zero-initialized defaults. c0 still needs
+            // the last available price, so use the existing 15-second range
+            // lookup rather than leaving it at zero.
             MqlTick tarr[];
             datetime just_before_in_time_msc = (datetime)(in_time_msc - 15*1000);
             int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, just_before_in_time_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
@@ -451,26 +451,12 @@ bool init_ticks_arr_g(
                     out_ticks_arr,
                     out_data);
 
-                // RTFP RAW - the undisplayed SUM_POS/SUM_NEG doubles, printed
-                // at full precision (12 decimals, no rounding) right after
-                // they're computed. SUM_POS/SUM_NEG are theoretically always
-                // whole numbers (each tick contributes one whole point-unit),
-                // but summing thousands of per-tick deltas accumulates ~1e-8
-                // of FP noise - normally harmless, but it previously flipped
-                // the *displayed* integer when it landed on the wrong side of
-                // a .0/.5 boundary combined with a truncating (int) cast in
-                // PrintRow. This print is what proved that: two runs whose
-                // RTFP (aggregate) fingerprint above matched exactly could
-                // still show a raw SUM_NEG of -12182.999999998943 vs
-                // -12183.000000001766 - same value, opposite side of -12183.0.
-                // Fixed by rounding instead of truncating in PrintRow (see
-                // comment there); this print is kept so the same class of
-                // mismatch is diagnosable again without re-deriving the
-                // technique from scratch.
+                // Keep the exact integer flow sums available in verbose
+                // diagnostics alongside the aggregate tick fingerprint.
                 if (1 < in_conf.DEBUG)
                     Print("  RTFP REF RAW cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                          " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
-                          " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
+                          " SUM_POS=", IntegerToString(out_data.SUM_POS),
+                          " SUM_NEG=", IntegerToString(out_data.SUM_NEG));
             }
         }
 
@@ -513,11 +499,11 @@ bool init_ticks_arr_g(
                 out_ticks_arr,
                 out_data);
 
-            // RTFP RAW - see the matching comment in the REF branch above.
+            // Exact integer flow sums; see the matching REF diagnostic.
             if (1 < in_conf.DEBUG)
                 Print("  RTFP S", in_period_num, " RAW cache=", in_conf.USE_TICK_CACHE, " ", in_symbol, " ", TimeToString(in_time_msc / 1000, TIME_SECONDS),
-                      " SUM_POS=", DoubleToString(out_data.SUM_POS, 12),
-                      " SUM_NEG=", DoubleToString(out_data.SUM_NEG, 12));
+                      " SUM_POS=", IntegerToString(out_data.SUM_POS),
+                      " SUM_NEG=", IntegerToString(out_data.SUM_NEG));
         }
 
     } // if (ENUM_PERIOD_TYPE_SECONDS_S == period_type )
@@ -750,8 +736,8 @@ struct sData
     double c0_pro;
 
     // fft
-    double SUM_POS;
-    double SUM_NEG;
+    long SUM_POS;
+    long SUM_NEG;
     double NETFLOW;
 
     sData()
@@ -982,9 +968,9 @@ struct sSymbolVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
-            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %7s %9s %9s",
+            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %7s",
                                         sData[p].period,
-                                        "OC", "HL", "OC/HL", "SCORE", "NETFLOW", "SUMPOS", "SUMNEG");
+                                        "OC", "HL", "OC/HL", "SCORE", "NETFLOW");
         }
 
         string foot = StringFormat(" | %10s %8s", "C0", "LAT_US");
@@ -1018,32 +1004,13 @@ struct sSymbolVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
-            // SUM_POS/SUM_NEG are theoretically always whole numbers (each
-            // tick contributes one whole point-unit to the running delta
-            // sum), but summing thousands of per-tick doubles accumulates
-            // ~1e-8 of FP noise. A plain (int) cast truncates, so noise
-            // landing on either side of a .0/.5 boundary displayed a
-            // different integer depending on summation order - this is what
-            // caused the intermittent +/-1 SUM_POS/SUM_NEG mismatch between
-            // I_USE_TICK_CACHE=true and =false runs (native fetch vs cache
-            // slice reconstruct ticks in a subtly different order for ticks
-            // sharing identical/adjacent time_msc). MathRound fixes the
-            // *display* only - the underlying noise is still there and
-            // harmless, since both sides round to the same integer. See
-            // docs/repository-notes.md's Tick cache section for the full root-cause writeup
-            // and the RTFP diagnostic (I_DEBUG>=2 in init_ticks_arr_g) that
-            // proved it. OC/HL don't need this - they're single-arithmetic
-            // values, not summed across the window, so they never accumulate
-            // this noise.
-            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %7.2f %9d %9d",
+            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %7.2f",
                                         sData[p].period,
                                         (int)sData[p].d.OC,
                                         (int)sData[p].d.HL,
                                         sData[p].d.OC_HL,
                                         sData[p].d.SCORE,
-                                        sData[p].d.NETFLOW,
-                                        (int)MathRound(sData[p].d.SUM_POS),
-                                        (int)MathRound(sData[p].d.SUM_NEG));
+                                        sData[p].d.NETFLOW);
         }
 
         string foot = StringFormat(" | %10.5f %8d",
@@ -1189,36 +1156,16 @@ int CompareDataVars_g(const sDataVars &a, const sDataVars &b, const string &cont
         mismatches++;
     }
 
-    // SUM_POS/SUM_NEG: MathRound-to-int equality, matching PrintRow's
-    // established display-equivalence contract (see PrintRow's comment on
-    // why raw doubles can differ by ~1e-8 while still rounding identically).
-    int sum_pos_native = (int)MathRound(a.d.SUM_POS);
-    int sum_pos_cached = (int)MathRound(b.d.SUM_POS);
-    if (sum_pos_native != sum_pos_cached)
+    // SUM_POS/SUM_NEG are exact long accumulators of per-tick rounded points.
+    if (a.d.SUM_POS != b.d.SUM_POS)
     {
-        Print("  ", context, " SUM_POS MISMATCH native=", sum_pos_native, " cached=", sum_pos_cached,
-              " (raw native=", DoubleToString(a.d.SUM_POS, 12), " cached=", DoubleToString(b.d.SUM_POS, 12), ")");
+        Print("  ", context, " SUM_POS MISMATCH native=", a.d.SUM_POS, " cached=", b.d.SUM_POS);
         mismatches++;
     }
-    else if (a.d.SUM_POS != b.d.SUM_POS)
+    if (a.d.SUM_NEG != b.d.SUM_NEG)
     {
-        // RTFP-style informational note, not a failure - rounded values agree.
-        Print("  ", context, " SUM_POS raw differs but rounds equal: native=", DoubleToString(a.d.SUM_POS, 12),
-              " cached=", DoubleToString(b.d.SUM_POS, 12));
-    }
-
-    int sum_neg_native = (int)MathRound(a.d.SUM_NEG);
-    int sum_neg_cached = (int)MathRound(b.d.SUM_NEG);
-    if (sum_neg_native != sum_neg_cached)
-    {
-        Print("  ", context, " SUM_NEG MISMATCH native=", sum_neg_native, " cached=", sum_neg_cached,
-              " (raw native=", DoubleToString(a.d.SUM_NEG, 12), " cached=", DoubleToString(b.d.SUM_NEG, 12), ")");
+        Print("  ", context, " SUM_NEG MISMATCH native=", a.d.SUM_NEG, " cached=", b.d.SUM_NEG);
         mismatches++;
-    }
-    else if (a.d.SUM_NEG != b.d.SUM_NEG)
-    {
-        Print("  ", context, " SUM_NEG raw differs but rounds equal: native=", DoubleToString(a.d.SUM_NEG, 12),
-              " cached=", DoubleToString(b.d.SUM_NEG, 12));
     }
 
     // small-epsilon equality for ratios/sums derived from the fields above
