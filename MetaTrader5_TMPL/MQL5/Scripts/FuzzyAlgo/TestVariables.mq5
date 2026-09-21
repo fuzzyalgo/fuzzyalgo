@@ -242,7 +242,8 @@ void OnStart()
     sRefPoint sr_harness(in_time_msc_cache_cmp);
     RunCacheComparisonHarness_g(in_time_msc_cache_cmp, sr_harness);
 
-    bool doLive = false;
+    bool doLive = true; // true: live monitoring against the system clock (see GetSystemTimeMsc below);
+                        // false: deterministic single-day replay anchored at in_time_msc_cache_cmp.
     long in_time_msc;
     int ring_buf_num = 60;
     int delta_ringbuf_entries_secs = 60;
@@ -302,10 +303,16 @@ void OnStart()
     cfg_native.USE_TICK_CACHE = false;
 
     sRefPoint sr3(in_time_msc);
+
+    // Day-boundary loop condition below is covered by
+    // Scripts/FuzzyAlgo/TestDayBounds.mq5 (run it to verify).
     long replay_day_start_msc = 0;
     long replay_day_end_msc = 0;
-    if (!doLive)
-        GetDayBoundsMsc_g(in_time_msc, replay_day_start_msc, replay_day_end_msc);
+    GetDayBoundsMsc_g(in_time_msc, replay_day_start_msc, replay_day_end_msc);
+    Print( StringFormat("DAY_START_MSC: %s  DAY_END_MSC: %s",
+                TimeToStringMsc_g(replay_day_start_msc),
+                TimeToStringMsc_g(replay_day_end_msc) )
+                );
 
     int min_cnt = 0;
     while (!IsStopped())

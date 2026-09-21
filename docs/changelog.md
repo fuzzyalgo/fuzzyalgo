@@ -6,6 +6,15 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-21** — Fixed the intermittent EURUSD `sRefPoint` zero-price case with a
+  five-minute `CopyTicksRange_g` fallback (matching PRO/REF's existing fallback pattern);
+  unified PRO/REF fallback normalization to `SYMBOL_DIGITS` and widened REF's fallback
+  window from 15s to 5min; changed `GetDayBoundsMsc_g` to end a day at 23:59:59 and added
+  `TestDayBounds.mq5`, which prints its input/output timestamps and the replay loop's
+  day-boundary stop for visual verification - run in the MT5 terminal, confirmed correct;
+  verified clean compile and a live EURUSD run with the new default
+  `PRO:REF:DAY:S100:T100` period set. Also documented the OC/HL tie-break's single-period
+  selection as an open design question (candidate fixes recorded, no decision made yet).
 - **2026-09-20** — Re-ran `TestVariables` on EURUSD without a large PRO buffer: all 240
   comparisons matched, cached construction was 2.24x faster than native, replay latency still
   grew about 4.9x across the supplied interval, and 31/60 confirmation rows used OC/HL

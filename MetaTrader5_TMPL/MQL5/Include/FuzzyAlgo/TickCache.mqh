@@ -30,9 +30,9 @@
 // (variables.mqh's init_ticks_arr_g) regardless of which mode is active.
 
 //+------------------------------------------------------------------+
-//| Midnight-to-next-midnight bounds (ms) for in_time_msc's calendar |
-//| day. Shared by variables.mqh's DAY branch and this file's cache  |
-//| keying, so both agree on what "a day" means.                     |
+//| Returns [start, end] ms bounds for in_time_msc's calendar day:   |
+//| start = that day's 00:00:00.000, end = that day's 23:59:59.000.  |
+//| Shared by variables.mqh's DAY branch and this file's cache keying.|
 //+------------------------------------------------------------------+
 void GetDayBoundsMsc_g(const long in_time_msc, long &out_start_msc, long &out_end_msc)
 {
@@ -42,7 +42,7 @@ void GetDayBoundsMsc_g(const long in_time_msc, long &out_start_msc, long &out_en
     tm.min = 0;
     tm.sec = 0;
     out_start_msc = (long)StructToTime(tm) * 1000;
-    out_end_msc = out_start_msc + 24 * 3600 * 1000;
+    out_end_msc = out_start_msc + 24 * 3600 * 1000 - 1 * 1000;
 } // void GetDayBoundsMsc_g
 
 struct sTickDayCache

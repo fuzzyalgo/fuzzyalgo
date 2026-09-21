@@ -31,7 +31,7 @@ input string I_ACCOUNT = "RF5D03"; // forex account name
 input string I_SYMBOLS = "EURUSD";
 // input string I_PERIODS = "PRO:T15:T30:T60:T_AVG:S300:S900:S3600:S_AVG:SUM_AVG"; // periods are seperated by colon. T for Ticks and S for seconds
 //input string I_PERIODS = "REF:DAY:S300:S900:S3600";
-input string I_PERIODS = "PRO:REF:DAY:S3600";
+input string I_PERIODS = "PRO:REF:DAY:S100:T100";
 // input string I_PERIODS = "S300:S14400:S86400";
 //  input string I_PERIODS = "T300:T900:T3600";
 input string I_HOSTS = "vm1.localhost:vm2.localhost:vm3.localhost"; // hosts where the forex expert is running
@@ -63,6 +63,19 @@ int string_split_g(const string &in_string_to_split, const string &in_seperator,
         Print("@TODO throw exception here - string_split_g " + in_string_to_split + " " + in_seperator);
     return num_splits;
 }
+
+// Formats an epoch-millisecond timestamp as "YYYY.MM.DD HH:MM:SS.mmm", i.e.
+// TimeToString() plus the millisecond remainder. Used for diagnostic prints
+// (e.g. TestVariables.mq5's DAY_START_MSC/DAY_END_MSC line) where second-only
+// precision would hide sub-second boundary details.
+string TimeToStringMsc_g( const long& in_time_msc )
+{
+    string timestr = StringFormat("%s.%03d",
+                TimeToString(in_time_msc / 1000, TIME_DATE | TIME_SECONDS),
+                in_time_msc % 1000);
+    return timestr;
+}
+
 
 // Per-cell, sign-independent evidence strength. Direction remains in NETFLOW
 // and OC_HL; this score combines their magnitudes with saturating activity.
@@ -299,8 +312,14 @@ bool init_ticks_arr_g(
             out_data.c0_pro = 0.0;
         }
 
-        if (0 >= start_time_pro_msc || in_time_msc <= start_time_pro_msc)
+        if (0 == start_time_pro_msc || in_time_msc <= start_time_pro_msc)
         {
+            // start_time_pro_msc is a real epoch-ms timestamp (from
+            // POSITION_TIME_MSC) whenever a position is open, so 0 here means
+            // "no open position" specifically, not "any non-positive value" -
+            // hence the exact equality check rather than >=. The second
+            // clause still covers "sampled at/before the position's own open
+            // time", which needs the same no-history fallback below.
             MqlTick tarr[];
             // Use the last available tick in a five-minute lookback because
             // quiet symbols may have no tick at the exact sample timestamp.
@@ -308,7 +327,13 @@ bool init_ticks_arr_g(
             int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, c0_from_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
             {
+                // Normalize to SYMBOL_DIGITS so this fallback c0 lines up
+                // with the point-grid canonicalization used everywhere else
+                // (see TickCache.mqh); otherwise it could carry more decimal
+                // precision than the rest of the pipeline expects.
+                long digits = SymbolInfoInteger(in_symbol, SYMBOL_DIGITS);
                 out_data.c0 = (tarr[len-1].ask + tarr[len-1].bid) / 2;
+                out_data.c0  = NormalizeDouble(out_data.c0, (int)digits);
                 out_data.t0 = tarr[len-1].time_msc;
                 if( 2 < in_conf.DEBUG )
                 {
@@ -377,19 +402,25 @@ bool init_ticks_arr_g(
         // sDataVars::init/init_ticks_arr_g runs, so it's valid here.
         datetime start_time_ref_msc = (datetime)out_data.time_msc_ref;
 
-        if (0 >= start_time_ref_msc || in_time_msc <= start_time_ref_msc)
+        if (0 == start_time_ref_msc || in_time_msc <= start_time_ref_msc)
         {
             // No ref point established yet, or no time has elapsed since it -
             // there's no window to sum OC/HL/SUM_POS/SUM_NEG/NETFLOW over, so
             // those stay at their zero-initialized defaults. c0 still needs
-            // the last available price, so use the existing 15-second range
-            // lookup rather than leaving it at zero.
+            // the last available price; use the same five-minute lookback
+            // as PRO's fallback above (was 15 seconds - widened to match PRO
+            // so both fallbacks tolerate the same quiet-symbol gap instead of
+            // REF failing sooner than PRO would for an identical gap).
             MqlTick tarr[];
-            datetime just_before_in_time_msc = (datetime)(in_time_msc - 15*1000);
+            datetime just_before_in_time_msc = (datetime)(in_time_msc - 5 * 60 * 1000);
             int len = CopyTicksRange_g(in_symbol, tarr, in_conf.COPY_TICKS_FLAG, just_before_in_time_msc, in_time_msc, in_conf.USE_TICK_CACHE, in_conf.DEBUG);
             if (0 < len)
             {
+                // See the matching PRO-fallback comment above: normalize to
+                // SYMBOL_DIGITS for point-grid consistency.
+                long digits = SymbolInfoInteger(in_symbol, SYMBOL_DIGITS);
                 out_data.c0 = (tarr[len-1].ask + tarr[len-1].bid) / 2;
+                out_data.c0  = NormalizeDouble(out_data.c0, (int)digits);
                 out_data.t0 = tarr[len-1].time_msc;
                 if( 2 < in_conf.DEBUG )
                 {
@@ -888,30 +919,58 @@ struct sRefPoint
             string sym = c.SYMBOLS_arr[cnt];
             long digits = SymbolInfoInteger(sym, SYMBOL_DIGITS);
             MqlTick tarr[];
-            int len = CopyTicks(sym, tarr, COPY_TICKS_TIME_MS, time_msc_ref, 1);
+            // Uses the configured I_COPY_TICKS_FLAG (was hardcoded to
+            // COPY_TICKS_TIME_MS) so this lookup honors the same tick-flag
+            // input as every other CopyTicks[Range]_g call in this file.
+            int len = CopyTicks(sym, tarr, c.COPY_TICKS_FLAG, time_msc_ref, 1);
             if (0 < len)
             {
-                // OK
+                // OK1: exact tick found at time_msc_ref itself.
                 c0_ref[cnt] = (tarr[0].ask + tarr[0].bid) / 2;
                 c0_ref[cnt] = NormalizeDouble(c0_ref[cnt], (int)digits);
-                str_ref[cnt] = StringFormat("OK  %s %s delta ms: %6d price: %s",
+                str_ref[cnt] = StringFormat("OK1  %s %s delta ms: %6d price: %s",
                                             sym,
                                             time_msc_ref_str,
                                             (int)(tarr[0].time_msc - time_msc_ref),
                                             DoubleToString(c0_ref[cnt], (int)digits));
-                Print(str_ref[cnt]);
             }
             else
             {
-                // ERROR case - @TODO make this work in case of error
-                c0_ref[cnt] = 0;
-                str_ref[cnt] = StringFormat("XX  %s %s delta ms: %6d price: %s",
-                                            sym,
-                                            time_msc_ref_str,
-                                            0,
-                                            DoubleToString(c0_ref[cnt], (int)digits));
-                Print(str_ref[cnt]);
+                // OK2 fallback: no tick exists exactly at time_msc_ref (quiet
+                // symbol), so fall back to the last available tick in a
+                // five-minute lookback - the same pattern used by the PRO/REF
+                // c0 fallbacks in init_ticks_arr_g. This replaces what used
+                // to be an unconditional failure (see docs/known-issues.md's
+                // formerly-open "EURUSD sRefPoint intermittently returns 0
+                // results" entry, now resolved by this fallback).
+                MqlTick tarr[];
+                long c0_from_msc = time_msc_ref - 5 * 60 * 1000;
+                int len = CopyTicksRange_g(sym, tarr, c.COPY_TICKS_FLAG, c0_from_msc, time_msc_ref, c.USE_TICK_CACHE, c.DEBUG);
+                if (0 < len)
+                {
+                    c0_ref[cnt] = (tarr[len-1].ask + tarr[len-1].bid) / 2;
+                    c0_ref[cnt] = NormalizeDouble(c0_ref[cnt], (int)digits);
+                    str_ref[cnt] = StringFormat("OK2  %s %s delta ms: %6d price: %s",
+                                                sym,
+                                                time_msc_ref_str,
+                                                (int)(tarr[len-1].time_msc - time_msc_ref),
+                                                DoubleToString(c0_ref[cnt], (int)digits));
+                }
+                else
+                {
+                    // XX: both the exact-time lookup and the five-minute
+                    // fallback failed - no ticks at all for this symbol in
+                    // that window. c0_ref stays 0, which downstream code
+                    // must treat as "no reference point", not a real price.
+                    c0_ref[cnt] = 0;
+                    str_ref[cnt] = StringFormat("XX  %s %s delta ms: %6d price: %s",
+                                                sym,
+                                                time_msc_ref_str,
+                                                0,
+                                                DoubleToString(c0_ref[cnt], (int)digits));
+                }
             } // if (0 < len)
+            Print(str_ref[cnt]);
 
         } // for( int cnt = 0; cnt < num_symbols; cnt++ )
 
@@ -968,9 +1027,9 @@ struct sSymbolVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
-            periods_str += StringFormat(" | %-5s %7s %7s %8s %7s %7s",
+            periods_str += StringFormat(" | %-5s %7s %7s %7s %7s %7s",
                                         sData[p].period,
-                                        "OC", "HL", "OC/HL", "SCORE", "NETFLOW");
+                                        "VOLS/TD", "HL/TD", "OC/HL", "SCORE", "NETFLOW");
         }
 
         string foot = StringFormat(" | %10s %8s", "C0", "LAT_US");
@@ -1004,10 +1063,10 @@ struct sSymbolVars
         string periods_str = "";
         for (int p = 0; p < c.PERIODS_num; p++)
         {
-            periods_str += StringFormat(" | %-5s %7d %7d %8.1f %7.2f %7.2f",
+            periods_str += StringFormat(" | %-5s %7.2f %7.2f %7.2f %7.2f %7.2f",
                                         sData[p].period,
-                                        (int)sData[p].d.OC,
-                                        (int)sData[p].d.HL,
+                                        sData[p].d.VOLS_TD,
+                                        sData[p].d.HL_TD,
                                         sData[p].d.OC_HL,
                                         sData[p].d.SCORE,
                                         sData[p].d.NETFLOW);

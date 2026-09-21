@@ -1384,3 +1384,143 @@ Current EURUSD example with PRO empty and threshold=3:
        -> S3600 OC_HL > 0
        -> final_signal=BUY, tie_breaker_used=true
 ```
+
+### 2026-09-20/21: OC/HL tie-break is a single, arbitrarily-selected period - design concern, not just a provenance gap
+
+The provenance discussion above (raw_signal vs final_signal vs tie_breaker_used) covers
+*whether the caller can tell a tie-break happened*. A separate, more fundamental concern
+was raised about *what the tie-break itself does* once it fires
+(`ApplyOCHLTieBreaker_g`/`OCHLTieBreakerSignal_g` in `SignalFusion.mqh`):
+
+- `ResolveTieBreakerPeriodIdx_g` picks exactly **one** period - the caller-supplied
+  `in_tie_breaker_period_idx`, or by default `periods_num - 1` (the *last configured*
+  period, not necessarily the longest or most reliable one; this depends entirely on
+  `I_PERIODS` ordering).
+- The fallback signal comes from that single period's `OC_HL` sign only. It does **not**
+  re-consult the other periods' NETFLOW votes that were just computed - the ambiguous
+  3-period vote is discarded outright in favor of one period's candle-shape bias.
+- A single period's OC/HL is comparatively noisy (a small intrabar move can flip its
+  sign), so an already-ambiguous row is being resolved by one of the *least* robust
+  signals available, not a more robust one.
+
+This is a real design weakness, independent of the missing raw/final/tie_breaker_used
+exposure: even once that's added, the tie-break's resolution logic itself should be
+reconsidered. Candidate fixes discussed, with tradeoffs:
+
+1. **Aggregate OC/HL across all periods** (majority sign, or weighted by the same
+   static/adaptive weights as the main fusion) instead of one period. Cheap, reuses data
+   already in the matrix, restores multi-period agreement for the fallback too. Con:
+   introduces OC/HL (a different signal family than NETFLOW) into the "main" decision
+   path more broadly, only ever exercised in the tie-break branch today.
+2. **Use the period whose NETFLOW has the strongest magnitude** (most conviction) rather
+   than switching signal families at all. Stays entirely inside NETFLOW - "let the most
+   decisive period win" - but requires confirming NETFLOW magnitudes are actually
+   comparable across differently-sized periods (it's an integer-scaled, truncated-to-4-
+   decimals ratio already bounded to [-1, 1], so likely comparable, but not yet verified
+   for this specific use).
+3. **Always use the longest configured period explicitly** (a real trend-filter
+   heuristic - "defer to the long-term trend on close calls") rather than "last in
+   array" by accident. Fixes the arbitrariness of *which* period, but not the
+   single-period-noise objection.
+4. **Drop the OC/HL fallback and return FLAT/no-trade on true ties.** Most honest - a
+   final BUY/SELL always means genuine multi-period agreement - but reduces signal
+   frequency substantially: in the no-PRO EURUSD log, 31/60 rows (~52%) were ambiguous
+   and relied on the tie-break.
+
+### 2026-09-21: `TestVariables.mq5`/`variables.mqh`/`TickCache.mqh` cleanup pass, `sRefPoint` zero-price fix, live-run verification
+
+Reviewed and commented a set of working-tree changes (not yet committed at write time):
+
+- **`sRefPoint`'s `CopyTicks` zero-result case now has a real fallback instead of failing
+  outright.** Previously, if the exact-timestamp `CopyTicks` lookup for a reference point
+  returned no ticks, `c0_ref` was hard-set to `0` and logged as `XX ... price: 0.00000`
+  with a `@TODO make this work in case of error` comment - this was the formerly-open
+  known issue "EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results". The fix
+  adds a second attempt: `CopyTicksRange_g` over the same five-minute lookback window
+  already used by the PRO/REF c0 fallbacks in `init_ticks_arr_g`, before giving up. Three
+  outcomes are now logged: `OK1` (exact tick at the reference timestamp), `OK2` (fallback
+  range lookup succeeded), `XX` (both failed - no ticks at all in the window, `c0_ref`
+  stays `0`). This closes the known issue rather than just working around it; removed
+  from `docs/known-issues.md`.
+- **`sRefPoint`'s exact-timestamp lookup now uses `c.COPY_TICKS_FLAG`** (the configurable
+  `I_COPY_TICKS_FLAG` input) instead of a hardcoded `COPY_TICKS_TIME_MS`, matching every
+  other `CopyTicks[Range]_g` call site in `variables.mqh`. `I_COPY_TICKS_FLAG`'s default is
+  still `COPY_TICKS_TIME_MS`, so this is a consistency fix with no default-behavior change.
+- **PRO/REF c0 fallback prices are now normalized to `SYMBOL_DIGITS`** (`NormalizeDouble`
+  with `SymbolInfoInteger(..., SYMBOL_DIGITS)`), matching the point-grid canonicalization
+  already used by `TickCache.mqh` and by `sRefPoint`'s own `OK1`/`OK2` prices. Previously
+  these two fallbacks were the only c0 paths not normalized this way.
+- **REF's no-window fallback lookback widened from 15 seconds to 5 minutes**, matching
+  PRO's existing fallback window, so REF doesn't fail sooner than PRO would for an
+  identically quiet symbol.
+- **PRO/REF's "no ref point yet" guard changed from `0 >= start_time_*_msc` to
+  `0 == start_time_*_msc`.** `start_time_pro_msc`/`start_time_ref_msc` are always
+  non-negative in practice (derived from `POSITION_TIME_MSC` or an established ref
+  point), so this has no observed behavioral effect today; it documents the intent
+  more precisely (0 means "not established", not "any non-positive value") and the
+  `in_time_msc <= start_time_*_msc` clause already covers "sampled at/before the
+  anchor" separately.
+- **`GetDayBoundsMsc_g` (`TickCache.mqh`) now ends a day at 23:59:59.000 instead of the
+  next midnight, and this is now verified end-to-end.** Added
+  `Scripts/FuzzyAlgo/TestDayBounds.mq5`, which prints `GetDayBoundsMsc_g`'s input/output
+  timestamps for three cases (mid-day, at-midnight, just-before-midnight) plus the
+  anchor/day-bounds/last-processed/first-rejected timestamps for a reproduction of
+  `TestVariables.mq5`'s exact replay day-boundary loop condition
+  (`time_msc >= replay_day_end_msc`, anchored 5 minutes before midnight). Independently
+  re-checked the same arithmetic with .NET `DateTime` beforehand and it matched. Actually
+  run in the MT5 terminal on 2026-09-21: all three `GetDayBoundsMsc_g` cases printed
+  `[OK]`, and the replay-loop reproduction showed `last_processed=2026.09.04
+  23:59:00.000` / `first_rejected=2026.09.05 00:00:00.000` - i.e. the loop stops on the
+  last in-day sample and correctly rejects the first next-day sample. This closes what
+  was previously an open, unverified `@TODO`.
+- **`TestVariables.mq5` day-bounds computation and print are now unconditional**
+  (previously only computed under `!doLive`), so a live run also logs which calendar
+  day its `DAY` period is scoped to (`DAY_START_MSC: ... DAY_END_MSC: ...`).
+  `doLive` itself now defaults to `true` (was `false`), so `TestVariables.mq5` runs
+  live against the system clock by default.
+  Added `TimeToStringMsc_g` (millisecond-precision `TimeToString`) to support this
+  print.
+  - **Default `I_PERIODS` changed from `PRO:REF:DAY:S3600` to `PRO:REF:DAY:S100:T100`**,
+    swapping the one-hour seconds-window period for a 100-second window and a 100-tick
+    window - shorter, more granular windows for live-mode observation, at the cost of no
+    longer testing a full-hour window by default (`S3600` is still available by editing
+    the input).
+  - **`PrintRow`'s per-period columns changed from raw `OC`/`HL` integer point-counts to
+    `VOLS_TD`/`HL_TD`** (ticks-per-second and points-per-second ratios; both fields
+    already existed in `sData` beforehand - this only changes what's printed, not what's
+    computed). Header/row format strings were widened/adjusted to match
+    (`VOLS/TD`/`HL/TD` column labels).
+
+**Live-run verification (2026-09-21, EURUSD, `doLive=true`, default `PRO:REF:DAY:S100:T100`):**
+Compiled clean (0 errors, 0 warnings) after the above changes and comment cleanup, then
+observed a live run via `MQL5/logs/20260921.log`. Representative rows (17:28:55-17:29:00,
+~1 sample/second matching `I_EVENT_TIMER_INTERVAL_MSC=1000`):
+
+- `PRO` stayed at all-zero (`VOLS/TD=HL/TD=OC/HL=SCORE=NETFLOW=0.00`) for the whole
+  session - expected and consistent with earlier findings: this account had no open
+  position, so PRO has no anchor and never accumulates (see the "PRO empty" case already
+  documented above for the ASCII tie-break example).
+  - **Consequence surfaced for the first time here**: because PRO always abstains from
+    voting when empty (NETFLOW=0), and now only 4 non-PRO periods (REF/DAY/S100/T100)
+    remain, `ConfirmationFusion_g`'s vote is effectively over 4 active periods, not 5 -
+    worth remembering when picking a confirmation threshold against this period set.
+- `REF`/`DAY`/`S100`/`T100` all populated with plausible values every row; `C0` ticked
+  down smoothly (1.14700 -> 1.14698 over the 5 sampled seconds) with no zero-price or
+  stale-value rows for EURUSD - consistent with the `sRefPoint` OK2 fallback fix above
+  (no `XX`/zero-price rows observed for EURUSD in this run).
+  - **First-hand comparison of window sizes**: `DAY` (and the retired `S3600`) have
+    naturally lower `VOLS_TD`/`HL_TD` (more ticks/seconds averaged out over a long
+    window) than the newer, shorter `S100`/`T100` windows - expected given their
+    different window sizes, not a bug.
+- Per-sample latency (native, uncached path) ranged ~2.2-3.2 ms across these rows, in the
+  same order of magnitude as the "clean EURUSD" cached/native comparison documented
+  above; no outliers or growth pattern visible in this short excerpt (too few samples to
+  re-derive the DAY/REF growing-window trend already established with the 60-row run).
+
+No regressions or new anomalies found; this run is consistent with all prior findings and
+additionally confirms the `sRefPoint` OK2 fallback fires correctly under a real live feed.
+
+No option was chosen; this needs a decision informed by trading intent (is the tie-break
+meant to be a long-term-trend filter, a price-action confirmation independent of period,
+or "most-conviction NETFLOW wins"?) before implementation. Tracked in
+`docs/known-issues.md` under "Planned / deferred work".
