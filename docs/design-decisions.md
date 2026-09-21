@@ -3,6 +3,30 @@
 Read this before questioning or reversing a settled technical decision, or before adding a
 feature that resembles something already decided against.
 
+## PRO/REF c0 fallback window and normalization unified; `sRefPoint` gains a range-lookup fallback (2026-09-21)
+
+PRO's and REF's "no window established yet" c0 fallback both now use the same five-minute
+`CopyTicksRange_g` lookback (REF previously used 15 seconds) and both normalize the resulting
+price to `SYMBOL_DIGITS`, matching the point-grid canonicalization already used elsewhere
+(`TickCache.mqh`). Reasoning: a quiet symbol shouldn't fail REF's fallback sooner than PRO's,
+and every c0 value entering the pipeline should carry the same point-grid precision.
+
+`sRefPoint`'s one-shot reference-point lookup (`CopyTicks(..., time_msc_ref, 1)`) now falls back
+to the same five-minute `CopyTicksRange_g` window when no tick exists exactly at the reference
+timestamp, instead of failing outright (`c0_ref = 0`, logged as `XX ... price: 0.00000`). This
+resolves the intermittent EURUSD zero-price case that was tracked as an open issue - the failure
+was not corruption, just a lookup with no fallback for a quiet exact-timestamp gap. Three log
+labels now distinguish the path taken: `OK1` (exact tick), `OK2` (fallback range lookup), `XX`
+(both failed). Also switched from a hardcoded `COPY_TICKS_TIME_MS` to the configurable
+`c.COPY_TICKS_FLAG`, matching every other tick-copy call site.
+
+`GetDayBoundsMsc_g` (`TickCache.mqh`) now ends a calendar day at 23:59:59.000 instead of the
+next midnight, so a deterministic historical replay's day-boundary check stops cleanly instead
+of constructing a sample dated at the next day's midnight. Verified with
+`Scripts/FuzzyAlgo/TestDayBounds.mq5`, run in the MT5 terminal 2026-09-21: the replay loop
+correctly stops at the last in-day sample and rejects the first next-day sample. Full change
+notes, code comments, and the printed verification output: `docs/repository-notes.md`.
+
 ## Point-grid cache and integer tick-flow aggregation (2026-09-20)
 
 Tick-cache prices are now a canonical symbol-grid representation rather than a bit-exact

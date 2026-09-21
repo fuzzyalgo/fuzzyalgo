@@ -61,8 +61,10 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   per-period derived tick features — `OC`/`HL`, exact `long` point accumulators
   `SUM_POS`/`SUM_NEG`, four-decimal `NETFLOW`, etc., plus the per-cell unsigned `SCORE`
   derived only from that cell's own `NETFLOW`/`OC_HL`/`VOLS_TD`, and the raw per-tick delta
-  series `ticks_arr`), `sRefPoint` (a single fixed reference tick, native
-  `CopyTicks` only, never cached), `sSymbolVars` (all periods for one symbol), `sGlobalVars`
+  series `ticks_arr`), `sRefPoint` (a single fixed reference tick per symbol: a native
+  one-shot `CopyTicks` at the exact reference timestamp, falling back to a five-minute
+  `CopyTicksRange_g` lookback - honoring `c.USE_TICK_CACHE` - if no tick exists exactly at
+  that timestamp), `sSymbolVars` (all periods for one symbol), `sGlobalVars`
   (all symbols for one sample), and `sRingBuf<T>` (a fixed-size ring buffer used to hold
   recent `sGlobalVars` snapshots). `ENUM_PERIOD_TYPE` (DAY/PRO/REF/SECONDS_S/TICKS_T) selects
   how each period's tick window is anchored. `CompareDataVars_g`/`CompareGlobalVars_g` at the

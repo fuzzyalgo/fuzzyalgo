@@ -5,12 +5,6 @@ you're seeing is already known, and before starting new work, to check what's al
 
 ## Open issues
 
-- **EURUSD `sRefPoint`/`CopyTicks` intermittently returns 0 results** — seen as
-  `XX EURUSD ... price: 0.00000` while other symbols (EURGBP/GBPJPY/NZDUSD) succeeded
-  (`OK ...`) in the same run; in other runs EURUSD came back `OK`, so it's intermittent,
-  not constant. Corrupts the `c0_ref`-based delta column for EURUSD when it happens. If
-  reported again, check `sRefPoint`'s `CopyTicks` call/retry logic in
-  `MQL5/Include/FuzzyAlgo/variables.mqh` first. Full history: `docs/repository-notes.md`.
 - **`DAY` period's `SUM_POS`/`SUM_NEG` recompute from the full day's tick history on
   every call, so a "frozen" value can look like a bug but usually isn't** —
   `init_ticks_arr_g`'s `ENUM_PERIOD_TYPE_DAY` branch (`variables.mqh`) calls
@@ -42,6 +36,19 @@ you're seeing is already known, and before starting new work, to check what's al
   confirmation threshold, tie-break period, and per-row tie logging script inputs rather than
   demo literals. It must also decide whether an empty/zero PRO period remains an abstention
   under a fixed threshold or reduces the effective threshold. Full evidence:
+  `docs/repository-notes.md`.
+- **OC/HL tie-break resolution logic itself is a design concern, not just a provenance
+  gap.** Once a confirmation/weighted-average vote is ambiguous, the fallback consults only
+  one period's OC/HL sign (default: the last-configured period, `periods_num - 1` - an
+  accident of `I_PERIODS` ordering, not a deliberate "most reliable period" choice), and
+  never re-consults the other periods' NETFLOW votes that produced the ambiguity. A single
+  period's OC/HL is comparatively noisy, so an already-ambiguous row is resolved with one of
+  the least robust signals available. Candidate fixes (need a decision before implementing):
+  (1) aggregate OC/HL across all periods (majority/weighted sign) instead of one period;
+  (2) use the period with the strongest NETFLOW magnitude instead of switching signal
+  families; (3) always use the explicitly-longest configured period as a deliberate
+  trend-filter, rather than "last in array" by accident; (4) drop the OC/HL fallback
+  entirely and return FLAT/no-trade on true ties. Full tradeoff writeup:
   `docs/repository-notes.md`.
 - **A lightweight fusion snapshot is optional, not the next performance priority.** Without
   the pathological cross-day PRO array, `AddBuf` and `TryGet` averaged only about 0.11-0.13 ms
