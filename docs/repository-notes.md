@@ -1229,8 +1229,8 @@ the detailed PR/output analysis follows.
 
 ### PR #3 delta from main and supplied TestVariables output (2026-09-20)
 
-The committed PR #3 range (`7afbba7` on main through `99025f7`) contains five commits and
-introduces the signal-fusion layer without changing the Python subsystem:
+The committed PR #3 range (five commits after "Remove CopyTicks_g ...", since squashed into
+"Add NETFLOW signal fusion, OC_HL tie-breaker and per-cell sData score") introduces the signal-fusion layer without changing the Python subsystem:
 
 - new `SignalFusion.mqh`, with a dense `[sample][symbol][period]` `sDataMatrix` copied from
   `sRingBuf<sGlobalVars>`, default static weights `1..N` in configured period order,
