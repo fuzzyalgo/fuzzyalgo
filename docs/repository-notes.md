@@ -1524,3 +1524,59 @@ No option was chosen; this needs a decision informed by trading intent (is the t
 meant to be a long-term-trend filter, a price-action confirmation independent of period,
 or "most-conviction NETFLOW wins"?) before implementation. Tracked in
 `docs/known-issues.md` under "Planned / deferred work".
+
+### Crossed/zero-price tick ("spam tick") repair added to both fetch paths (2026-09-22)
+
+A live `doLive=true` run (`MQL5/logs/20260921.log`, `USE_TICK_CACHE=false`) logged the
+same `@TODO throw exception here - init_ticks_arr_g ASK | BID` line once per second for
+the rest of the session, always for the same tick: EURUSD, `time_msc=2026.09.21
+13:33:02.628`, `ask=1.14807 < bid=1.14808` (a crossed quote - a genuine broker-feed
+anomaly, not corruption introduced by this codebase). `init_data_from_ticks_arr_g`'s
+existing sanity check (`variables.mqh`) already `continue`s past this tick, so the
+math was never affected - only the log was spammed.
+
+**Root cause, traced precisely** (an earlier pass through this investigation incorrectly
+attributed the repeat to `FindOrLoadDayCache_g`/`g_tick_day_caches`, which was not in
+play for this run at all - that path only ran once, during a startup native-vs-cache
+self-check against a fixed reference day, 2026.09.04, finishing in the same
+sub-second timestamp burst the self-check always produces). The actual repeat source is
+`FindOrRefreshLiveBuffer_g` (`TickCache.mqh`): with `USE_TICK_CACHE=false`, every new
+`time_msc` sample triggers a fresh native `CopyTicksRange(symbol, day_start_msc,
+to_msc)` call spanning the whole day so far, and the crossed tick - part of today's real
+tick history - is included in that window on literally every refresh once its
+timestamp has passed, hence the once-per-second repeat.
+
+**Fix: `RepairSpamTicks_g` (`TickCache.mqh`)**, dropping any tick with
+`ask==0 || bid==0 || ask<bid` via an in-place compaction (no extra array allocated),
+called at both places a tick array is (re)built:
+
+- `FindOrLoadDayCache_g` (`USE_TICK_CACHE=true`, day-CSV mode): called once per
+  symbol+day, right after `LoadTickCacheFile_g`, before the array is cached - covers
+  both a freshly-fetched-and-written CSV and one that already existed (possibly written
+  before this fix existed, so could already contain the bad tick). Since this array is
+  cached and only sliced afterward, one repair here is permanent for the rest of the
+  script's run.
+- `FindOrRefreshLiveBuffer_g` (`USE_TICK_CACHE=false`, live mode): called on every
+  refetch, immediately after the native `CopyTicksRange` call, before the array is
+  copied into `g_live_tick_buffers[idx].ticks`. An earlier pass through this
+  investigation wrongly deferred this side, reasoning it should wait for the planned
+  Phase 2 incremental-accumulation work (`docs/known-issues.md`) to land first. That
+  reasoning didn't hold up: `FindOrRefreshLiveBuffer_g` already re-fetches and
+  re-copies the *entire* day-so-far window on every new `time_msc` regardless of this
+  fix - scanning that same freshly-fetched array once more for crossed/zero-price ticks
+  costs nothing extra relative to the native fetch and array copy already happening
+  there. So it was fixed immediately rather than deferred; Phase 2 remains a genuine,
+  separate performance win (fetching only the delta instead of the whole day-so-far
+  window each sample), and once it lands, `RepairSpamTicks_g` will simply be called on
+  that smaller delta fetch instead - no design conflict between the two.
+
+Both call sites log via the same `debug`-gated pattern already used by their respective
+`[TickCache]`/`[LiveTickBuffer]` load logs (`... repaired N crossed/zero-price tick(s)`),
+not per-tick, so a poisoned day is reported once per repair call, not once per skipped
+tick.
+
+Compiled clean (0 errors, 0 warnings) after wiring `RepairSpamTicks_g` into both
+`FindOrLoadDayCache_g` and `FindOrRefreshLiveBuffer_g`. Not yet re-run against a live
+session containing the specific crossed tick to visually confirm the log line stops
+recurring - next verification step if/when a live or cached run reproduces a similarly
+poisoned day.

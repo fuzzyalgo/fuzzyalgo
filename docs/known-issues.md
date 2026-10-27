@@ -26,8 +26,11 @@ you're seeing is already known, and before starting new work, to check what's al
   - with a cross-day PRO position holding about 5.68 million ticks per sample, both modes
     averaged about 0.32 seconds because the day-scoped cache must use the native cross-day path.
   Phase 2 should therefore cover DAY/REF first and preserve a reset/rebuild path for PRO anchor
-  changes and cross-day positions. Full design sketch, risk analysis, and validation history:
-  `docs/repository-notes.md`.
+  changes and cross-day positions. `RepairSpamTicks_g` (`TickCache.mqh`, added 2026-09-22) is
+  already called on every live refetch in `FindOrRefreshLiveBuffer_g`; once Phase 2 fetches
+  only the delta per sample instead of the whole day-so-far window, the same call simply
+  repairs that smaller delta instead - no separate follow-up work needed for this. Full design
+  sketch, risk analysis, and validation history: `docs/repository-notes.md`.
 - **Expose fusion decision provenance and runtime policy inputs.** The current final
   `confirmation` value does not tell a caller whether the threshold was met or OC/HL resolved
   an ambiguous row. In the no-PRO EURUSD run, 31/60 rows used the tie-breaker; all 27 final BUY

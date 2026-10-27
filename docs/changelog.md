@@ -6,6 +6,13 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-09-22** — Added `RepairSpamTicks_g` (`TickCache.mqh`) to drop crossed/zero-price
+  ticks in place, called both once per symbol+day in `FindOrLoadDayCache_g`
+  (`USE_TICK_CACHE=true`) and on every refetch in `FindOrRefreshLiveBuffer_g`
+  (`USE_TICK_CACHE=false`), fixing a once-per-second log-spam repeat seen in a live run
+  (the math was already correct via an existing per-tick skip; only the log repeated).
+  Phase 2 incremental accumulation remains a separate performance win and will repair
+  the smaller delta fetch once it lands, instead of today's full day-so-far window.
 - **2026-09-21** — Fixed the intermittent EURUSD `sRefPoint` zero-price case with a
   five-minute `CopyTicksRange_g` fallback (matching PRO/REF's existing fallback pattern);
   unified PRO/REF fallback normalization to `SYMBOL_DIGITS` and widened REF's fallback

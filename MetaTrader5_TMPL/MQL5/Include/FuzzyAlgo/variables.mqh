@@ -128,6 +128,7 @@ bool init_data_from_ticks_arr_g(
     bool ret = true;
     int size1 = ArraySize(in_array);
     double point = SymbolInfoDouble(in_symbol, SYMBOL_POINT);
+    long digits = SymbolInfoInteger(in_symbol, SYMBOL_DIGITS);
     out_data.c0 = (in_array[size1 - 1].ask + in_array[size1 - 1].bid) / 2;
     out_data.t0 = in_array[size1 - 1].time_msc;
     out_data.c1 = (in_array[0].ask + in_array[0].bid) / 2;
@@ -159,7 +160,15 @@ bool init_data_from_ticks_arr_g(
         // sanity check
         if (in_array[cnt].ask == 0 || in_array[cnt].bid == 0 || in_array[cnt].ask < in_array[cnt].bid)
         {
-            Print("@TODO throw exception here - init_ticks_arr_g ASK | BID" + in_symbol + " " + IntegerToString(in_period_num) + " " + EnumToString(in_period_type) + " " + DoubleToString(in_array[cnt].ask) + " " + DoubleToString(in_array[cnt].bid));
+            string str = StringFormat("@TODO throw exception here - init_ticks_arr_g ASK | BID %s CNT: %d %s %d %s %s %s",
+                                      in_symbol,
+                                      cnt,
+                                      TimeToStringMsc_g(in_array[cnt].time_msc),
+                                      in_period_num,
+                                      EnumToString(in_period_type),
+                                      DoubleToString(in_array[cnt].ask, (int)digits),
+                                      DoubleToString(in_array[cnt].bid, (int)digits));
+            Print(str);
             ret = false;
             continue;
         }

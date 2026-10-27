@@ -27,6 +27,29 @@ of constructing a sample dated at the next day's midnight. Verified with
 correctly stops at the last in-day sample and rejects the first next-day sample. Full change
 notes, code comments, and the printed verification output: `docs/repository-notes.md`.
 
+## Crossed/zero-price ("spam") ticks are repaired at every point a tick array is fetched
+   or refetched, not deferred to a future optimization (2026-09-22)
+
+A crossed EURUSD tick (`ask < bid`) already gets skipped correctly by
+`init_data_from_ticks_arr_g`'s sanity check, but in `USE_TICK_CACHE=false` (live) mode the
+same tick got rescanned and re-logged once per second for the rest of the session, because
+`FindOrRefreshLiveBuffer_g` refetches the whole day-so-far window on every sample. New
+`RepairSpamTicks_g` (`TickCache.mqh`) drops any `ask==0 || bid==0 || ask<bid` tick from a
+tick array in place, and is called at **both** fetch paths: once per symbol+day in
+`FindOrLoadDayCache_g` (`USE_TICK_CACHE=true`, right after `LoadTickCacheFile_g`, before the
+array is cached - covering a fresh fetch and an old CSV written before this fix existed),
+and on every refetch in `FindOrRefreshLiveBuffer_g` (`USE_TICK_CACHE=false`), immediately
+after the native `CopyTicksRange` call, before the array is copied into the live buffer.
+Decision, corrected after an initial wrong attempt: repairing the live path today is not
+"waiting on Phase 2" - `FindOrRefreshLiveBuffer_g` already refetches and copies the entire
+day-so-far window every sample regardless of this fix, so scanning that same array once more
+for crossed/zero-price ticks adds negligible cost on top of work already being done. The
+already-planned Phase 2 incremental-accumulation work (`docs/known-issues.md`) remains a
+separate, genuine performance win (fetching only the delta per sample instead of the whole
+day-so-far window); once it lands, `RepairSpamTicks_g` will simply repair that smaller delta
+instead of the current full-window scan - no conflict between the two changes.
+Full root-cause trace and reasoning: `docs/repository-notes.md`.
+
 ## Point-grid cache and integer tick-flow aggregation (2026-09-20)
 
 Tick-cache prices are now a canonical symbol-grid representation rather than a bit-exact

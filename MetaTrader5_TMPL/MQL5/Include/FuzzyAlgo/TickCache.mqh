@@ -83,6 +83,40 @@ struct sLiveTickBuffer
 sLiveTickBuffer g_live_tick_buffers[];
 
 //+------------------------------------------------------------------+
+//| Drops crossed/zero-price ticks (ask==0, bid==0, or ask<bid) from |
+//| ticks[] in place - the same broker-feed anomaly                  |
+//| init_data_from_ticks_arr_g (variables.mqh) already detects and    |
+//| skips per-tick. Repairing here removes it from the array once    |
+//| per call site below, so that per-call skip goes back to being a   |
+//| true "should never happen" guard rather than something expected  |
+//| to keep firing. Called from both FindOrRefreshLiveBuffer_g (every |
+//| live refetch - cheap relative to the refetch itself, since the    |
+//| whole array is already being copied) and FindOrLoadDayCache_g     |
+//| (once per symbol+day). Returns the number of ticks dropped.       |
+//+------------------------------------------------------------------+
+int RepairSpamTicks_g(MqlTick &ticks[], const string symbol, const int debug)
+{
+    int size1 = ArraySize(ticks);
+    int out_cnt = 0;
+    for (int cnt = 0; cnt < size1; cnt++)
+    {
+        if (ticks[cnt].ask == 0 || ticks[cnt].bid == 0 || ticks[cnt].ask < ticks[cnt].bid)
+            continue;
+        if (out_cnt != cnt)
+            ticks[out_cnt] = ticks[cnt];
+        out_cnt++;
+    }
+    int dropped = size1 - out_cnt;
+    if (0 < dropped)
+    {
+        ArrayResize(ticks, out_cnt);
+        if (0 < debug)
+            Print("[TickCache] ", symbol, " repaired ", dropped, " crossed/zero-price tick(s)");
+    }
+    return dropped;
+} // int RepairSpamTicks_g
+
+//+------------------------------------------------------------------+
 //| Finds (or creates) symbol's live buffer slot. If the calendar    |
 //| day has rolled over since it was last used, resets it to the new |
 //| day. If it's already fetched up to (>=) to_msc - i.e. this is    |
@@ -136,6 +170,14 @@ int FindOrRefreshLiveBuffer_g(const string symbol, const long to_msc, const ENUM
     int size1 = CopyTicksRange(symbol, fresh, flags, day_start_msc, to_msc);
     if (0 > size1)
         return -1; // real fetch error - leave previous buffer contents usable
+
+    // Repaired every refetch (not just once, unlike FindOrLoadDayCache_g's
+    // immutable day-cache) because this buffer is rebuilt wholesale from
+    // native ticks on every new to_msc anyway - scanning the array we just
+    // fetched is negligible next to the native call itself, and it stops a
+    // crossed/zero-price tick from being re-logged by
+    // init_data_from_ticks_arr_g's sanity check on every subsequent sample.
+    RepairSpamTicks_g(fresh, symbol, debug);
 
     ArrayCopy(g_live_tick_buffers[idx].ticks, fresh);
     g_live_tick_buffers[idx].last_to_msc = to_msc;
@@ -285,6 +327,9 @@ int LoadTickCacheFile_g(const string symbol, const long day_start_msc, MqlTick &
 } // int LoadTickCacheFile_g
 
 //+------------------------------------------------------------------+
+//| Drops crossed/zero-price ticks (ask==0, bid==0, or ask<bid) from |
+//| ticks[] in place - the same broker-feed anomaly                  |
+//+------------------------------------------------------------------+
 //| Orchestrator: finds symbol+day in the in-memory cache, else      |
 //| loads it from CSV (creating the CSV first if it doesn't exist    |
 //| yet), appends a new sTickDayCache slot, and returns its index.   |
@@ -308,6 +353,12 @@ int FindOrLoadDayCache_g(const string symbol, const long in_time_msc, const ENUM
     int loaded = LoadTickCacheFile_g(symbol, day_start_msc, ticks);
     if (0 > loaded)
         return -1;
+
+    // Repaired once here, whether the CSV was just created (fresh native
+    // fetch) or already existed (possibly written before this repair
+    // existed) - every later CopyTicksRange_g slice of this cached array is
+    // then guaranteed clean, with no per-call rescanning/re-repairing.
+    RepairSpamTicks_g(ticks, symbol, debug);
 
     // Confirms whether this symbol+day was loaded from a pre-existing CSV
     // (existed=true, a frozen snapshot possibly from a much earlier run) vs
