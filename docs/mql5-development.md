@@ -2,6 +2,9 @@
 
 Read this when compiling MQL5 scripts or running the MetaTrader terminal.
 
+The workspace command `workspace\fa.cmd` wraps the procedures below (`fa compile <program>`,
+`fa run <program>`, `fa logs`, `fa doctor`); see `workspace/AGENTS.md`.
+
 ## Compiling MQL5 scripts (FuzzyAlgo)
 
 FuzzyAlgo source lives under `MetaTrader5_TMPL/MQL5/`:

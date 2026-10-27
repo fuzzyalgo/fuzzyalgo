@@ -1,0 +1,45 @@
+// fuzzyalgo workspace - this file in git (fuzzyalgo/fuzzyalgo) IS the workspace; edits here are committed + pushed as usual.
+// Open it directly: code <root>\fuzzyalgo\workspace\fuzzyalgo.code-workspace   (the folder "../.." = <root>, see AGENTS.md)
+// Every task calls fa.cmd (same commands as in a terminal; "fa help" lists them).
+{
+	"folders": [
+		{ "name": "fuzzyalgo-root", "path": "../.." }
+	],
+	"settings": {
+		"terminal.integrated.env.windows": {
+			// "fa <command>" works in every terminal of this workspace
+			"PATH": "${workspaceFolder}\\fuzzyalgo\\workspace;${env:PATH}"
+		},
+		"files.associations": { "*.mq5": "cpp", "*.mqh": "cpp" },
+		"C_Cpp.errorSquiggles": "disabled",
+		"git.repositoryScanMaxDepth": 2,
+		"search.exclude": {
+			"fuzzyalgo/MetaTrader5_TMPL/bases/**": true,
+			"fuzzyalgo/MetaTrader5_TMPL/Tester/**": true,
+			"fuzzyalgo/MetaTrader5_TMPL/temp/**": true,
+			"fuzzyalgo/install/**": true,
+			"*.zip": true
+		},
+		"files.watcherExclude": {
+			"**/MetaTrader5_TMPL/bases/**": true,
+			"**/MetaTrader5_TMPL/Tester/**": true,
+			"**/MetaTrader5_TMPL/temp/**": true
+		}
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"inputs": [
+			{ "id": "program", "type": "promptString", "description": "Program: name (TestVariables) or path below MQL5", "default": "TestVariables" },
+			{ "id": "symbol", "type": "promptString", "description": "Symbol", "default": "EURUSD" },
+			{ "id": "period", "type": "pickString", "description": "Period", "options": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], "default": "M1" }
+		],
+		"tasks": [
+			{ "label": "fa: doctor", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["doctor"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [] },
+			{ "label": "fa: compile", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["compile", "${input:program}"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [], "group": "build" },
+			{ "label": "fa: compile --check", "detail": "syntax only, the tracked .ex5 stays unchanged", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["compile", "${input:program}", "--check"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [], "group": "build" },
+			{ "label": "fa: run", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["run", "${input:program}", "${input:symbol}", "${input:period}"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [], "group": "test" },
+			{ "label": "fa: logs", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["logs"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [] },
+			{ "label": "fa: logs compile", "type": "shell", "command": "${workspaceFolder}\\fuzzyalgo\\workspace\\fa.cmd", "args": ["logs", "compile"], "options": { "shell": { "executable": "cmd.exe", "args": ["/d", "/c"] } }, "problemMatcher": [] }
+		]
+	}
+}
