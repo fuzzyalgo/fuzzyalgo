@@ -6,6 +6,23 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-10-30** — `fa doctor` now checks every server of `<root>\.mcp.json` with its own
+  credentials (stdio servers must answer `initialize` and one tool call, http servers
+  `initialize` plus a tool call that needs the key, GitHub tokens report login, scopes and
+  expiry with a WARN 14 days ahead) plus gh, and exits 1 on any TODO. New `fa gh <args>`
+  runs gh with the github.com PAT of `.mcp.json`; `workspace/fa_env.ps1` sets that
+  environment in one place and is the default `fa` terminal profile of
+  `fuzzyalgo.code-workspace`; `fa.ps1` restores the caller's environment and location when
+  it ends; `fa setup claude` installs `github-mcp-server.exe` when it is missing or does not
+  start. Verified in Windows PowerShell 5.1 and PowerShell 7 (doctor, `fa gh`, environment
+  restore, failure paths with fake configs, install into a temp folder); the VS Code
+  terminal profile is not tested yet, and bugs found in review are tracked in
+  `docs/known-issues.md`. Details: `workspace/AGENTS.md`.
+- **2026-10-27** — Added the `fa` workspace command (`workspace/fa.cmd` + `fa.ps1` with
+  `setup`, `doctor`, `compile`, `run`, `logs`) and the VS Code workspace
+  `workspace/fuzzyalgo.code-workspace`; `fa setup` writes `<root>\CLAUDE.md` so a Claude
+  Code session started at `<root>` loads the repo instructions. Details:
+  `workspace/AGENTS.md`; the MQL5 procedures it wraps are in `docs/mql5-development.md`.
 - **2026-09-22** — Added `RepairSpamTicks_g` (`TickCache.mqh`) to drop crossed/zero-price
   ticks in place, called both once per symbol+day in `FindOrLoadDayCache_g`
   (`USE_TICK_CACHE=true`) and on every refetch in `FindOrRefreshLiveBuffer_g`

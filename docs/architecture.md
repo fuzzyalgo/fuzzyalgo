@@ -100,3 +100,14 @@ not copies. It also symlinks `Lib/algotrader` and `Lib/mplfinance` into the cond
   `variables.mqh` object graph but is not part of the tick-cache investigation.
 - `MQL5/Files/FuzzyAlgo/ticks_cache/` — where `TickCache.mqh` writes/reads per-symbol,
   per-day CSV tick caches (gitignored).
+
+## Workspace tooling (`workspace/`)
+
+`workspace/fa.cmd` (implementation `fa.ps1`) is the single entry point for setup, checks,
+compiling and running MQL5 programs, reading logs, and gh with the workspace's GitHub
+account. `fa_env.ps1` sets the workspace environment (PATH, gh host and the token from
+`<root>\.mcp.json`) for every `fa` command and for the default terminal profile of
+`fuzzyalgo.code-workspace`; `mcp_doctor.ps1` holds the MCP server and token checks of
+`fa doctor`. `<root>` is the parent directory of the repo. `workspace/AGENTS.md` is the
+source of truth for this tooling; `docs/mql5-development.md` describes the MQL5 procedures
+that `fa` wraps.

@@ -22,10 +22,29 @@ $FaTemp = Join-Path $Root 'Temp\fa'                    # generated start configu
 $Kinds = @('Scripts', 'Experts', 'Indicators')
 $Periods = '^(M(1|2|3|4|5|6|10|12|15|20|30)|H(1|2|3|4|6|8|12)|D1|W1|MN1)$'
 $RootClaudeImport = '@fuzzyalgo/workspace/CLAUDE.md'    # the only line of <root>\CLAUDE.md
+$McpJson = Join-Path $Root '.mcp.json'                  # MCP servers + keys, per machine, never versioned
+$GitHost = 'github.com'
+
+# PowerShell runs "fa" as this script in its own session (fa.ps1 comes before fa.cmd), so every environment
+# change would stay in the caller's terminal. The environment and the location are therefore saved here and
+# restored when fa ends (main, finally).
+$script:CallerEnv = @{}
+Get-ChildItem Env: | ForEach-Object { $script:CallerEnv[$_.Name] = $_.Value }
+$script:CallerLocation = Get-Location
+function Restore-CallerEnv {
+    foreach ($e in @(Get-ChildItem Env:)) { if (-not $script:CallerEnv.ContainsKey($e.Name)) { Remove-Item "Env:$($e.Name)" } }
+    foreach ($k in $script:CallerEnv.Keys) { if ([Environment]::GetEnvironmentVariable($k) -cne $script:CallerEnv[$k]) { Set-Item "Env:$k" $script:CallerEnv[$k] } }
+    Set-Location $script:CallerLocation
+}
+# PATH, GH_HOST, no GITHUB_TOKEN, GH_TOKEN from .mcp.json: the same as a workspace terminal
+& (Join-Path $PSScriptRoot 'fa_env.ps1')    # & = own scope: its parameters do not touch the variables here
 
 $script:ShowCmd = $false
 $script:DryRun = $false
 $script:ExitCode = 0
+$script:TodoCount = 0
+
+. (Join-Path $PSScriptRoot 'mcp_doctor.ps1')
 
 # =====================================================================================================
 # Help
@@ -36,7 +55,7 @@ $Help = [ordered]@{
 fa setup
     One-time (safe to re-run) setup of <root> = parent of the fuzzyalgo repo:
       1 MetaEditor64.exe, terminal64.exe, metatester64.exe from their zip (only when missing)
-      2 <root>\logs\ (compile logs)      3 <root>\CLAUDE.md (= fa setup claude)      4 fa doctor
+      2 <root>\logs\ (compile logs)      3 <root>\CLAUDE.md + MCP server (= fa setup claude)      4 fa doctor
     The account (config\common.ini, with the password) is not created here: run RUN.ps1 once yourself,
     see docs\mql5-development.md.
     e.g. fa setup
@@ -46,12 +65,20 @@ fa setup claude
     loads the repo CLAUDE.md and workspace\AGENTS.md. Claude Code reads CLAUDE.md only from its start
     directory and the parents. An existing CLAUDE.md with other content is kept with a warning
     (line endings do not count).
+    Then installs github-mcp-server.exe (latest release zip of github/github-mcp-server) where the stdio
+    servers of <root>\.mcp.json expect it ("command"), when it is missing or does not start; a working one
+    is not updated. .mcp.json itself is written by hand (keys) and never versioned.
     e.g. fa setup claude
 '@
     doctor  = @'
 fa doctor
     Checks only, changes nothing: root CLAUDE.md and .mcp.json, repo branch + uncommitted files,
-    MetaEditor/terminal binaries, account config, log directories, running terminal.
+    MetaEditor/terminal binaries, account config, log directories, running terminal, and the accounts:
+      gh             logged in to github.com with the token of the github server in .mcp.json (GH_TOKEN)
+      <root>\.mcp.json  every server: stdio ones are started, http ones get initialize + a tool call;
+                     GitHub tokens report login, scopes and expiry
+    No key is printed. A token that expires within 14 days is a WARN. Every check runs; the exit code is 1
+    when at least one is TODO (missing or failing), WARN does not count.
 '@
     compile = @'
 fa compile <program>... [--check]
@@ -99,6 +126,16 @@ fa logs <program> [n]
     The last n (default 60) lines that program printed (MQL5\Logs, newest day that has some).
     e.g. fa logs TestTickCacheDiff
 '@
+    gh      = @'
+fa gh <gh arguments>
+    gh with the account of this workspace, from any terminal: GH_HOST = github.com, GITHUB_TOKEN cleared,
+    GH_TOKEN = the github.com token of <root>\.mcp.json. Everything after "gh" goes to gh unchanged; the
+    exit code is gh's. Terminals of fuzzyalgo.code-workspace ("fa" profile, fa_env.ps1) already have that
+    environment, there plain gh does the same. Like every fa command it leaves the terminal's environment
+    as it was.
+    e.g. fa gh auth status
+         fa gh repo view fuzzyalgo/fuzzyalgo
+'@
 }
 
 function Show-Help([string]$topic) {
@@ -110,9 +147,10 @@ fa - fuzzyalgo workspace (<root>\fuzzyalgo\workspace\fa.cmd)
   fa compile <program>... [--check]
   fa run <program> [SYMBOL] [PERIOD] [--timeout <s>]
   fa logs [compile [program] | terminal [n] | <program> [n]]
+  fa gh <gh arguments>      gh with the account of this workspace
 
   Every command: --show-cmd prints the real command lines, --dry-run prints them without running.
-  Details: fa help setup|doctor|compile|run|logs
+  Details: fa help setup|doctor|compile|run|logs|gh
 '@
 }
 
@@ -123,7 +161,8 @@ fa - fuzzyalgo workspace (<root>\fuzzyalgo\workspace\fa.cmd)
 function Fail([string]$msg) { throw [System.Management.Automation.RuntimeException]::new("FA: $msg") }
 function Say([string]$msg, [string]$color = 'Gray') { Write-Host $msg -ForegroundColor $color }
 function Ok([string]$msg) { Write-Host "  OK    $msg" -ForegroundColor Green }
-function Todo([string]$msg) { Write-Host "  TODO  $msg" -ForegroundColor Yellow }
+function Todo([string]$msg) { $script:TodoCount++; Write-Host "  TODO  $msg" -ForegroundColor Yellow }
+function Warn([string]$msg) { Write-Host "  WARN  $msg" -ForegroundColor Yellow }
 function Title([string]$msg) { Write-Host "`n=== $msg" -ForegroundColor Cyan }
 
 function Show-Cmd([string]$line, [string]$cwd) {
@@ -221,10 +260,61 @@ function Setup-RootClaude {
     else { Say "  WARNING  $path has different content - left unchanged; expected: $RootClaudeImport" Yellow }
 }
 
+# github-mcp-server.exe of the stdio servers in <root>\.mcp.json, installed where "command" points. A server
+# that already answers initialize is left alone (no update); github-mcp-server is a single Go exe from the
+# GitHub releases (not on winget or PyPI).
+function Setup-McpServers {
+    $servers = $null
+    try { $servers = Read-McpJson $McpJson } catch { Say "  WARNING  $McpJson is not valid JSON - MCP server not installed" Yellow; return }
+    if (-not $servers) { Say "  WARNING  no $McpJson (per machine, by hand, never versioned) - MCP server not installed" Yellow; return }
+    foreach ($p in $servers.PSObject.Properties) {
+        if ((McpProp $p.Value 'url') -or ((McpProp $p.Value 'type') -and (McpProp $p.Value 'type') -ne 'stdio')) { continue }
+        $state = Get-McpStdioState $p.Value
+        $isGitHub = [IO.Path]::GetFileName($state.Exe) -eq 'github-mcp-server.exe'
+        if ($state.Ok) {
+            $latest = if ($isGitHub) { try { ", latest release $((Get-GitHubMcpRelease).tag_name), not updated" } catch { '' } }
+            Ok "MCP $($p.Name): $($state.Server) works$latest"; continue
+        }
+        if (-not $isGitHub) { Say "  WARNING  MCP $($p.Name): $($state.Exe) $($state.Why) - setup does not know how to install it" Yellow; continue }
+        if (-not [IO.Path]::IsPathRooted($state.Exe)) { Say "  WARNING  MCP $($p.Name): command '$($state.Exe)' is not a full path - put one into $McpJson" Yellow; continue }
+        Say "  MCP $($p.Name): $($state.Exe) $($state.Why) - installing"
+        Install-GitHubMcp (Split-Path $state.Exe)
+        if ($script:DryRun) { continue }
+        $state = Get-McpStdioState $p.Value
+        if ($state.Ok) { Ok "MCP $($p.Name): $($state.Server) installed and started" }
+        else { Say "  WARNING  MCP $($p.Name): installed, but $($state.Exe) $($state.Why)" Yellow }
+    }
+}
+
+function Get-GitHubMcpRelease {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    if ($script:ShowCmd) { Say '  > GET https://api.github.com/repos/github/github-mcp-server/releases/latest' DarkGray }
+    Invoke-RestMethod 'https://api.github.com/repos/github/github-mcp-server/releases/latest' -UseBasicParsing -Headers @{ 'User-Agent' = 'fa' }
+}
+function Install-GitHubMcp([string]$dir) {
+    $release = Get-GitHubMcpRelease
+    $name = "github-mcp-server_Windows_$(if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x86_64' }).zip"
+    $asset = @($release.assets | Where-Object { $_.name -eq $name })[0]
+    if (-not $asset) { Fail "github-mcp-server $($release.tag_name) has no $name" }
+    Act "download $($asset.browser_download_url), unpack into $dir" {
+        $tmp = Join-Path $env:TEMP ('fa_mcp_' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory $tmp | Out-Null
+        try {
+            $zip = Join-Path $tmp $name
+            Invoke-WebRequest $asset.browser_download_url -OutFile $zip -UseBasicParsing
+            Expand-Archive $zip (Join-Path $tmp 'x')
+            New-Item -ItemType Directory $dir -Force | Out-Null
+            try { Copy-Item (Join-Path $tmp 'x\*') $dir -Recurse -Force }
+            catch { Fail "cannot write $dir ($($_.Exception.Message)) - is github-mcp-server.exe still running (Claude Code)?" }
+        }
+        finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    Ok "github-mcp-server $($release.tag_name) $(if ($script:DryRun) { 'would be ' })installed in $dir"
+}
 function Cmd-Setup([string[]]$a) {
     if ($a[0] -eq 'claude') {
         if ($a.Count -gt 1) { Fail "unexpected '$($a[1])' - fa help setup" }
-        Setup-RootClaude; return
+        Setup-RootClaude; Setup-McpServers; return
     }
     if ($a.Count -gt 0) { Fail "unexpected '$($a[0])' - fa help setup" }
 
@@ -240,8 +330,9 @@ function Cmd-Setup([string[]]$a) {
     Title '2/4 compile log directory'
     if (Test-Path $LogDir) { Ok "already present: $LogDir" }
     else { Act "mkdir $LogDir" { New-Item -ItemType Directory $LogDir | Out-Null }; Ok $LogDir }
-    Title '3/4 CLAUDE.md at the root'
+    Title '3/4 CLAUDE.md and MCP server at the root'
     Setup-RootClaude
+    Setup-McpServers
     Title '4/4 doctor'
     Cmd-Doctor
 }
@@ -252,8 +343,6 @@ function Cmd-Doctor {
     if (-not (Test-Path $rootClaude)) { Todo "no $rootClaude (agent instructions are not loaded at the root): fa setup claude" }
     elseif (-not (Test-RootClaude $rootClaude)) { Todo "$rootClaude differs from the expected '$RootClaudeImport' - kept; edit or delete it, then: fa setup claude" }
     else { Ok 'CLAUDE.md at the root imports fuzzyalgo\workspace\CLAUDE.md' }
-    if (Test-Path (Join-Path $Root '.mcp.json')) { Ok "$Root\.mcp.json (per machine, not versioned)" }
-    else { Todo "no $Root\.mcp.json (MCP servers, per machine, by hand)" }
 
     Title 'repository'
     $git = Get-Command git -ErrorAction SilentlyContinue
@@ -282,6 +371,22 @@ function Cmd-Doctor {
         $f = Newest $d '*.log'
         if ($f) { Ok "$(Rel $f.FullName) ($($f.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))" } else { Say "  INFO  no log in $(Rel $d) yet" DarkGray }
     }
+
+    Title "accounts and MCP servers ($McpJson)"
+    $null = Test-McpServers $McpJson
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Todo 'gh not on PATH (winget install GitHub.cli)' }
+    elseif (-not $env:GH_TOKEN) { Todo "gh: no github server with GITHUB_HOST github.com and a GITHUB_PERSONAL_ACCESS_TOKEN in $McpJson" }
+    else {
+        $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $null = & gh auth status -h $GitHost 2>&1; $code = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($code -eq 0) { Ok "gh logged in to $GitHost (GH_TOKEN from .mcp.json)" } else { Todo "gh does not accept the token of .mcp.json for $GitHost (gh auth status -h $GitHost)" }
+    }
+    if ($script:CallerEnv['GH_HOST'] -ne $GitHost -or -not $script:CallerEnv['GH_TOKEN']) {
+        Say "  INFO  plain gh in this terminal has no github.com token (no fa terminal): use fa gh <args>" DarkGray
+    }
+    if ($script:TodoCount) { Say "`n$($script:TodoCount) TODO(s) - see above" Yellow; $script:ExitCode = 1 }
+    else { Say "`nall checks OK" Green }
 }
 
 # =====================================================================================================
@@ -424,6 +529,15 @@ function Cmd-Logs([string[]]$a) {
     Fail "'$name' printed nothing in $(Rel $MqlLogDir) - fa logs compile | terminal"
 }
 
+# gh with the account of this workspace (fa_env.ps1), for terminals that are not fa terminals.
+function Cmd-Gh([string[]]$a) {
+    $gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $gh) { Fail 'gh CLI missing: winget install GitHub.cli' }
+    if (-not $a) { Fail 'fa gh <gh arguments>, e.g. fa gh repo view fuzzyalgo/fuzzyalgo' }
+    $line = ($a | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+    $script:ExitCode = Exec $gh.Source $line (Get-Location).Path
+}
+
 # =====================================================================================================
 # main
 # =====================================================================================================
@@ -439,9 +553,10 @@ foreach ($x in $args) {
 if ($script:DryRun) {
     Say 'DRY RUN - state-changing commands and file actions will be printed but not executed; read-only queries may run.' Yellow
 }
-if ($argv -contains '--help' -or $argv -contains '-h') { Show-Help $argv[0]; exit 0 }
 
 try {
+    # "fa gh ... -h" is gh's help
+    if ($argv[0] -ne 'gh' -and ($argv -contains '--help' -or $argv -contains '-h')) { Show-Help $argv[0]; exit 0 }
     $cmd = $argv[0]
     $rest = @($argv | Select-Object -Skip 1)
     switch ($cmd) {
@@ -452,6 +567,7 @@ try {
         'compile' { Cmd-Compile $rest; break }
         'run' { Cmd-Run $rest; break }
         'logs' { Cmd-Logs $rest; break }
+        'gh' { Cmd-Gh $rest; break }
         default { Fail "unknown command '$cmd' - fa help" }
     }
 }
@@ -460,4 +576,5 @@ catch {
     if ($env:FA_DEBUG) { Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray }
     exit 1
 }
+finally { Restore-CallerEnv }
 exit $script:ExitCode

@@ -14,6 +14,19 @@ you're seeing is already known, and before starting new work, to check what's al
   rescans the entire day's ticks, getting more expensive as the trading day progresses —
   see the Phase 2 plan below, which addresses exactly this. Full history:
   `docs/repository-notes.md`.
+- **`fa` workspace tooling: bugs found in the 2026-10-30 review, not yet fixed** —
+  (1) typed in PowerShell, `fa gh pr list --json number,title` hands the field list to gh
+  several times: PowerShell turns the unquoted `number,title` into an array, and the
+  argument loop of `workspace/fa.ps1` appends the joined string once per element (`fa.cmd`
+  is not affected); (2) `fa doctor` reports "all checks OK" when `mcpServers` in
+  `.mcp.json` is empty; (3) a rejected GitHub token is reported as "curl exit 56" instead
+  of "key rejected": GitHub answers 401 and closes TLS without close_notify, which Schannel
+  `curl.exe` reports as exit 56 (it still counts as a TODO); (4) the header comment of
+  `workspace/fa_env.ps1` says it is dot-sourced, but `fa.ps1` calls it with `&`. Open
+  questions: `fa setup` exits 1 on a fresh machine because its doctor step counts the
+  missing `config\common.ini` as a TODO; `fa_env.ps1` keeps a `GH_TOKEN` that is already in
+  the environment when `.mcp.json` has no github.com token; `fa gh` drops empty-string
+  arguments and keeps `--dry-run`/`--show-cmd` for itself instead of passing them to gh.
 
 ## Planned / deferred work
 

@@ -8,8 +8,21 @@
 	"settings": {
 		"terminal.integrated.env.windows": {
 			// "fa <command>" works in every terminal of this workspace
-			"PATH": "${workspaceFolder}\\fuzzyalgo\\workspace;${env:PATH}"
+			"PATH": "${workspaceFolder}\\fuzzyalgo\\workspace;${env:PATH}",
+			// gh goes to github.com; a GITHUB_TOKEN of the environment may be for another host (fa.ps1 does the same)
+			"GH_HOST": "github.com",
+			"GITHUB_TOKEN": null
 		},
+		// The default terminal runs fa_env.ps1: also gh with the github.com token of <root>\.mcp.json
+		// (GH_TOKEN). No secret is in this file.
+		"terminal.integrated.profiles.windows": {
+			"fa": {
+				"path": "powershell.exe",
+				"args": ["-NoExit", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\fuzzyalgo\\workspace\\fa_env.ps1", "-Terminal"],
+				"icon": "graph-line"
+			}
+		},
+		"terminal.integrated.defaultProfile.windows": "fa",
 		"files.associations": { "*.mq5": "cpp", "*.mqh": "cpp" },
 		"C_Cpp.errorSquiggles": "disabled",
 		"git.repositoryScanMaxDepth": 2,
