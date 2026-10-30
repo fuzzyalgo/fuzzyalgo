@@ -14,7 +14,7 @@
 			"GITHUB_TOKEN": null
 		},
 		// The default terminal runs fa_env.ps1: also gh with the github.com token of <root>\.mcp.json
-		// (GH_TOKEN). No secret is in this file.
+		// (GH_TOKEN) and gh's own folder <root>\.gh (GH_CONFIG_DIR). No secret is in this file.
 		"terminal.integrated.profiles.windows": {
 			"fa": {
 				"path": "powershell.exe",

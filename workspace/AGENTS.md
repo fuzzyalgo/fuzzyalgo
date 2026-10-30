@@ -43,14 +43,18 @@ Steps (re-run safe): MetaTrader binaries from their zip -> `<root>\logs\` -> `<r
   once in that directory and accept them, or list them in `enabledMcpjsonServers` of its `.claude\settings.local.json`.
 - **GitHub account:** one classic PAT for github.com, kept only in `<root>\.mcp.json` (server `github`,
   `GITHUB_HOST` `https://github.com`). `workspace\fa_env.ps1` is the one place that sets the environment:
-  `PATH`, `GH_HOST=github.com`, clears `GITHUB_TOKEN` (an environment token may belong to another host, and gh
+  `PATH`, `GH_HOST=github.com`, `GH_CONFIG_DIR=<root>\.gh` (gh's own folder, so gh sees none of the other gh
+  logins of this Windows user), clears `GITHUB_TOKEN` (an environment token may belong to another host, and gh
   would take it for github.com) and gives gh that PAT as `GH_TOKEN`. Nothing is stored in Windows Credential
-  Manager. The default terminal profile `fa` of `fuzzyalgo.code-workspace` runs it
-  (`powershell -NoExit -File fa_env.ps1 -Terminal`, one grey status line), so plain gh works there; `fa.ps1`
-  calls it for every command. From any other terminal use `fa gh <args>`.
-- **`fa` leaves the caller's environment alone.** In PowerShell `fa` resolves to `fa.ps1` (before `fa.cmd`) and
-  runs in the terminal's own session; `fa.ps1` saves all environment variables and the location at the start and
-  restores them in the `finally` of the main dispatch (also on `exit`).
+  Manager; do not run `gh auth login` in a `fa` terminal (it would store the PAT a second time). The default
+  terminal profile `fa` of `fuzzyalgo.code-workspace` runs it (`powershell -NoExit -File fa_env.ps1 -Terminal`,
+  one grey status line), so plain gh there sees only the github.com account; open a new `fa` terminal after
+  changing `fa_env.ps1`. `fa.ps1` calls it for every command and gives the PAT to gh only, not to MetaEditor, the
+  terminal or the MCP servers. From any other terminal use `fa gh <args>`.
+- **`fa` leaves the caller's session alone.** In PowerShell `fa` resolves to `fa.ps1` (before `fa.cmd`) and
+  runs in the terminal's own session; `fa.ps1` saves all environment variables, the location and the TLS
+  protocols at the start and restores them in the `finally` of the main dispatch (also on `exit` and after
+  errors). Profile settings such as `$PSDefaultParameterValues['*:WhatIf']` do not reach it.
 - `fa doctor` starts or calls every server of `.mcp.json` with its credentials (`workspace\mcp_doctor.ps1`),
   reports login, scopes and expiry of GitHub tokens (WARN 14 days before), checks gh, and prints no key.
   It runs every check and exits 1 when at least one is TODO.
@@ -64,10 +68,11 @@ Steps (re-run safe): MetaTrader binaries from their zip -> `<root>\logs\` -> `<r
 |---|---|---|
 | `CLAUDE.md` | one line `@fuzzyalgo/workspace/CLAUDE.md` | `fa setup`, `fa setup claude` |
 | `.mcp.json`, `.claude\` | per machine, never versioned | by hand |
+| `.gh\` | gh's own folder (`GH_CONFIG_DIR`) for `fa gh` and `fa` terminals; normally empty, never versioned | `fa_env.ps1` |
 | `logs\compile_<program>.log` | MetaEditor compile logs (UTF-16LE), outside the repo | `fa compile` |
 | `Temp\fa\run_<program>.ini` | start configuration of the last `fa run` (no credentials) | `fa run` |
 | `fuzzyalgo\` | git `fuzzyalgo/fuzzyalgo`; map in `CLAUDE.md`, details in `docs\` | clone |
-| `fuzzyalgo\workspace\` | `fa.cmd` + `fa.ps1`, `fa_env.ps1`, `mcp_doctor.ps1`, `fuzzyalgo.code-workspace`, this file | git |
+| `fuzzyalgo\workspace\` | `fa.cmd` + `fa.ps1`, `fa_env.ps1`, `mcp_doctor.ps1`, `fa_test.ps1`, `fuzzyalgo.code-workspace`, this file | git |
 | `fuzzyalgo\MetaTrader5_TMPL\` | portable MT5: `MetaEditor64.exe`, `terminal64.exe` (from the zips, ignored), `RUN.ps1` | git + `fa setup` |
 | `...\MQL5\Scripts\FuzzyAlgo\`, `Include\FuzzyAlgo\` | FuzzyAlgo sources; `.ex5` next to the `.mq5`, **tracked** | git, `fa compile` |
 | `...\MQL5\Logs\<yyyyMMdd>.log` | `Print()` output of scripts/experts (UTF-16LE) | terminal |
@@ -83,10 +88,14 @@ Steps (re-run safe): MetaTrader binaries from their zip -> `<root>\logs\` -> `<r
 | `fa run <program> [SYMBOL] [PERIOD] [--timeout s]` | `terminal64.exe /portable /config:<root>\Temp\fa\run_<program>.ini` with `[StartUp] Script=`/`Expert=`, `Symbol` (EURUSD), `Period` (M1). Script: `ShutdownTerminal=1`, waits (300 s), prints the script's new log lines and journal errors. Expert: stays open. Refuses while the terminal runs (one per directory) |
 | `fa logs [compile [program] \| terminal [n] \| <program> [n]]` | newest logs, decoded from UTF-16LE |
 | `fa doctor` | checks only: root `CLAUDE.md`, repo, binaries, account config, logs, running terminal, every `.mcp.json` server, gh; exit 1 on any TODO |
-| `fa gh <args>` | gh with the github.com account of `.mcp.json`, from any terminal; arguments unchanged, gh's exit code |
+| `fa gh <args>` | gh with the github.com account of `.mcp.json` and gh's own folder `<root>\.gh`, from any terminal; arguments, stdin, output and exit code as with plain gh |
 | `fa setup [claude]` | see section 0 |
 
 - `fa run` passes no credentials; the terminal uses its saved account (`config\common.ini` from `RUN.ps1`).
   For the user's interactive chart session keep using `RUN.ps1` (profiles, `--login`).
 - Indicators cannot be started from the command line (`[StartUp]` knows only `Script` and `Expert`).
 - A successful `fa compile` rewrites the tracked `.ex5`; use `--check` when only the syntax matters.
+- After changing `fa.ps1`, `fa_env.ps1` or `fa.cmd` run `workspace\fa_test.ps1`: `fa gh` with a fake gh in
+  Windows PowerShell 5.1, PowerShell 7 and cmd, plus `gh auth status` with the real gh (one account only).
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <root>\fuzzyalgo\workspace\fa_test.ps1 [-Ref <commit>]
+  [-NoRealGh]`; exit 0 = every check PASS. `-Ref 0783c72` shows what the version before the fixes got wrong.

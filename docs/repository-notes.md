@@ -1580,3 +1580,157 @@ Compiled clean (0 errors, 0 warnings) after wiring `RepairSpamTicks_g` into both
 session containing the specific crossed tick to visually confirm the log line stops
 recurring - next verification step if/when a live or cached run reproduces a similarly
 poisoned day.
+
+### `fa` workspace tooling: review fixes of the `fa doctor`/`fa gh` commit (2026-10-30)
+
+A multi-agent review of commit 0783c72 found 63 issues: 3 high, 20 medium and 40 low. Four
+more were already tracked in `docs/known-issues.md`. All are fixed except the ones still
+listed there. The bugs that matter in daily use, with their root causes:
+
+**`fa gh` ran outside the PowerShell pipeline.**
+- Root cause: `Cmd-Gh` started gh through `Exec` (`[Diagnostics.Process]`, no redirection).
+  gh wrote straight to the console and read the console's stdin.
+- Effects:
+  - `$x = fa gh ...` captured nothing;
+  - `| ConvertFrom-Json` got nothing;
+  - `'text' | fa gh ... -F -` gave gh 0 bytes.
+- Fix: gh is now called with `& $gh @a`, and piped input is forwarded (`@($input)`). For
+  the call, `[Console]::OutputEncoding` is UTF-8, because gh writes UTF-8. In 5.1, while
+  piping, the console input encoding has no BOM, because 5.1 writes the BOM of a UTF-8
+  input encoding into the pipe.
+
+**Arguments from PowerShell did not arrive as typed.**
+- Root causes:
+  - An unquoted `number,title` arrives in the script as an array. The old loop appended
+    the joined list once per element, so gh got `number title` twice.
+  - `-name:value` arrives as `-name:` plus `value`.
+  - The old quoting only turned `"` into `\"`.
+- Fix:
+  - Arrays are joined with `,`, and `-name:` is glued to the next word.
+  - Quoting follows the CommandLineToArgvW rules (`Join-ArgLine`).
+  - PowerShell 7.3+ uses `$PSNativeCommandArgumentPassing='Windows'`. 5.1 and 7.0-7.2 use
+    `& gh --% %FA_GH_ARGS%` with the line fa builds.
+  - PowerShell drops a bare `--` before the script sees it. fa finds it in the AST of the
+    invocation line and stops with a hint.
+
+**`fa.cmd` let powershell.exe bind the arguments.**
+- Root cause: `powershell -File fa.ps1 %*`.
+  - A lone `-` failed with `Cannot process argument because the value of argument "name"
+    is not valid`, so `fa.cmd gh issue create -F - < file` never started gh.
+  - `-X:POST` was split into `-X` and `POST`.
+- Fix: `-Command "$LASTEXITCODE = 1; & $env:FA_PS1; exit $LASTEXITCODE #FA_ARGS#" %*`.
+  `fa.ps1` takes the raw text after the `#FA_ARGS#"` marker from
+  `[Environment]::CommandLine` and splits it the way gh (a Go program) does
+  (`Split-ArgLine`).
+
+**Two gh logins.**
+- Root cause: gh reads `%APPDATA%\GitHub CLI\hosts.yml` in every terminal. fa only added
+  `GH_TOKEN` for github.com, so `fa gh auth status` also listed the user's keyring login
+  for another GitHub host (github.qualcomm.com).
+- Fix: `fa_env.ps1` sets `GH_CONFIG_DIR=<root>\.gh` and creates the folder when missing. gh
+  writes nothing there unless someone runs `gh auth login` in it.
+- The doctor shows an INFO line in two cases:
+  - the terminal's gh is not set up that way;
+  - `<root>\.gh\hosts.yml` has logins of its own.
+
+**The PAT reached every child process.**
+- Root cause: `fa_env.ps1` set `GH_TOKEN` in fa's own process, so MetaEditor, the terminal
+  and every MCP server inherited it.
+- Fix:
+  - `-PassThru` returns the token, and the caller's `GH_TOKEN` is removed until fa ends.
+  - `Cmd-Gh` and `Test-GhAuth` set the token for their one call only.
+  - stdio servers get the caller's environment plus their own `env`.
+
+**The caller's session was changed.** fa runs in the terminal's own session (`fa` resolves
+to `fa.ps1`).
+- Root causes, restore:
+  - The restore used `Get-ChildItem Env:`, `Set-Item` and `Remove-Item`. In 5.1 that
+    deleted variables with an empty value (in a VS Code terminal e.g. `GIT_ASKPASS` and
+    `VSCODE_L10N_BUNDLE_LOCATION`), and it threw on names that differ only in case.
+  - `Set-Location` without `-LiteralPath` broke on `[` in a path.
+  - `fa_env.ps1` and the dot-source of `mcp_doctor.ps1` ran before the `try`, so an error
+    there skipped the restore.
+  - The TLS protocols were pinned for good.
+- Root causes, profile settings:
+  - `$PSDefaultParameterValues['*:WhatIf']=$true` makes every `ForEach-Object` throw.
+  - `$InformationPreference='Stop'` makes `Write-Host` throw after printing.
+  - StrictMode and `ErrorAction` defaults change behaviour.
+- Fix:
+  - A snapshot of `[Environment]::GetEnvironmentVariables()`; `SetEnvironmentVariable` is
+    called only for values that changed.
+  - `-LiteralPath`, and the TLS protocols are restored.
+  - Everything runs inside the `try`.
+  - `fa.ps1` sets its own preferences at the start, in script scope only.
+
+**`fa doctor` and `.mcp.json`.**
+- `.mcp.json` is now read the way Claude Code reads it:
+  - UTF-8 (in 5.1, `Get-Content` read it as ANSI);
+  - strict JSON;
+  - `${VAR}`/`${VAR:-default}`, where a set variable wins even when empty;
+  - `%VAR%` gives a warning;
+  - a `url` without `type` is a TODO;
+  - the shapes of the entries are validated;
+  - an empty `mcpServers` is a TODO (known-issues bug 2).
+- One server no longer stops the run. A stdio command that could not be started threw out
+  of the whole doctor (high). Now each server has its own `try`, and the checks:
+  - tell timeout, EOF and error apart;
+  - kill the process tree;
+  - decode UTF-8.
+- http servers:
+  - curl gets headers and keys through temp files (`-K`, `-H @file`), so no key is on a
+    command line;
+  - `-q` ignores a `.curlrc`;
+  - SSE answers are read per event;
+  - `initialized` is sent with the session id;
+  - 3xx answers are reported;
+  - the context7 probe needs its key header.
+- curl exit 56 after a 401 is now reported as a rejected key (known-issues bug 3). GitHub
+  closes TLS after the 401 without close_notify, which Schannel curl reports as exit 56.
+- GitHub token check:
+  - the API host is derived like github-mcp-server's `parseAPIHost`;
+  - a 200 answer that is not JSON is a TODO;
+  - the expiry is in calendar days with the invariant culture. The old code used
+    `Floor(TotalDays)` and a date in the current culture.
+
+**`fa setup claude`.**
+- Root cause: the release lookup was unauthenticated and unguarded. A 403 rate limit (60
+  per hour per IP, often 0 behind a shared egress IP) stopped setup with a raw .NET message
+  before the doctor step (high).
+- Fix:
+  - the lookup uses the token, with a fallback without it;
+  - a failure gives a WARNING and exit 1 instead of an abort;
+  - .NET `ZipFile` with a zip-slip check;
+  - only the exe is copied;
+  - `--version` is checked before re-downloading;
+  - the native architecture is downloaded;
+  - TLS 1.2 is added only for the call.
+
+**The header of `fa_env.ps1`** described dot-sourcing (known-issues bug 4). It now
+describes `-Terminal` and `-PassThru`.
+
+**Testing.** `workspace/fa_test.ps1` runs a temporary copy of the workspace files with a
+fake gh. The fake (C#, compiled with the .NET Framework `csc.exe`) logs its arguments, its
+stdin, `GH_CONFIG_DIR` and whether `GH_TOKEN` is set.
+- Checks:
+  - 9 in Windows PowerShell 5.1 and the same 9 in PowerShell 7;
+  - 4 through `fa.cmd`;
+  - 2 with the real gh: `gh auth status` lists github.com only, both through `fa gh` and as
+    plain gh after `fa_env.ps1 -Terminal`.
+- Working tree: 24 passed.
+- `-Ref 0783c72`: 14 failed:
+  - in both editions: the comma list, capture, `ConvertFrom-Json`, stdin, `GH_CONFIG_DIR`,
+    and plain gh in the `fa` terminal;
+  - the 5.1 environment;
+  - `fa.cmd ... -F -`.
+- The first version of the test reported a false difference in 5.1:
+  `[Environment]::GetEnvironmentVariable` returns `$null` for a variable that is set but
+  empty, so the check now compares the whole environment block.
+
+The other fixes were checked during the work with throwaway scripts outside the repo:
+- fake MCP and http servers;
+- a hostile profile;
+- a 5.1 limited to TLS 1.0;
+- a leak scan of all output for 27 planted secrets, which found none.
+
+Those checks were judged by reading their output, not with assertions, and they are not in
+the repo.

@@ -14,19 +14,51 @@ you're seeing is already known, and before starting new work, to check what's al
   rescans the entire day's ticks, getting more expensive as the trading day progresses —
   see the Phase 2 plan below, which addresses exactly this. Full history:
   `docs/repository-notes.md`.
-- **`fa` workspace tooling: bugs found in the 2026-10-30 review, not yet fixed** —
-  (1) typed in PowerShell, `fa gh pr list --json number,title` hands the field list to gh
-  several times: PowerShell turns the unquoted `number,title` into an array, and the
-  argument loop of `workspace/fa.ps1` appends the joined string once per element (`fa.cmd`
-  is not affected); (2) `fa doctor` reports "all checks OK" when `mcpServers` in
-  `.mcp.json` is empty; (3) a rejected GitHub token is reported as "curl exit 56" instead
-  of "key rejected": GitHub answers 401 and closes TLS without close_notify, which Schannel
-  `curl.exe` reports as exit 56 (it still counts as a TODO); (4) the header comment of
-  `workspace/fa_env.ps1` says it is dot-sourced, but `fa.ps1` calls it with `&`. Open
-  questions: `fa setup` exits 1 on a fresh machine because its doctor step counts the
-  missing `config\common.ini` as a TODO; `fa_env.ps1` keeps a `GH_TOKEN` that is already in
-  the environment when `.mcp.json` has no github.com token; `fa gh` drops empty-string
-  arguments and keeps `--dry-run`/`--show-cmd` for itself instead of passing them to gh.
+- **`fa` workspace tooling: open after the 2026-10-30 fixes** — the review bugs are fixed
+  (`docs/repository-notes.md`); still open:
+  - *Design questions for the user:*
+    - `fuzzyalgo.code-workspace` sets `GH_HOST=github.com` and clears `GITHUB_TOKEN` for
+      every terminal of the workspace, which breaks gh against a GitHub Enterprise Server
+      there.
+    - The `fa` terminal starts PowerShell with `-ExecutionPolicy Bypass`, and every
+      PowerShell started from it inherits that.
+    - The `fa` profile's arguments turn off VS Code's automatic shell integration.
+  - *Kept on purpose:*
+    - `fa setup` exits 1 on a fresh machine, because its doctor step counts the missing
+      `config\common.ini` as a TODO.
+    - `fa gh` keeps `--dry-run`/`--show-cmd` for itself (anywhere on the line) and drops
+      empty arguments (an unset VS Code task input).
+    - In PowerShell a bare `--` must be quoted (`'--'`); fa stops with a hint, except on a
+      backtick-continued line. `--%` does not work through fa.
+    - `fa_env.ps1 -Terminal` keeps a `GH_TOKEN` already in the environment when
+      `.mcp.json` has no github.com token.
+    - In `fa` terminals, gh's own settings and aliases (`%APPDATA%\GitHub CLI\config.yml`)
+      do not apply; copy that file to `<root>\.gh` to keep them.
+  - *Smaller limitations, not fixed:*
+    - Not tested: PowerShell 7.0-7.2, and the argument quoting of VS Code tasks.
+    - Windows PowerShell 5.1:
+      - `FA_GH_ARGS` is visible in gh's environment;
+      - some number spellings (`a,007`) cannot be recovered in-session;
+      - IPv6 hosts are printed without brackets.
+    - `-label: bug` (with a space) is glued like `-label:bug`.
+    - The doctor shows an empty branch name for a detached HEAD.
+    - The `RUN.ps1` hint is not quoted for paths with spaces.
+    - Masking replaces every configured secret of 8+ characters wherever it appears.
+    - `fa compile --check` and `fa compile` write the same log, and two programs with the
+      same name share one log.
+    - `mcp_doctor.ps1` differs from Claude Code for:
+      - `.cmd`/`.bat`/`.ps1` commands;
+      - whitespace around values;
+      - a UTF-8 BOM;
+      - case-only duplicate keys;
+      - the exact `${VAR:-default}` split, `${CLAUDE_PROJECT_DIR}` and invalid names
+        (`${1BAD}`) - `${VAR}` comes from the terminal's environment;
+      - redirects (reported, not followed);
+      - repeated `Accept`/`Content-Type` headers;
+      - URL userinfo (sent as Basic auth);
+      - `McpServers` in the wrong case;
+      - env names that differ only in case.
+    - The doctor also counts an empty `{}` tool result as OK.
 
 ## Planned / deferred work
 

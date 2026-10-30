@@ -3,6 +3,35 @@
 Read this before questioning or reversing a settled technical decision, or before adding a
 feature that resembles something already decided against.
 
+## `fa`: gh gets its own folder and the only token; fa leaves the caller's session alone (2026-10-30)
+
+- **gh's own folder:** gh in the workspace (`fa gh`, and plain `gh` in a `fa` terminal) runs
+  with `GH_CONFIG_DIR=<root>\.gh`, set by `workspace/fa_env.ps1`. gh then sees only the
+  github.com PAT of `<root>\.mcp.json` (`GH_TOKEN`), and none of the other logins of the
+  Windows user in `%APPDATA%\GitHub CLI`, e.g. another GitHub host. Other terminals keep
+  their normal gh. Not chosen:
+  - `gh auth login` would store the PAT a second time (Credential Manager).
+  - A user-wide `GH_CONFIG_DIR` would break gh for the other hosts.
+- **The token goes to gh only:** `fa_env.ps1 -PassThru` returns the PAT instead of setting
+  it. Only gh and the doctor's gh check get it, for that one call. MCP servers and every
+  other program fa starts get the caller's environment.
+- **`fa gh` runs gh in the pipeline:** gh is run with `&` inside the PowerShell pipeline,
+  not through `[Diagnostics.Process]`, so stdin, stdout and the exit code are gh's own.
+  Arguments are passed as typed:
+  - PowerShell 7.3+: `$PSNativeCommandArgumentPassing='Windows'`.
+  - 5.1: `--%` with a command line fa builds itself.
+  - `fa.cmd`: hands its raw command line over through `-Command`, not `-File`, because
+    `-File` rejects a lone `-` and splits `-name:value`.
+- **The caller's session is restored** after every command: environment, location and TLS,
+  also after errors and `exit`. Profile settings such as `'*:WhatIf'` are shielded.
+- **`fa doctor` reads `.mcp.json` like Claude Code:** strict JSON and `${VAR}` expansion.
+  Each server is checked on its own, so one broken server does not stop the run.
+- **Tests:** `workspace/fa_test.ps1` checks the `fa gh` behaviour with a fake gh. Its
+  `-Ref <commit>` option shows what an older commit got wrong.
+
+Full reasoning: `docs/repository-notes.md`, "`fa` workspace tooling: review fixes of the
+`fa doctor`/`fa gh` commit (2026-10-30)".
+
 ## PRO/REF c0 fallback window and normalization unified; `sRefPoint` gains a range-lookup fallback (2026-09-21)
 
 PRO's and REF's "no window established yet" c0 fallback both now use the same five-minute

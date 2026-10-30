@@ -6,6 +6,17 @@ milestones (a fix verified, a feature shipped, a decision made) — not per-comm
 `git log` doesn't capture. Each entry links to `docs/repository-notes.md` for full detail
 where relevant.
 
+- **2026-10-30** — Fixed the bugs of the first `fa doctor`/`fa gh` commit (the 4 tracked in
+  known-issues plus 63 review findings, most of them edge cases). `fa gh` now runs gh inside
+  the PowerShell pipeline (`$x = fa gh ...`, `| ConvertFrom-Json`, piped stdin) and passes
+  arguments as typed (`--json number,title`; `fa.cmd gh ... -F - < file`). fa and the `fa`
+  terminal give gh its own folder `<root>\.gh` (`GH_CONFIG_DIR`), so gh sees only the
+  github.com account of `.mcp.json`, also as plain `gh` in a `fa` terminal. The PAT reaches
+  only gh. fa leaves the caller's session unchanged (in 5.1 it used to delete empty variables
+  such as `GIT_ASKPASS`). `fa doctor` reads `.mcp.json` like Claude Code, and one broken
+  server no longer stops it. New `workspace/fa_test.ps1`: 24 checks in 5.1, 7 and cmd, two of
+  them with the real gh; with `-Ref 0783c72`, 14 of them fail on the old version. Open items:
+  `docs/known-issues.md`. Details: `docs/repository-notes.md`.
 - **2026-10-30** — `fa doctor` now checks every server of `<root>\.mcp.json` with its own
   credentials (stdio servers must answer `initialize` and one tool call, http servers
   `initialize` plus a tool call that needs the key, GitHub tokens report login, scopes and
